@@ -54,3 +54,12 @@ mode is on, Dexerion enforces it across all tabs and accounts and shows a brande
 - `ARCHITECTURE.md` — tech evaluation + module map + future-AI hook point
 - `EXTENSIONS.md` — extension support, Web Store flow, honest limitations
 - `TESTLOG.md` — V1 verification record
+
+Copyright (c) 2026 sc-simpledev. All Rights Reserved.
+
+This software and its source code are proprietary. No part of it may be copied,
+modified, distributed, sublicensed or used to build other works without prior
+written permission from the copyright holder.
+
+Third-party components bundled with this software, including the Xray core, remain
+under their own licences.
