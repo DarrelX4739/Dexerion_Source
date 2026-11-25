@@ -19,8 +19,8 @@ It does not run on pushes, pull requests, or tag creation.
    the **Run workflow** button.
 2. Open **Actions → Build installers and publish release → Run workflow**.
 3. Select the branch containing the code to release and enter a new version such
-   as `1.2.3` (or `v1.2.3`). Use three non-negative integers without leading zeros;
-   prerelease/build suffixes are not supported. Existing tags/releases are rejected.
+   as `1.2.3` (or `v1.2.3`). Test versions such as `v1.0.0_buildtest` and
+   `1.2.3-beta.1` are also supported. Existing tags/releases are rejected.
 4. Run the workflow. After both platform builds succeed, it creates and publishes
    a GitHub Release tagged `v1.2.3` at the selected run's source commit, containing:
    - `Main_Exe_Dexerion.exe` — Windows x64 NSIS installer, with the existing branding.
@@ -28,7 +28,28 @@ It does not run on pushes, pull requests, or tag creation.
    - `Dexerion-1.2.3-x64.deb` — Linux x64 Debian package.
    - `SHA256SUMS.txt` — SHA-256 checksums for all three packages.
 
-The entered version is embedded in the built application using a temporary CI
+### Test versions and prereleases
+
+An optional leading `v` is accepted; release tags always have one. A suffix can
+start with `_` or `-`, followed by dot-separated identifiers containing letters,
+numbers, or hyphens. Core version numbers and purely numeric suffix identifiers
+must not have leading zeros. Spaces, additional underscores, and `+` build
+metadata are not supported.
+
+For example, entering `v1.0.0_buildtest` produces:
+
+- Release tag/title: `v1.0.0_buildtest` / `Dexerion v1.0.0_buildtest`.
+- Embedded application version: `1.0.0-buildtest` (valid SemVer for packaging).
+- Linux packages: `Dexerion-1.0.0-buildtest-x64.AppImage` and
+  `Dexerion-1.0.0-buildtest-x64.deb`; the Windows filename stays unchanged.
+- A GitHub **prerelease**, explicitly not marked as the latest stable release.
+
+Hyphenated suffixes such as `v1.0.0-beta.1` also produce prereleases. Unsuffixed
+versions continue to produce normal releases. Tags retain the chosen suffix
+separator, so `_buildtest` and `-buildtest` are distinct tags even though they map
+to the same package version; use one spelling consistently to avoid duplicates.
+
+The package version is embedded in the built application using a temporary CI
 configuration; no source files, package manifests, lockfiles, or existing builder
 settings are committed or modified by the workflow. Build artifacts are also kept
 on the workflow run for seven days. Release assets remain on the GitHub Release.

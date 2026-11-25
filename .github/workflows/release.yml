@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (X.Y.Z, for example 1.2.3; optional leading v)'
+        description: 'Version, e.g. 1.2.3, v1.0.0_buildtest, or 1.2.3-beta.1'
         required: true
         type: string
 
@@ -23,6 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate version and reject existing tags
@@ -32,12 +33,28 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${REQUESTED_VERSION#v}"
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo '::error::Version must be X.Y.Z (for example 1.2.3 or v1.2.3).'
+          requested="${REQUESTED_VERSION#v}"
+          if [[ ! "$requested" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)([-_]([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+            echo '::error::Use X.Y.Z with an optional -suffix or _suffix (for example v1.0.0_buildtest or 1.2.3-beta.1).'
             exit 1
           fi
-          tag="v$version"
+          suffix="${BASH_REMATCH[5]}"
+          version="$requested"
+          prerelease=false
+          if [[ -n "$suffix" ]]; then
+            # SemVer numeric prerelease identifiers cannot have leading zeros.
+            IFS='.' read -ra identifiers <<< "$suffix"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "$identifier" =~ ^0[0-9]+$ ]]; then
+                echo '::error::Numeric prerelease identifiers must not have leading zeros.'
+                exit 1
+              fi
+            done
+            # Preserve the requested tag, but use a SemVer-compatible package version.
+            version="${requested/_/-}"
+            prerelease=true
+          fi
+          tag="v$requested"
           # ls-remote errors must fail validation, not look like an unused tag.
           tags="$(git ls-remote --tags origin "refs/tags/$tag")"
           if [[ -n "$tags" ]]; then
@@ -51,6 +68,7 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.platform }} (x64)
@@ -148,6 +166,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      IS_PRERELEASE: ${{ needs.validate.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -171,9 +190,13 @@ jobs:
       - name: Create draft and upload all assets before publishing
         shell: bash
         run: |
+          release_flags=()
+          if [[ "$IS_PRERELEASE" == 'true' ]]; then
+            release_flags+=(--prerelease --latest=false)
+          fi
           gh release create "$RELEASE_TAG" release-assets/* \
             --target "$GITHUB_SHA" \
             --title "Dexerion $RELEASE_TAG" \
             --generate-notes \
-            --draft
+            --draft "${release_flags[@]}"
           gh release edit "$RELEASE_TAG" --draft=false
