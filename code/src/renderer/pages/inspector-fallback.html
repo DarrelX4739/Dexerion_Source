@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Inspector — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+/* Shown inside the inspector panel when Chromium's DevTools frontend does not
+   come up. It occupies exactly the same surface, so the panel is never a blank
+   rectangle, and it says what happened in the browser's own voice. */
+html, body { height:100%; }
+body.ins-fallback { margin:0; display:flex; align-items:center; justify-content:center; background:var(--pbg); }
+.dx-ins {
+  width:100%; max-width:520px; padding:0 28px; text-align:left;
+}
+.dx-ins h1 { font-size:17px; margin:0 0 6px; letter-spacing:-.01em; }
+.dx-ins p { margin:0; color:var(--pmuted); font-size:13px; line-height:1.55; max-width:52ch; }
+.dx-ins .why {
+  margin:16px 0 18px; padding:9px 11px; font-family:var(--font-mono); font-size:11.5px;
+  color:var(--pfg-2); background:var(--pcard); border:1px solid var(--pborder); border-radius:var(--r-sm);
+  white-space:pre-wrap; word-break:break-word;
+}
+.dx-ins .row { display:flex; align-items:center; gap:10px; }
+.dx-ins .hint { color:var(--pfaint); font-size:11.5px; }
+</style>
+</head><body class="ins-fallback"><div class="dx-ins">
+  <h1>The inspector did not start</h1>
+  <p>Chromium's DevTools owns this panel, and it did not open. Trying again usually works; if it keeps failing, close the panel and reopen it from a right-click.</p>
+  <div class="why" id="why">no reason reported</div>
+  <div class="row"><button class="btn primary" id="again">Try again</button><span class="hint" id="hint"></span></div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+// The reason travels in the query so the panel can explain the failure without
+// another round trip; the retry is a plain IPC call the main process validates
+// against the inspector windows it opened.
+try {
+  const q = new URLSearchParams(location.search);
+  const why = q.get('reason');
+  if (why) document.getElementById('why').textContent = why;
+} catch (e) {}
+document.getElementById('again').onclick = async (ev) => {
+  const b = ev.currentTarget;
+  b.disabled = true; b.textContent = 'Starting…';
+  try { await window.dexerion.invoke('dex:inspector-retry'); }
+  catch (e) { b.disabled = false; b.textContent = 'Try again'; document.getElementById('hint').textContent = 'Dexerion refused the request.'; }
+};
+</script>
+</body></html>

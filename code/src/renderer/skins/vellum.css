@@ -1,0 +1,136 @@
+/* ============================================================================
+   Dexerion chrome skin — "VELLUM"
+   ----------------------------------------------------------------------------
+   A reading instrument. Warm paper, serif tab titles (the strip reads like a
+   shelf of spines), and one ink gesture: focusing the address field draws a
+   line under it rather than a glow. Tabs are cards that rise into the toolbar;
+   a group is a RUNNING HEAD — a solid rule in the group's colour with its name
+   set in the serif italic, the way a chapter title sits above a page.
+
+   Loaded only by ?skin=vellum (design review). shell.css alone ships.
+   ========================================================================= */
+
+:root[data-skin="vellum"] {
+  --paper:#f7f4ee; --paper-raised:#fffdf8; --paper-field:#fffefb;
+  --paper-ink:#211d17; --paper-ink-2:#4c4536; --paper-muted:#7b7263; --paper-faint:#a89e8c;
+  --paper-line:rgba(33,29,23,.13); --paper-line-strong:rgba(33,29,23,.24);
+  --paper-hover:rgba(33,29,23,.04); --paper-active:rgba(33,29,23,.075);
+  --paper-highlight:rgba(255,255,255,.85);
+  --accent-ink:#fffdf8;
+  --sh1:0 1px 1px rgba(60,48,30,.05); --sh2:0 2px 6px rgba(60,48,30,.08);
+  --sh3:0 4px 14px rgba(60,48,30,.1); --shpop:0 14px 40px -18px rgba(60,48,30,.35);
+  --font:"Candara","Corbel","Segoe UI",sans-serif;
+  --font-display:"Constantia","Georgia","Iowan Old Style",serif;
+  --font-mono:"Cascadia Mono","Consolas",monospace;
+  --r-xs:2px; --r-sm:3px; --r:3px; --r-md:4px; --r-lg:6px;
+  --ease:cubic-bezier(.25,.8,.3,1);
+}
+:root[data-skin="vellum"][data-theme="dark"] {
+  --paper:#151310; --paper-raised:#1d1a15; --paper-field:#191611;
+  --paper-ink:#f1ece1; --paper-ink-2:#c8c0af; --paper-muted:#9d9484; --paper-faint:#6d6557;
+  --paper-line:rgba(255,255,255,.11); --paper-line-strong:rgba(255,255,255,.2);
+  --paper-hover:rgba(255,255,255,.045); --paper-active:rgba(255,255,255,.08);
+  --paper-highlight:rgba(255,255,255,.045);
+  --sh1:none; --sh2:0 2px 8px rgba(0,0,0,.45); --sh3:0 4px 14px rgba(0,0,0,.55);
+  --shpop:0 16px 40px -20px rgba(0,0,0,.8);
+}
+
+/* ---------- strip: a shelf of spines ---------- */
+[data-skin="vellum"] #tabstrip {
+  /* the whole strip is set in the serif; controls below stay in the sans */
+  --font:var(--font-display);
+  height:46px; padding:9px 14px 0; gap:5px;
+  border-bottom:0;
+}
+[data-skin="vellum"] #tabs { gap:5px; }
+[data-skin="vellum"] .tab {
+  height:34px; max-width:214px; min-width:128px; padding:0 10px 0 13px; gap:8px;
+  border:1px solid transparent; border-radius:4px 4px 0 0;
+  font-size:12.5px; letter-spacing:.005em;
+}
+[data-skin="vellum"] .tab.active {
+  background:var(--bg2);
+  color:var(--fg);
+  border-color:var(--hair);
+  border-bottom-color:var(--bg2);
+  box-shadow:inset 0 1px 0 var(--hl), 0 -8px 18px -14px rgba(60,48,30,.5);
+}
+/* no bar: the active spine is marked by a hairline of its identity colour */
+[data-skin="vellum"] .tab.active::after {
+  top:0; left:0; right:0; height:1px;
+  background:color-mix(in srgb,var(--identity) 75%,transparent);
+  border-radius:3px 3px 0 0;
+}
+/* running head: a solid rule above every member of the group */
+[data-skin="vellum"] .tab.grouped::before {
+  top:0; bottom:auto; left:0; right:0; width:auto; height:2px;
+  border-radius:1px 1px 0 0; background:var(--identity); opacity:.9;
+}
+[data-skin="vellum"] .tab.grouped:hover { background:color-mix(in srgb,var(--identity) 7%,var(--hover)); }
+[data-skin="vellum"] #newtab-btn {
+  width:30px; height:28px; margin-bottom:2px; border-radius:3px; color:var(--muted);
+}
+[data-skin="vellum"] #newtab-btn:hover { color:var(--fg); }
+/* the chip is the running head's name, not a badge */
+[data-skin="vellum"] .gchip {
+  height:24px; padding:5px 9px 0 7px; margin-bottom:6px; gap:6px;
+  background:transparent; border:0; border-top:2px solid var(--gc);
+  border-radius:0; font-size:11.5px; font-style:italic; color:var(--fg2);
+}
+[data-skin="vellum"] .gchip:hover { background:transparent; color:var(--fg); }
+[data-skin="vellum"] .gchip .gdot { width:6px; height:6px; border-radius:0; transform:rotate(45deg); }
+[data-skin="vellum"] .gchip .gstate { font-size:9px; }
+[data-skin="vellum"] .gchip .gct {
+  border-radius:0; background:transparent; border:1px solid var(--hair); padding:0 4px;
+  font-family:var(--font-mono); font-size:9.5px;
+}
+
+/* ---------- toolbar: quiet, hairline-ruled ---------- */
+[data-skin="vellum"] #toolbar {
+  height:50px; gap:4px; padding:0 14px;
+  border-bottom:1px solid var(--hair); box-shadow:none;
+}
+[data-skin="vellum"] #toolbar button { width:30px; height:30px; border-radius:3px; }
+[data-skin="vellum"] #toolbar button:hover:not(:disabled) { background:var(--hover); border-color:transparent; }
+[data-skin="vellum"] #omni-wrap { margin:0 8px; }
+[data-skin="vellum"] #omnibox {
+  height:32px; padding:0 14px; border-radius:3px; border-color:transparent;
+  background:var(--field); box-shadow:0 1px 0 var(--hair);
+  font-size:12px;
+}
+[data-skin="vellum"] #omnibox:hover { border-color:var(--hair); box-shadow:0 1px 0 var(--hair2); }
+/* the one ink gesture: focus draws a line, not a halo */
+[data-skin="vellum"] #omnibox:focus {
+  background:var(--bg2); border-color:var(--hair2);
+  box-shadow:0 2px 0 0 var(--accent), 0 -1px 0 var(--hair) inset;
+}
+[data-skin="vellum"] #account-btn { border-radius:3px !important; }
+[data-skin="vellum"] #account-av { border-radius:2px; }
+[data-skin="vellum"] #bookmarkbar {
+  height:29px; padding:4px 14px 0; gap:6px;
+  font-family:var(--font-display); font-size:12px;
+}
+[data-skin="vellum"] #bookmarkbar a { border-radius:0; padding:4px 6px; }
+[data-skin="vellum"] #bookmarkbar a:hover { background:transparent; color:var(--fg); box-shadow:0 1px 0 var(--accent); }
+
+[data-skin="vellum"] #dmenu,
+[data-skin="vellum"] #gedit { border-radius:4px; }
+[data-skin="vellum"] .mitem { border-radius:2px; }
+[data-skin="vellum"] .mlabel { font-family:var(--font-display); font-style:italic; letter-spacing:0; }
+[data-skin="vellum"] #skin-tag { font-family:var(--font-display); font-style:italic; letter-spacing:0; }
+
+/* ---------- vertical rail ---------- */
+[data-skin="vellum"] body.vertical #tabstrip { width:204px; min-width:204px; padding:10px 8px; gap:3px; }
+[data-skin="vellum"] body.vertical #tabs { gap:2px; }
+[data-skin="vellum"] body.vertical .tab { height:30px; border-radius:3px; }
+[data-skin="vellum"] body.vertical .tab.active { border-bottom-color:var(--hair); }
+[data-skin="vellum"] body.vertical .tab.active::after {
+  top:7px; bottom:7px; left:0; right:auto; width:2px; height:auto; border-radius:2px;
+}
+[data-skin="vellum"] body.vertical .tab.grouped::before {
+  top:0; bottom:0; left:0; right:auto; width:2px; height:auto; border-radius:2px 0 0 2px;
+}
+[data-skin="vellum"] body.vertical .gchip {
+  border-top:0; border-left:2px solid var(--gc); padding:6px 8px 6px 9px; margin:2px 0; border-radius:0;
+}
+[data-skin="vellum"] body.vertical #newtab-btn { border-radius:3px; }

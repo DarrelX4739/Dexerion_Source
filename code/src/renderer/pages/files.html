@@ -1,0 +1,208 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Files — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+/* Files: the home for what the assistant made and where you talked about it. */
+.file-kind{font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);border-radius:var(--r-xs);padding:3px 8px;flex:none}
+.file-kind.chat{color:var(--pmuted);background:var(--pbtn);border-color:var(--pborder)}
+</style>
+</head><body><div class="dx-page">
+<div class="dx-head">
+  <div class="eyebrow">Library</div>
+  <h1>Files</h1>
+  <p>Everything Dexerion AI has made and every conversation it kept, in one searchable place.</p>
+</div>
+
+<div class="dx-search">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+  <input id="q" type="search" placeholder="Search reports, artifacts and chats" aria-label="Search artifacts and chats" autocomplete="off">
+</div>
+
+<div class="dx-section"><h2>Artifacts — reports, sites, quizzes, decks, charts</h2></div>
+<div class="dx-list" id="reports"></div>
+
+<div class="dx-section"><h2>Chats</h2></div>
+<div class="dx-list" id="chats"></div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script src="dexerion://assets/ai-artifacts.js"></script>
+<script>
+const reportsBox = document.getElementById('reports');
+const chatsBox = document.getElementById('chats');
+const search = document.getElementById('q');
+let reports = [];
+let chats = [];
+
+const themeName = (id) => String(id || 'clean').charAt(0).toUpperCase() + String(id || 'clean').slice(1);
+
+function when(value) {
+  const time = Number(value) || 0;
+  if (!time) return '';
+  const date = new Date(time);
+  const today = new Date();
+  const sameDay = date.toDateString() === today.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function empty(box, title, sub) {
+  box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'dx-empty';
+  const b = document.createElement('b');
+  b.textContent = title;
+  const span = document.createElement('span');
+  span.textContent = sub;
+  row.append(b, span);
+  box.appendChild(row);
+}
+
+function action(label, primary, fn) {
+  const button = document.createElement('button');
+  button.className = 'btn ghost' + (primary ? ' primary' : '');
+  button.textContent = label;
+  button.onclick = (event) => { event.stopPropagation(); fn(); };
+  return button;
+}
+
+function renderReports(term, hits) {
+  // A search term runs the full-text artifact index (title + body + source
+  // files), so a report is findable by a phrase inside it, not just its title.
+  const rows = term
+    ? (Array.isArray(hits) ? hits : reports.filter((r) => String(r.title || '').toLowerCase().includes(term)))
+    : reports;
+  reportsBox.innerHTML = '';
+  if (!rows.length) {
+    empty(reportsBox, term ? 'Nothing matches' : 'No artifacts yet',
+      term ? 'Nothing here matches “' + term + '”.' : 'Ask Dexerion AI to write a report, build a site or make a quiz and it will appear here.');
+    return;
+  }
+  for (const report of rows) {
+    const hit = term && report.snippet !== undefined;
+    const row = document.createElement('div');
+    row.className = 'dx-item';
+    const kind = document.createElement('span');
+    kind.className = 'file-kind';
+    kind.textContent = String(report.kind || 'report').toUpperCase();
+    const main = document.createElement('div');
+    main.className = 'main';
+    const b = document.createElement('b');
+    b.textContent = report.title;
+    const small = document.createElement('small');
+    small.textContent = hit
+      ? (report.noteHit ? 'note · ' : '') + (report.chatTitle ? report.chatTitle + ' · ' : '') + (report.snippet || '')
+      : 'v' + report.version
+        + (report.files ? ' · ' + report.files + ' files' : '')
+        + (report.kind === 'report' ? ' · ' + themeName(report.theme) : '')
+        + (when(report.updatedAt) ? ' · ' + when(report.updatedAt) : '');
+    if (hit) small.title = report.snippet || '';
+    main.append(b, small);
+    main.onclick = () => (hit ? openReportHit(report) : openReport(report));
+    main.title = 'Open “' + report.title + '”';
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.append(
+      action('Open', true, () => (hit ? openReportHit(report) : openReport(report))),
+      action('Chat', false, () => openChat(report.chatId)),
+    );
+    row.append(kind, main, actions);
+    reportsBox.appendChild(row);
+  }
+}
+
+function renderChats(term) {
+  const rows = term ? chats.filter((c) => String(c.title || '').toLowerCase().includes(term)) : chats;
+  chatsBox.innerHTML = '';
+  if (!rows.length) {
+    empty(chatsBox, term ? 'No chats match' : 'No chats yet',
+      term ? 'Nothing here matches “' + term + '”.' : 'Conversations you have with Dexerion AI will be listed here.');
+    return;
+  }
+  for (const chat of rows) {
+    const row = document.createElement('div');
+    row.className = 'dx-item';
+    const kind = document.createElement('span');
+    kind.className = 'file-kind chat';
+    kind.textContent = 'Chat';
+    const main = document.createElement('div');
+    main.className = 'main';
+    const b = document.createElement('b');
+    b.textContent = chat.title || 'New chat';
+    const small = document.createElement('small');
+    const count = Number(chat.messageCount) || 0;
+    small.textContent = count + ' message' + (count === 1 ? '' : 's') + (when(chat.updatedAt) ? ' · ' + when(chat.updatedAt) : '');
+    main.append(b, small);
+    main.onclick = () => openChat(chat.id);
+    main.title = 'Open “' + (chat.title || 'New chat') + '” in the assistant';
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.append(action('Open', true, () => openChat(chat.id)));
+    row.append(kind, main, actions);
+    chatsBox.appendChild(row);
+  }
+}
+
+// A report opens in the report viewer (contents, notes, design controls);
+// every other kind opens in the artifact viewer. The shared builder (V18)
+// deep-links a search hit to the block that matched, so the viewer lands on
+// the section instead of the top of the document.
+function urlFor(target, opts) {
+  if (window.DexArtifacts && typeof window.DexArtifacts.artifactUrl === 'function') {
+    return window.DexArtifacts.artifactUrl(target, opts);
+  }
+  const route = (target.kind && target.kind !== 'report') ? 'artifact' : 'report';
+  return 'dexerion://' + route + '?chat=' + encodeURIComponent(target.chatId || '') + '&i=' + target.index;
+}
+
+function openReport(report) {
+  window.dexerion.invoke('dex:new-tab', urlFor(report), false).catch(() => {});
+}
+
+function openReportHit(hit) {
+  window.dexerion.invoke('dex:new-tab', urlFor(hit), false).catch(() => {});
+}
+
+function openChat(id) {
+  window.dexerion.invoke('dex:ai-open-chat', id).catch(() => {});
+}
+
+let searchTimer = 0;
+let lastHits = [];
+
+function render() {
+  const term = search.value.trim().toLowerCase();
+  renderReports(term, lastHits);
+  renderChats(term);
+}
+
+function runSearch() {
+  const term = search.value.trim();
+  if (term.length < 2) { lastHits = []; render(); return; }
+  window.dexerion.invoke('dex:ai-artifacts-search', { q: term, limit: 30 })
+    .then((hits) => { lastHits = Array.isArray(hits) ? hits : []; render(); })
+    .catch(() => { lastHits = []; render(); });
+}
+
+// (one render() only: the search-aware one above. A second declaration here
+// used to shadow it and silently drop the full-text hits.)
+
+async function load() {
+  const [reportList, chatList] = await Promise.all([
+    window.dexerion.invoke('dex:ai-reports-list').catch(() => []),
+    window.dexerion.invoke('dex:ai-chats-list').catch(() => []),
+  ]);
+  reports = Array.isArray(reportList) ? reportList : [];
+  chats = Array.isArray(chatList) ? chatList : [];
+  render();
+}
+
+search.oninput = () => {
+  lastHits = [];
+  render();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 180);
+};
+load();
+</script></body></html>

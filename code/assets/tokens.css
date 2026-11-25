@@ -1,0 +1,250 @@
+/* ============================================================================
+   Dexerion shared design tokens — the single source of colour, type, space,
+   radius, elevation, motion and chrome metrics. Both the shell and every
+   dexerion:// page alias into these; nothing defines raw values twice.
+
+   Values follow the scTerra design system: plain greys, hairline borders
+   instead of shadows, near-black primary buttons, one accent for focus and
+   active states, Geist type, a 4/6/10 radius scale, three elevations, and
+   120/160/200ms motion. The user's accent overrides --accent in the shell
+   and pages at runtime; --dx-accent is only the fallback.
+   ========================================================================= */
+
+/* ---------- type: vendored, no network ----------
+   Geist (chrome + UI), Geist Mono (URLs, code, typewriter captions) and
+   Newsreader (report editorial face). All SIL Open Font License; licences sit
+   next to the files. */
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist Mono Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/geist-mono-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Newsreader Variable";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("fonts/newsreader-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Newsreader Variable";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("fonts/newsreader-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+
+  /* ---------- colour ---------- */
+  --dx-bg: #f9f9f9;
+  --dx-surface: #ffffff;
+  --dx-surface-hover: #f3f3f3;
+  --dx-surface-active: #ededed;
+  --dx-field: #ffffff;
+  --dx-border: #e4e4e4;
+  --dx-border-strong: #cfcfcf;
+  --dx-text: #111111;
+  --dx-text-muted: #555555;
+  --dx-text-faint: #8a8a8a;
+  --dx-text-ghost: #a6a6a6;
+
+  --dx-accent: oklch(0.65 0.105 200);
+  --dx-accent-hover: oklch(0.58 0.105 200);
+  --dx-accent-soft: oklch(0.65 0.105 200 / 0.12);
+  --dx-on-accent: oklch(0.99 0 0);
+  --dx-focus-ring: oklch(0.65 0.105 200 / 0.55);
+
+  --dx-danger: #c8473b;
+  --dx-success: oklch(0.56 0.12 155);
+  --dx-warn: #a56a00;
+  --dx-rec: #c2413b;
+
+  /* ---------- typography ---------- */
+  --dx-font-sans: "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --dx-font-mono: "Geist Mono Variable", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --dx-font-serif: "Newsreader Variable", "Iowan Old Style", Georgia, serif;
+  --dx-font-display: var(--dx-font-sans);
+  --dx-text-2xs: 11px;
+  --dx-text-xs: 12px;
+  --dx-text-sm: 13px;
+  --dx-text-md: 15px;
+  --dx-text-lg: 20px;
+  --dx-text-xl: 28px;
+  --dx-leading-tight: 1.2;
+  --dx-leading-normal: 1.45;
+  --dx-weight-regular: 400;
+  --dx-weight-medium: 500;
+  --dx-weight-semibold: 600;
+
+  /* ---------- space (4px grid) ---------- */
+  --dx-space: 4px;
+  --dx-space-1: 4px;
+  --dx-space-2: 8px;
+  --dx-space-3: 12px;
+  --dx-space-4: 16px;
+
+  /* ---------- radius: small controls / tabs & buttons / pages & popovers ---------- */
+  --dx-radius-sm: 4px;
+  --dx-radius-md: 6px;
+  --dx-radius-lg: 10px;
+
+  /* ---------- elevation: three levels, never more ---------- */
+  --dx-shadow-1: 0 0 0 1px var(--dx-border);
+  --dx-shadow-2: 0 0 0 1px var(--dx-border), 0 2px 8px rgb(0 0 0 / 0.06);
+  --dx-shadow-3: 0 0 0 1px var(--dx-border), 0 4px 8px rgb(0 0 0 / 0.04), 0 20px 48px rgb(0 0 0 / 0.16);
+
+  /* ---------- motion ---------- */
+  --dx-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dx-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dx-dur-fast: 120ms;
+  --dx-dur: 160ms;
+  --dx-dur-slow: 200ms;
+
+  /* ---------- chrome metrics ---------- */
+  --dx-tabstrip-h: 40px;
+  --dx-toolbar-h: 44px;
+  --dx-page-inset: 6px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --dx-bg: #171717;
+  --dx-surface: #121212;
+  --dx-surface-hover: #232323;
+  --dx-surface-active: #2a2a2a;
+  --dx-field: #121212;
+  --dx-border: #2e2e2e;
+  --dx-border-strong: #404040;
+  --dx-text: #f2f2f2;
+  --dx-text-muted: #b5b5b5;
+  --dx-text-faint: #888888;
+  --dx-text-ghost: #6f6f6f;
+
+  --dx-accent: oklch(0.72 0.105 200);
+  --dx-accent-hover: oklch(0.78 0.105 200);
+  --dx-accent-soft: oklch(0.72 0.105 200 / 0.16);
+  --dx-on-accent: #111111;
+  --dx-focus-ring: oklch(0.72 0.105 200 / 0.6);
+
+  --dx-success: oklch(0.72 0.13 155);
+  --dx-warn: #e0ad4d;
+  --dx-danger: #e47c73;
+  --dx-rec: #e06a63;
+
+  --dx-shadow-1: 0 0 0 1px var(--dx-border);
+  --dx-shadow-2: 0 0 0 1px var(--dx-border), 0 2px 8px rgb(0 0 0 / 0.3);
+  --dx-shadow-3: 0 0 0 1px var(--dx-border), 0 4px 8px rgb(0 0 0 / 0.25), 0 20px 48px rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --dx-border: var(--dx-border-strong);
+    --dx-text-muted: var(--dx-text);
+    --dx-text-faint: var(--dx-text-muted);
+    --dx-focus-ring: var(--dx-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dx-dur-fast: 0ms;
+    --dx-dur: 0ms;
+    --dx-dur-slow: 0ms;
+  }
+}
+
+/* ---------- component tokens (polish pass: design) ----------
+   Buttons, inputs, cards, focus rings, and component states.  These are the
+   only place component geometry and colours are defined; shell.css and page
+   CSS reference them only. */
+:root {
+  /* button */
+  --dx-btn-pad-y: 8px;
+  --dx-btn-pad-x: 16px;
+  --dx-btn-font: var(--dx-weight-medium);
+  --dx-btn-font-size: 13px;
+  --dx-btn-radius: var(--dx-radius-md);
+  --dx-btn-bg: var(--dx-surface);
+  --dx-btn-bg-hover: var(--dx-surface-hover);
+  --dx-btn-border: var(--dx-border);
+  --dx-btn-border-hover: var(--dx-accent);
+  --dx-btn-text: var(--dx-text);
+  --dx-btn-text-hover: var(--dx-text);
+
+  --dx-btn-primary-bg: var(--dx-accent);
+  --dx-btn-primary-bg-hover: var(--dx-accent-hover);
+  --dx-btn-primary-border: var(--dx-accent);
+  --dx-btn-primary-text: var(--dx-on-accent);
+
+  --dx-btn-ghost-bg: transparent;
+  --dx-btn-ghost-bg-hover: var(--dx-accent-soft);
+  --dx-btn-ghost-border: transparent;
+  --dx-btn-ghost-text: var(--dx-text-muted);
+  --dx-btn-ghost-text-hover: var(--dx-text);
+
+  --dx-btn-danger-bg: var(--dx-danger);
+  --dx-btn-danger-bg-hover: #b33b30;
+  --dx-btn-danger-border: var(--dx-danger);
+  --dx-btn-danger-text: #ffffff;
+
+  /* input / select / textarea */
+  --dx-input-pad-y: 8px;
+  --dx-input-pad-x: 12px;
+  --dx-input-bg: var(--dx-field);
+  --dx-input-border: var(--dx-border);
+  --dx-input-border-focus: var(--dx-focus-ring);
+  --dx-input-text: var(--dx-text);
+  --dx-input-placeholder: var(--dx-text-faint);
+  --dx-input-radius: var(--dx-radius-md);
+
+  /* card */
+  --dx-card-bg: var(--dx-surface);
+  --dx-card-border: var(--dx-border);
+  --dx-card-radius: var(--dx-radius-lg);
+  --dx-card-pad: 16px;
+
+  /* focus ring (accessibility) */
+  --dx-focus-ring-width: 2px;
+  --dx-focus-ring-offset: 2px;
+
+  /* compact popovers and status lines */
+  --dx-popover-radius: var(--dx-radius-lg);
+  --dx-popover-pad: var(--dx-space-1);
+  --dx-status-font-size: var(--dx-text-2xs);
+}
+
+[data-theme="dark"] {
+  --dx-input-placeholder: #8a8a8a;
+}

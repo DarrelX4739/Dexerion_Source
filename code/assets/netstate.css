@@ -1,0 +1,87 @@
+/* ============================================================================
+   Network state pages — connecting.html, offline.html
+   ----------------------------------------------------------------------------
+   Two devices, one per page, both drawn in the browser's own hairline language
+   rather than as clip art.
+
+   While Dexerion is waiting, four bars rise and fall on a one-second cycle —
+   the same rhythm as the retry attempts underneath them, so the motion is
+   reading out the thing that is happening, not decorating it. On recovery the
+   bars stop and stand up in the connected green.
+
+   When the wait has failed, the page carries a sign instead: a globe with one
+   stroke through it, static. The old device animated a story — a signal leaving a
+   router, giving up halfway — and that is the wrong register for a page already
+   delivering news you did not choose. Under the sign there is a game, because the
+   one thing an offline page can still usefully offer is something to do that needs
+   no network at all; it is drawn in the same materials, so it belongs here.
+
+   Nothing here invents a palette: the track/lines are the theme's hairline, the
+   live parts are the accent, and the connected state is the theme's own success
+   green. Both pages include page-theme.css, so light/dark and the user's accent
+   apply exactly as they do on the blocked page.
+   ========================================================================= */
+
+.state { display: grid; place-items: center; min-height: 100vh; padding: 40px 24px; }
+.state .wrap { width: min(560px, 94vw); text-align: center; animation: dx-rise .4s var(--ease) both; }
+
+.state h1 { font-family: var(--font-display); font-size: 24px; letter-spacing: -.01em; margin: 0 0 10px; }
+.state .host { font-family: var(--font-mono); font-size: 14px; color: var(--accent); word-break: break-all; margin-bottom: 14px; }
+.state .lede { color: var(--pmuted); font-size: 13.5px; line-height: 1.7; margin: 0 auto; max-width: 46ch; }
+.state .actions { display: flex; gap: 10px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
+
+.state .status {
+  margin-top: 18px; font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .02em;
+  color: var(--pmuted); transition: color var(--dur) var(--ease);
+}
+.state .status.done { color: var(--ok); }
+
+/* ---------- waiting: four bars, one cycle per second ---------- */
+.bars { display: flex; align-items: flex-end; justify-content: center; gap: 7px; height: 44px; margin: 30px auto 22px; }
+.bars i {
+  display: block; width: 6px; height: 44px; border-radius: 3px; background: var(--accent);
+  transform: scaleY(.26); transform-origin: bottom center;
+  animation: barJump 1s cubic-bezier(.42, 0, .58, 1) infinite;
+}
+.bars i:nth-child(2) { animation-delay: .11s; }
+.bars i:nth-child(3) { animation-delay: .22s; }
+.bars i:nth-child(4) { animation-delay: .33s; }
+@keyframes barJump { 0%, 100% { transform: scaleY(.26); } 50% { transform: scaleY(1); } }
+/* recovered: the bars stand up and the motion stops, which is the whole point */
+.bars.done i { animation: none; transform: scaleY(1); background: var(--ok); }
+
+/* ---------- offline: the sign, nothing moving ----------
+   A globe with one stroke through it. It is a sign, so it does not animate: the
+   previous device told a story in a loop, which is exactly what you do not want
+   from a page that is already telling you something you did not choose.
+   The stroke is drawn twice — once in the page colour at a heavier weight to cut
+   the globe open, once in ink on top — which is what makes it read as a mark
+   through the object rather than a line lying across it. */
+.mark { display: block; width: 52px; height: 52px; margin: 18px auto 14px; color: var(--pfaint); overflow: visible; }
+.mark .globe { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.mark .cut { fill: none; stroke: var(--pbg); stroke-width: 6.5; }
+.mark .slash { fill: none; stroke: var(--pmuted); stroke-width: 1.5; stroke-linecap: round; transition: stroke var(--dur) var(--ease); }
+/* recovered: the mark is lifted and the globe takes the connected green */
+.mark.done { color: var(--ok); }
+.mark.done .slash, .mark.done .cut { opacity: 0; }
+
+/* ---------- the game ----------
+   Separated by a hairline rule rather than boxed in a card: the page's own
+   language for "another thing", not a rounded panel with a drop shadow. */
+.play { width: min(324px, 100%); margin: 20px auto 0; padding-top: 16px; border-top: 1px solid var(--pborder); }
+.play .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.play .name { font-family: var(--font-display); font-size: 15px; color: var(--pfg-2); }
+.play .scores { display: flex; gap: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--pmuted); }
+.play .scores b { font-weight: 500; color: var(--pfg-2); font-variant-numeric: tabular-nums; }
+.play canvas {
+  display: block; width: 100%; height: auto; box-sizing: border-box;
+  background: var(--pcard); border: 1px solid var(--pborder-2); border-radius: var(--r-sm);
+}
+.play .hint { margin-top: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--pmuted); min-height: 16px; }
+
+/* The bars are decoration, so they stop; the counting text and the state change
+   stay, because those are the information. The sign has no motion to stop. */
+@media (prefers-reduced-motion: reduce) {
+  .bars i { animation: none !important; transform: scaleY(.8); }
+  .bars.done i { transform: scaleY(1); }
+}

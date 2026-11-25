@@ -1,0 +1,222 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>You’re offline — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/netstate.css">
+</head><body>
+<div class="state"><div class="wrap">
+  <!-- The sign: a globe with one stroke through it. Static on purpose. -->
+  <svg class="mark" id="device" viewBox="0 0 64 64" aria-hidden="true">
+    <circle class="globe" cx="32" cy="32" r="21"/>
+    <ellipse class="globe" cx="32" cy="32" rx="9.5" ry="21"/>
+    <ellipse class="globe" cx="32" cy="32" rx="21" ry="8"/>
+    <path class="cut" d="M11 53L53 11"/>
+    <path class="slash" d="M11 53L53 11"/>
+  </svg>
+  <h1 id="title">You’re offline</h1>
+  <div class="host" id="host"></div>
+  <p class="lede">Dexerion kept trying and the connection never answered. Your other tabs still work, and this page opens by itself once the network is back.</p>
+  <div class="status" id="status">Waiting for the connection</div>
+  <div class="actions">
+    <button class="btn primary" id="retry">Try again</button>
+    <button class="btn" id="home">Start page</button>
+  </div>
+
+  <!-- While you wait: the one thing here that needs no network at all. -->
+  <div class="play">
+    <div class="head">
+      <div class="name">Snake</div>
+      <div class="scores"><span>Score <b id="score">0</b></span><span>Best <b id="best">0</b></span></div>
+    </div>
+    <canvas id="game" width="324" height="198" tabindex="0" role="application"
+            aria-label="Snake, played with the arrow keys"></canvas>
+    <div class="hint" id="hint">Press an arrow key to play.</div>
+  </div>
+</div></div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const q = new URLSearchParams(location.search);
+  const title = $('#title'), status = $('#status'), device = $('#device');
+
+  $('#host').textContent = q.get('host') || q.get('t') || 'this page';
+
+  // The main process keeps checking while this page is up, so recovery does not
+  // depend on anyone pressing Try again.
+  window.dexerion.on('dex:net-progress', (p) => {
+    if (!p) return;
+    if (p.state === 'recovered') {
+      device.classList.add('done');
+      title.textContent = 'Connected';
+      status.textContent = 'Opening the page you asked for';
+      status.classList.add('done');
+      return;
+    }
+    if (p.state === 'waiting') status.textContent = 'Trying again — ' + p.attempt + '/' + Math.max(p.of, p.attempt);
+    else if (p.state === 'offline') status.textContent = 'Still waiting for the connection';
+  });
+
+  $('#retry').onclick = () => window.dexerion.invoke('dex:net-retry').catch(() => {});
+  $('#home').onclick = () => window.dexerion.invoke('dex:navigate', null, 'dexerion://newtab').catch(() => {});
+})();
+
+// ---------- snake ----------
+// Played entirely here: no assets, no requests, nothing that can fail while the
+// network is down. The board is drawn in the page's own materials — hairline
+// grid, ink wire, accent food — so it reads as part of Dexerion rather than a
+// widget dropped onto it.
+(function () {
+  const cv = document.getElementById('game');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const COLS = 18, ROWS = 11, CELL = 18, W = COLS * CELL, H = ROWS * CELL;
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const hintEl = document.getElementById('hint');
+  const DIRS = { u: { x: 0, y: -1 }, d: { x: 0, y: 1 }, l: { x: -1, y: 0 }, r: { x: 1, y: 0 } };
+  const KEYS = { arrowup: 'u', arrowdown: 'd', arrowleft: 'l', arrowright: 'r', w: 'u', s: 'd', a: 'l', d: 'r' };
+  const START_MS = 130, MIN_MS = 85, SPEEDUP = 4, KEY = 'dexerion.snake.best';
+
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  let snake = [], dir = DIRS.r, next = DIRS.r, food = { x: 0, y: 0 };
+  let score = 0, best = 0, dead = false, playing = false, stepMs = START_MS, acc = 0, last = 0;
+  try { best = Math.max(0, Number(localStorage.getItem(KEY)) || 0); } catch {}
+  if (bestEl) bestEl.textContent = String(best);
+
+  // Read the palette when the board is (re)drawn, so light/dark and the user's
+  // accent apply without colour values living in here.
+  function pal() {
+    const s = getComputedStyle(document.body);
+    const v = (n, fallback) => (s.getPropertyValue(n) || '').trim() || fallback;
+    return { grid: v('--pborder', 'rgba(0,0,0,.1)'), wire: v('--pfg-2', '#333'), food: v('--accent', '#35c4ff') };
+  }
+  function setHint() {
+    if (!hintEl) return;
+    hintEl.textContent = dead
+      ? (score > 0 ? 'Game over at ' + score + '. Press space to play again.' : 'Game over. Press space to play again.')
+      : (playing ? 'Arrow keys to move. Space restarts.' : 'Press an arrow key to play.');
+  }
+  function place() {
+    const free = [];
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      let taken = false;
+      for (let i = 0; i < snake.length; i++) if (snake[i].x === x && snake[i].y === y) { taken = true; break; }
+      if (!taken) free.push({ x, y });
+    }
+    food = free.length ? free[(Math.random() * free.length) | 0] : { x: 0, y: 0 };
+  }
+  function render() {
+    const p = pal();
+    ctx.clearRect(0, 0, W, H);
+    // The grid is a guide, not a feature: drawn back so the frame, which is the
+    // wall, is the strongest line on the board.
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = p.grid;
+    ctx.beginPath();
+    for (let x = 1; x < COLS; x++) { ctx.moveTo(x * CELL + 0.5, 0); ctx.lineTo(x * CELL + 0.5, H); }
+    for (let y = 1; y < ROWS; y++) { ctx.moveTo(0, y * CELL + 0.5); ctx.lineTo(W, y * CELL + 0.5); }
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    if (dead) ctx.globalAlpha = 0.35;
+    ctx.fillStyle = p.food;
+    ctx.beginPath();
+    ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL * 0.27, 0, Math.PI * 2);
+    ctx.fill();
+    if (snake.length) {
+      ctx.strokeStyle = p.wire;
+      ctx.lineWidth = CELL * 0.58;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < snake.length; i++) {
+        const cx = snake[i].x * CELL + CELL / 2, cy = snake[i].y * CELL + CELL / 2;
+        if (i) ctx.lineTo(cx, cy);
+        else ctx.moveTo(cx, cy);
+      }
+      if (snake.length === 1) ctx.lineTo(snake[0].x * CELL + CELL / 2 + 0.01, snake[0].y * CELL + CELL / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function over() {
+    dead = true;
+    playing = false;
+    if (score > best) {
+      best = score;
+      if (bestEl) bestEl.textContent = String(best);
+      try { localStorage.setItem(KEY, String(best)); } catch {}
+    }
+    setHint();
+    render();
+  }
+  function step() {
+    dir = next;
+    const h = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    const out = h.x < 0 || h.y < 0 || h.x >= COLS || h.y >= ROWS;
+    // The tail cell is fair game: it moves out of the way this same step.
+    let bite = false;
+    for (let i = 0; i < snake.length - 1; i++) if (snake[i].x === h.x && snake[i].y === h.y) { bite = true; break; }
+    if (out || bite) { over(); return; }
+    snake.unshift(h);
+    if (h.x === food.x && h.y === food.y) {
+      score += 1;
+      if (scoreEl) scoreEl.textContent = String(score);
+      if (stepMs > MIN_MS) stepMs -= SPEEDUP;
+      place();
+    } else snake.pop();
+  }
+  function frame(t) {
+    requestAnimationFrame(frame);
+    // Only runs while the page actually has the window's attention, so a game
+    // left mid-run does not walk into a wall while you are reading elsewhere.
+    if (!playing || dead || !document.hasFocus()) { last = t; return; }
+    const dt = Math.min(150, t - (last || t));
+    last = t;
+    acc += dt;
+    let moved = false;
+    while (acc >= stepMs && !dead) { acc -= stepMs; step(); moved = true; }
+    if (moved) render();
+  }
+  function reset(start) {
+    snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
+    dir = DIRS.r;
+    next = DIRS.r;
+    score = 0;
+    dead = false;
+    playing = !!start;
+    stepMs = START_MS;
+    acc = 0;
+    last = 0;
+    if (scoreEl) scoreEl.textContent = '0';
+    place();
+    setHint();
+    render();
+  }
+  document.addEventListener('keydown', (e) => {
+    const to = KEYS[String(e.key || '').toLowerCase()];
+    if (to) {
+      e.preventDefault();   // the arrows are the game's, not the page's
+      if (!playing || dead) reset(true);
+      const nd = DIRS[to];
+      if (nd.x !== -dir.x || nd.y !== -dir.y) next = nd;   // no turning back into yourself
+      setHint();
+      return;
+    }
+    if (e.code === 'Space') {
+      const a = document.activeElement;
+      if (a && /^(BUTTON|INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;   // let the buttons be buttons
+      e.preventDefault();
+      if (dead || !playing) reset(true);
+    }
+  });
+  reset(false);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>

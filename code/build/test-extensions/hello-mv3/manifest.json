@@ -1,0 +1,6 @@
+{
+  "name": "Hello MV3",
+  "version": "1.0.0",
+  "manifest_version": 3,
+  "description": "Minimal MV3 fixture for the Dexerion selftest (extension loader)."
+}

@@ -1,0 +1,47 @@
+{
+  "appId": "com.dexerion.browser",
+  "productName": "Dexerion",
+  "copyright": "Copyright © 2026 Dexerion",
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "Main_Exe_Dexerion.${ext}",
+    "icon": "../code/assets/icon.ico",
+    "verifyUpdateCodeSignature": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Dexerion",
+    "uninstallDisplayName": "Dexerion",
+    "installerHeader": "installer/header.bmp",
+    "installerSidebar": "installer/sidebar.bmp",
+    "uninstallerSidebar": "installer/sidebar.bmp",
+    "include": "installer/installer.nsh",
+    "runAfterFinish": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "fileAssociations": [
+    { "ext": "html", "name": "Dexerion HTML", "role": "Browser" },
+    { "ext": "htm", "name": "Dexerion HTML", "role": "Browser" },
+    { "ext": "xhtml", "name": "Dexerion HTML", "role": "Browser" }
+  ],
+  "files": [
+    { "from": "../code", "to": "." },
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "main.js"
+  },
+  "extraResources": [],
+  "directories": {
+    "output": "C:/Users/Darre/AppData/Local/Temp/dex-build"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "source": {
+    "primary": {
+      "name": "Artificial Analysis",
+      "url": "https://artificialanalysis.ai/",
+      "capturedAt": "",
+      "attribution": "Benchmark data: Artificial Analysis (artificialanalysis.ai). Refresh with `npm run vendor:model-data` (needs ARTIFICIAL_ANALYSIS_API_KEY)."
+    },
+    "secondary": [
+      { "name": "LMArena", "url": "https://lmarena.ai/" },
+      { "name": "LiveBench", "url": "https://livebench.ai/" },
+      { "name": "HELM", "url": "https://crfm.stanford.edu/helm/" }
+    ]
+  },
+  "anchor": {
+    "model": "google/diffusiongemma-26b-a4b-it",
+    "speed": null,
+    "note": "Speed anchor. Official claims: >1,100 tok/s (NVIDIA NIM model card, H100 FP8 low batch), 1,000+ tok/s on H100 / 700+ on RTX 5090 (Google), ~1,500 tok/s (technical report). Provider-side end-to-end Output Speed from Artificial Analysis was not published at capture time, so the scout runs relative-speed scoring and records estimated:true until the snapshot carries a measured number."
+  },
+  "models": [],
+  "notes": [
+    "Starter snapshot: no invented measurements. Run `npm run vendor:model-data` with ARTIFICIAL_ANALYSIS_API_KEY to fill `models`.",
+    "Until then the scout scores capability heuristics (fast/reasoning/context/vision) and marks every pick estimated:true with source 'heuristic'.",
+    "The curated NIM recommended list remains the last-resort fallback when the live catalogue itself is unavailable."
+  ]
+}

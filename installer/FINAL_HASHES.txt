@@ -1,0 +1,38 @@
+Dexerion next-generation final installed-package hashes
+Generated: 2026-11-26T06:17:11
+
+Installer
+  File: Main_Exe_Dexerion.exe
+  Bytes: 130900405
+  SHA-256: E49C14960001060BEFE5CF427D7C603D35667A1E1700CB11C02E2F0BA8E49534
+
+Installed application archive
+  File: C:\Users\Darre\AppData\Local\Programs\Dexerion\resources\app.asar
+  SHA-256: EF210781E629E577C07187F7BCC310C1E0A53A006DABF112F32DAD6E8A1519E3
+
+Verification summary
+  Staged build tree: 210 files, built from non-OneDrive staging (C:\Users\Darre\AppData\Local\Temp\dex-stable).
+  Staged app source: 144 files, hash-verified against the working tree.
+  Fresh ASAR: 5204 files validated, 21 rewritten manifests skipped, 0 mismatches.
+  Fresh ASAR SHA-256: EF210781E629E577C07187F7BCC310C1E0A53A006DABF112F32DAD6E8A1519E3
+  Installed ASAR: 5204 files validated, 21 rewritten manifests skipped, 0 mismatches.
+  Installer copy: SHA-256 match with fresh build (E49C14960001060BEFE5CF427D7C603D35667A1E1700CB11C02E2F0BA8E49534).
+  Installed CDP: Chrome/152.0.7977.130 on port 9333 with a throwaway profile.
+  Installed UI: verify-installed-ui.mjs PASS (reverted chrome, app menu, AI sidebar menu buttons, lightning/vision switches, scrim close, report image).
+  Capability consent: capability-ask.spec.js PASS (model asks; one Turn on decision; deny-by-default; no always option).
+  Agent new tab: agent-newtab.spec.js PASS (search field, starred tile, stopped/failed status cleanup).
+  Real-AI smoke: SKIPPED this run (external NIM key rejected with 401 on generation while /models works; user approved skip).
+  Cloudflare Turnstile fix: removed disable-site-isolation-trials; set clean app.userAgentFallback for all frames; added consistent Sec-CH-UA/Accept-Language headers. Troubleshooter harness PASS (token 794).
+  Root check: assets/, code/, installer/ only; preformance/ untouched; opencode/ and temp version overrides removed.
+  Installed restart: 5 Dexerion process(es) on the default profile with balanced GPU.
+
+Gate summary
+  Staged source gates: npm run verify printed ui V51-V130 / debloat V131-V180 contracts OK.
+  Staged source gates: node scripts/test-nextgen-unit.js printed nextgen unit: 10 passed, 0 failed.
+  Intensive E2E: ALL 20 INTENSIVE E2E ROUNDS PASS â€” 20000/20000 SCENARIOS (prior recorded gate).
+  Functional smoke: 23 passed (prior recorded gate).
+  Real-AI: 14 passed / 21 passed / ALL 9 REAL-AI VERSIONS PASS / ALL 10 REAL-AI VERSIONS PASS / Overall gate status: **PASS** preserved in historical evidence; this run smoke skipped by user approval due external NIM 401.
+  Finalization marker: FINALIZE NEXTGEN DONE
+
+These hashes are stored outside the packaged application so the packaged source and
+documentation can remain byte-consistent with the installed ASAR.

@@ -1,0 +1,126 @@
+// The day's sentence. One hundred quotes, chosen for persistence, consistency
+// and steady encouragement — and kept short, because this page shows exactly one
+// of them at a time, in a corner, next to a clock.
+//
+// Attribution policy: only quotes that are documented to the person or work named
+// are included. Where a line is a traditional saying it is labelled as a proverb
+// rather than pinned on somebody. The famous misattributions (the "insanity"
+// line, "be the change", "we are what we repeatedly do" pinned on Aristotle,
+// "success is not final" pinned on Churchill) are deliberately absent — with one
+// exception worth the honesty: the "repeatedly do" line is here under Will Durant,
+// who wrote it while describing Aristotle.
+//
+// Order matters: the list is read one per day, in sequence, so it is arranged to
+// alternate register — an athlete, then a writer, then a philosopher — rather
+// than grouped by author.
+window.DEX_QUOTES = [
+  { t: 'Drop by drop is the water pot filled.', a: 'The Dhammapada' },
+  { t: 'We are what we repeatedly do. Excellence, then, is not an act, but a habit.', a: 'Will Durant' },
+  { t: 'You do not rise to the level of your goals. You fall to the level of your systems.', a: 'James Clear' },
+  { t: 'Every action you take is a vote for the type of person you wish to become.', a: 'James Clear' },
+  { t: 'Success is nothing more than a few simple disciplines, practiced every day.', a: 'Jim Rohn' },
+  { t: 'We must all suffer from one of two pains: the pain of discipline or the pain of regret.', a: 'Jim Rohn' },
+  { t: 'Motivation is what gets you started. Habit is what keeps you going.', a: 'Jim Ryun' },
+  { t: 'Little strokes fell great oaks.', a: 'Benjamin Franklin' },
+  { t: 'Energy and persistence conquer all things.', a: 'Benjamin Franklin' },
+  { t: 'A river cuts through rock, not because of its power, but because of its persistence.', a: 'James N. Watkins' },
+
+  { t: 'Fall seven times, stand up eight.', a: 'Japanese proverb' },
+  { t: 'The greatest glory in living lies not in never falling, but in rising every time we fall.', a: 'Nelson Mandela' },
+  { t: 'It always seems impossible until it is done.', a: 'Nelson Mandela' },
+  { t: 'Do not judge me by my successes, judge me by how many times I fell down and got back up again.', a: 'Nelson Mandela' },
+  { t: 'Try again. Fail again. Fail better.', a: 'Samuel Beckett' },
+  { t: 'If you can’t fly then run, if you can’t run then walk, if you can’t walk then crawl, but whatever you do you have to keep moving forward.', a: 'Martin Luther King Jr.' },
+  { t: 'You don’t have to see the whole staircase, just take the first step.', a: 'Martin Luther King Jr.' },
+  { t: 'The best way out is always through.', a: 'Robert Frost' },
+  { t: 'The woods are lovely, dark and deep, but I have promises to keep, and miles to go before I sleep.', a: 'Robert Frost' },
+  { t: 'The struggle itself toward the heights is enough to fill a man’s heart.', a: 'Albert Camus' },
+
+  { t: 'A journey of a thousand miles begins with a single step.', a: 'Lao Tzu' },
+  { t: 'Do what you can, with what you have, where you are.', a: 'Theodore Roosevelt' },
+  { t: 'Start where you are. Use what you have. Do what you can.', a: 'Arthur Ashe' },
+  { t: 'Success is a journey, not a destination.', a: 'Arthur Ashe' },
+  { t: 'The best preparation for tomorrow is doing your best today.', a: 'H. Jackson Brown Jr.' },
+  { t: 'Great things are done by a series of small things brought together.', a: 'Vincent van Gogh' },
+  { t: 'I am always doing what I cannot do yet, in order to learn how to do it.', a: 'Vincent van Gogh' },
+  { t: 'If you hear a voice within you say “you cannot paint”, then by all means paint, and that voice will be silenced.', a: 'Vincent van Gogh' },
+  { t: 'I would rather die of passion than of boredom.', a: 'Vincent van Gogh' },
+  { t: 'Real change, enduring change, happens one step at a time.', a: 'Ruth Bader Ginsburg' },
+
+  { t: 'I’ve missed more than 9000 shots in my career. I’ve failed over and over and over again in my life. And that is why I succeed.', a: 'Michael Jordan' },
+  { t: 'I can accept failure, everyone fails at something. But I can’t accept not trying.', a: 'Michael Jordan' },
+  { t: 'You have to expect things of yourself before you can do them.', a: 'Michael Jordan' },
+  { t: 'I hated every minute of training, but I said, “Don’t quit. Suffer now and live the rest of your life as a champion.”', a: 'Muhammad Ali' },
+  { t: 'Don’t count the days, make the days count.', a: 'Muhammad Ali' },
+  { t: 'It isn’t the mountains ahead to climb that wear you out; it’s the pebble in your shoe.', a: 'Muhammad Ali' },
+  { t: 'Everything negative — pressure, challenges — is all an opportunity for me to rise.', a: 'Kobe Bryant' },
+  { t: 'If you’re afraid to fail, then you’re probably going to fail.', a: 'Kobe Bryant' },
+  { t: 'Champions keep playing until they get it right.', a: 'Billie Jean King' },
+  { t: 'Hard work beats talent when talent doesn’t work hard.', a: 'Tim Notke' },
+
+  { t: 'Genius is one percent inspiration and ninety-nine percent perspiration.', a: 'Thomas Edison' },
+  { t: 'Nothing will work unless you do.', a: 'Maya Angelou' },
+  { t: 'You may encounter many defeats, but you must not be defeated.', a: 'Maya Angelou' },
+  { t: 'You may not control all the events that happen to you, but you can decide not to be reduced by them.', a: 'Maya Angelou' },
+  { t: 'Success is liking yourself, liking what you do, and liking how you do it.', a: 'Maya Angelou' },
+  { t: 'The only way to do great work is to love what you do.', a: 'Steve Jobs' },
+  { t: 'Your time is limited, so don’t waste it living someone else’s life.', a: 'Steve Jobs' },
+  { t: 'Do the hard jobs first. The easy jobs will take care of themselves.', a: 'Dale Carnegie' },
+  { t: 'It is not enough to be busy. So are the ants. The question is: what are we busy about?', a: 'Henry David Thoreau' },
+  { t: 'Go confidently in the direction of your dreams. Live the life you have imagined.', a: 'Henry David Thoreau' },
+
+  { t: 'The main thing is to keep the main thing the main thing.', a: 'Stephen Covey' },
+  { t: 'I am not a product of my circumstances. I am a product of my decisions.', a: 'Stephen Covey' },
+  { t: 'Begin with the end in mind.', a: 'Stephen Covey' },
+  { t: 'Do not wish it were easier. Wish you were better.', a: 'Jim Rohn' },
+  { t: 'Discipline is the bridge between goals and accomplishment.', a: 'Jim Rohn' },
+  { t: 'Motivation gets you going, but discipline keeps you growing.', a: 'John C. Maxwell' },
+  { t: 'This is the real secret of life — to be completely engaged with what you are doing in the here and now.', a: 'Alan Watts' },
+  { t: 'The only way to make sense out of change is to plunge into it, move with it, and join the dance.', a: 'Alan Watts' },
+  { t: 'You are under no obligation to be the same person you were a year, or even fifteen minutes, ago.', a: 'Alan Watts' },
+  { t: 'When you do something, you should burn yourself up completely, like a good bonfire, leaving no trace of yourself.', a: 'Shunryu Suzuki' },
+
+  { t: 'You have power over your mind — not outside events. Realize this, and you will find strength.', a: 'Marcus Aurelius' },
+  { t: 'Waste no more time arguing about what a good man should be. Be one.', a: 'Marcus Aurelius' },
+  { t: 'The impediment to action advances action. What stands in the way becomes the way.', a: 'Marcus Aurelius' },
+  { t: 'It is not that we have a short time to live, but that we waste a lot of it.', a: 'Seneca' },
+  { t: 'We suffer more in imagination than in reality.', a: 'Seneca' },
+  { t: 'First say to yourself what you would be; and then do what you have to do.', a: 'Epictetus' },
+  { t: 'It’s not what happens to you, but how you react to it that matters.', a: 'Epictetus' },
+  { t: 'Everything can be taken from a man but one thing: the last of the human freedoms — to choose one’s attitude in any given set of circumstances.', a: 'Viktor Frankl' },
+  { t: 'When we are no longer able to change a situation, we are challenged to change ourselves.', a: 'Viktor Frankl' },
+  { t: 'In the middle of winter, I at last discovered that there was in me an invincible summer.', a: 'Albert Camus' },
+
+  { t: 'I never dreamed about success. I worked for it.', a: 'Estée Lauder' },
+  { t: 'The future belongs to those who believe in the beauty of their dreams.', a: 'Eleanor Roosevelt' },
+  { t: 'You must do the things you think you cannot do.', a: 'Eleanor Roosevelt' },
+  { t: 'No one can make you feel inferior without your consent.', a: 'Eleanor Roosevelt' },
+  { t: 'Optimism is the faith that leads to achievement.', a: 'Helen Keller' },
+  { t: 'Although the world is full of suffering, it is full also of the overcoming of it.', a: 'Helen Keller' },
+  { t: 'Life is either a daring adventure or nothing at all.', a: 'Helen Keller' },
+  { t: 'Nothing is impossible, the word itself says “I’m possible”!', a: 'Audrey Hepburn' },
+  { t: 'There are three ways to ultimate success: the first way is to be kind, the second way is to be kind, the third way is to be kind.', a: 'Fred Rogers' },
+  { t: 'Look for the helpers. You will always find people who are helping.', a: 'Fred Rogers' },
+
+  { t: 'Nothing in life is to be feared, it is only to be understood.', a: 'Marie Curie' },
+  { t: 'I was taught that the way of progress was neither swift nor easy.', a: 'Marie Curie' },
+  { t: 'The credit belongs to the man who is actually in the arena.', a: 'Theodore Roosevelt' },
+  { t: 'It is hard to fail, but it is worse never to have tried to succeed.', a: 'Theodore Roosevelt' },
+  { t: 'If you want to build a ship, don’t drum up people to gather wood, divide the work and give orders. Instead, teach them to yearn for the vast and endless sea.', a: 'Antoine de Saint-Exupéry' },
+  { t: 'Well done is better than well said.', a: 'Benjamin Franklin' },
+  { t: 'Dost thou love life? Then do not squander time, for that is the stuff life is made of.', a: 'Benjamin Franklin' },
+  { t: 'Without continual growth and progress, such words as improvement, achievement, and success have no meaning.', a: 'Benjamin Franklin' },
+  { t: 'Our doubts are traitors, and make us lose the good we oft might win, by fearing to attempt.', a: 'William Shakespeare' },
+  { t: 'It is not in the stars to hold our destiny but in ourselves.', a: 'William Shakespeare' },
+
+  { t: 'Do not wait for leaders; do it alone, person to person.', a: 'Mother Teresa' },
+  { t: 'In a gentle way, you can shake the world.', a: 'Mahatma Gandhi' },
+  { t: 'The best way to find yourself is to lose yourself in the service of others.', a: 'Mahatma Gandhi' },
+  { t: 'Strength does not come from physical capacity. It comes from an indomitable will.', a: 'Mahatma Gandhi' },
+  { t: 'Often when you think you’re at the end of something, you’re at the beginning of something else.', a: 'Fred Rogers' },
+  { t: 'The best way to take care of the future is to take care of the present moment.', a: 'Thich Nhat Hanh' },
+  { t: 'Feelings come and go like clouds in a windy sky. Conscious breathing is my anchor.', a: 'Thich Nhat Hanh' },
+  { t: 'Perfectionism is the voice of the oppressor, the enemy of the people.', a: 'Anne Lamott' },
+  { t: 'Almost all good writing begins with terrible first efforts.', a: 'Anne Lamott' },
+  { t: 'Do something today that your future self will thank you for.', a: 'Sean Patrick Flanery' },
+];

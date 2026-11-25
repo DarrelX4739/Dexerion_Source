@@ -1,0 +1,152 @@
+/* ============================================================================
+   Dexerion chrome skin — "RISO"
+   ----------------------------------------------------------------------------
+   Two-colour risograph print. Cold newsprint ground, hard 2px ink rules, zero
+   radius, a halftone dot field, and spot inks (indigo and fluorescent pink)
+   laid down like separate plates. The one memorable move: the active tab is
+   INVERTED — solid ink with paper-coloured text and a pink registration bar —
+   the way an overprinted second pass looks on paper. Groups are a pink edge and
+   a solid pink block for the chip.
+
+   Loaded only by ?skin=riso (design review). shell.css alone ships.
+   ========================================================================= */
+
+:root[data-skin="riso"] {
+  --riso-indigo:#2b2bd6;
+  --riso-pink:#ff3d81;
+  --paper:#e7e7e1; --paper-raised:#f3f3ee; --paper-field:#fbfaf5;
+  --paper-ink:#15161c; --paper-ink-2:#3c3e4a; --paper-muted:#6a6c78; --paper-faint:#989aa3;
+  --paper-line:rgba(21,22,28,.32); --paper-line-strong:#15161c;
+  --paper-hover:rgba(43,43,214,.09); --paper-active:rgba(43,43,214,.16);
+  --paper-highlight:rgba(255,255,255,.7);
+  --accent-ink:#15161c;
+  --sh1:0 1px 0 rgba(21,22,28,.2); --sh2:2px 2px 0 rgba(21,22,28,.16);
+  --sh3:3px 3px 0 rgba(21,22,28,.2); --shpop:5px 5px 0 rgba(21,22,28,.28);
+  --font:"Franklin Gothic Medium","Franklin Gothic","Arial Narrow","Segoe UI",sans-serif;
+  --font-display:"Franklin Gothic Medium","Franklin Gothic","Segoe UI",sans-serif;
+  --font-mono:"Cascadia Mono","Consolas",monospace;
+  --r-xs:0; --r-sm:0; --r:0; --r-md:0; --r-lg:0; --r-pill:0;
+  --dur-fast:80ms; --dur:110ms;
+  --ease:cubic-bezier(.3,.7,.2,1);
+}
+:root[data-skin="riso"][data-theme="dark"] {
+  --riso-indigo:#6d6dff;
+  --riso-pink:#ff5c96;
+  --paper:#15161b; --paper-raised:#1d1f26; --paper-field:#101116;
+  --paper-ink:#f1f0ea; --paper-ink-2:#c8c8c2; --paper-muted:#97999f; --paper-faint:#66686f;
+  --paper-line:rgba(241,240,234,.3); --paper-line-strong:#f1f0ea;
+  --paper-hover:rgba(109,109,255,.14); --paper-active:rgba(109,109,255,.22);
+  --paper-highlight:rgba(255,255,255,.06);
+  --sh1:none; --sh2:2px 2px 0 rgba(0,0,0,.5); --sh3:3px 3px 0 rgba(0,0,0,.55);
+  --shpop:6px 6px 0 rgba(0,0,0,.65);
+}
+
+/* ---------- strip: printed band, halftone field ---------- */
+[data-skin="riso"] #tabstrip {
+  height:40px; padding:6px 0 0; gap:0; align-items:flex-end;
+  border-bottom:2px solid var(--fg);
+  background-color:var(--bg);
+  background-image:radial-gradient(color-mix(in srgb,var(--fg) 22%,transparent) .7px, transparent .8px);
+  background-size:5px 5px;
+}
+[data-skin="riso"] #tabs { gap:0; align-items:flex-end; }
+[data-skin="riso"] .tab {
+  height:32px; max-width:196px; min-width:112px; padding:0 12px; gap:8px;
+  border:0; border-right:1px solid var(--hair); border-radius:0;
+  font-size:12.5px; letter-spacing:-.008em;
+}
+[data-skin="riso"] .tab:hover { background:color-mix(in srgb,var(--riso-indigo) 12%,transparent); color:var(--fg); }
+[data-skin="riso"] .tab.active {
+  background:var(--fg); color:var(--bg); border-color:transparent;
+  box-shadow:none;
+}
+[data-skin="riso"] .tab.active .favimg { filter:none; }
+/* the rail is the pink plate, registered along the base of the active block */
+[data-skin="riso"] .tab.active::after {
+  top:auto; bottom:0; left:0; right:0; height:3px; border-radius:0;
+  background:var(--riso-pink);
+}
+[data-skin="riso"] .tab.grouped::before {
+  top:0; bottom:0; left:0; right:auto; width:3px; height:auto; border-radius:0;
+  background:var(--riso-pink);
+}
+[data-skin="riso"] .tab.grouped { background:color-mix(in srgb,var(--riso-pink) 9%,transparent); }
+[data-skin="riso"] .tab.grouped.active { background:var(--fg); }
+[data-skin="riso"] .tab .x:hover { background:transparent; color:var(--riso-pink); }
+[data-skin="riso"] #newtab-btn {
+  width:30px; height:30px; margin:0 8px 1px; border-radius:0;
+  color:#15161c; background:var(--riso-pink); border-color:var(--riso-pink);
+  box-shadow:2px 2px 0 color-mix(in srgb,var(--riso-indigo) 90%,transparent);
+}
+[data-skin="riso"] #newtab-btn:hover { color:#15161c; background:var(--riso-pink); border-color:var(--fg); }
+[data-skin="riso"] .gchip {
+  height:23px; padding:0 9px; margin-bottom:4px; gap:5px;
+  color:#15161c; background:var(--riso-pink); border:0; border-radius:0;
+  font-weight:600; letter-spacing:-.01em;
+}
+[data-skin="riso"] .gchip:hover { background:color-mix(in srgb,var(--riso-pink) 85%,var(--riso-indigo)); }
+[data-skin="riso"] .gchip .gdot { background:#15161c; border-radius:0; }
+[data-skin="riso"] .gchip .gstate { color:#15161c; }
+[data-skin="riso"] .gchip .gct { background:rgba(21,22,28,.22); color:#15161c; border-radius:0; }
+[data-skin="riso"] .gchip.collapsed { color:#15161c; background:var(--riso-pink); }
+
+/* ---------- toolbar: a two-plate bar ---------- */
+[data-skin="riso"] #toolbar {
+  height:46px; gap:2px; padding:0 10px;
+  border-bottom:2px solid var(--fg); box-shadow:none;
+}
+[data-skin="riso"] #toolbar button { width:30px; height:30px; border-radius:0; border-color:transparent; }
+[data-skin="riso"] #toolbar button:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--riso-indigo) 16%,transparent);
+  border-color:var(--fg); color:var(--fg);
+}
+[data-skin="riso"] #omni-wrap { margin:0 8px; }
+[data-skin="riso"] #omnibox {
+  height:32px; padding:0 12px; border-radius:0; border:1.5px solid var(--fg);
+  font-size:12px;
+  box-shadow:3px 3px 0 0 color-mix(in srgb,var(--riso-indigo) 70%,transparent);
+}
+[data-skin="riso"] #omnibox:hover { border-color:var(--fg); }
+[data-skin="riso"] #omnibox:focus {
+  background:var(--field); border-color:var(--fg);
+  box-shadow:3px 3px 0 0 var(--accent);
+}
+[data-skin="riso"] #account-btn { border-radius:0 !important; }
+[data-skin="riso"] #account-av { border-radius:0; background:var(--fg); color:var(--bg); }
+[data-skin="riso"] #bookmarkbar {
+  height:28px; padding:3px 10px; gap:2px;
+  border-bottom:1px solid var(--hair); font-size:11.5px;
+}
+[data-skin="riso"] #bookmarkbar a { border-radius:0; padding:4px 8px; }
+[data-skin="riso"] #bookmarkbar a:hover { background:color-mix(in srgb,var(--riso-indigo) 16%,transparent); color:var(--fg); }
+
+/* overlays: printed cards with a hard offset plate */
+[data-skin="riso"] #dmenu, [data-skin="riso"] #gedit {
+  border-radius:0; border:1.5px solid var(--fg); backdrop-filter:none;
+  background:var(--bg2); box-shadow:6px 6px 0 0 color-mix(in srgb,var(--fg) 18%,transparent);
+}
+[data-skin="riso"] .mitem { border-radius:0; }
+[data-skin="riso"] .mitem:hover { background:color-mix(in srgb,var(--riso-indigo) 16%,transparent); }
+[data-skin="riso"] .mitem kbd {
+  font-family:var(--font-mono); border:1px solid var(--hair); border-radius:0; padding:0 4px;
+}
+[data-skin="riso"] .gswb { border-radius:0; }
+[data-skin="riso"] .grow button, [data-skin="riso"] .grow button.danger { border-radius:0; }
+[data-skin="riso"] #focus-banner #focus-manage,
+[data-skin="riso"] #loginbar-save, [data-skin="riso"] #store-install { border-radius:0; }
+[data-skin="riso"] #skin-tag { border:1px solid var(--fg); border-radius:0; background:var(--bg2); color:var(--fg); }
+
+/* ---------- vertical rail ---------- */
+[data-skin="riso"] body.vertical #tabstrip {
+  width:204px; min-width:204px; padding:0; gap:0; border-right:2px solid var(--fg); border-bottom:0;
+}
+[data-skin="riso"] body.vertical #tabs { gap:0; }
+[data-skin="riso"] body.vertical .tab {
+  height:30px; border-radius:0; border-right:0; border-bottom:1px solid var(--hair);
+}
+[data-skin="riso"] body.vertical .tab.active::after {
+  top:0; bottom:0; left:auto; right:0; width:3px; height:auto;
+}
+[data-skin="riso"] body.vertical .tab.grouped::before { top:0; bottom:0; left:0; width:3px; height:auto; }
+[data-skin="riso"] body.vertical .gchip { margin:4px 6px; border-radius:0; }
+[data-skin="riso"] body.vertical #newtab-btn { width:calc(100% - 12px); margin:6px 6px 0; border-radius:0; }

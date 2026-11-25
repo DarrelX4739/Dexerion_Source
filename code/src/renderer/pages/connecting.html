@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Looking for the network — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/netstate.css">
+</head><body>
+<div class="state"><div class="wrap">
+  <div class="bars" id="device" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <h1 id="title">Looking for the network</h1>
+  <div class="host" id="host"></div>
+  <p class="lede">Dexerion keeps trying this page while the connection comes back. If it does, the page opens on its own.</p>
+  <div class="status" id="status">Retrying 1/10</div>
+  <div class="actions">
+    <button class="btn" id="give-up">Stop waiting</button>
+    <button class="btn" id="home">Start page</button>
+  </div>
+</div></div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const q = new URLSearchParams(location.search);
+  const title = $('#title'), status = $('#status'), device = $('#device');
+
+  $('#host').textContent = q.get('host') || q.get('t') || 'this page';
+
+  // Progress comes from the main process: it owns the retry loop (a background
+  // tab has its own timers throttled), so the count on screen is the real one.
+  window.dexerion.on('dex:net-progress', (p) => {
+    if (!p) return;
+    if (p.state === 'recovered') {
+      device.classList.add('done');
+      title.textContent = 'Connected';
+      status.textContent = 'Opening the page you asked for';
+      status.classList.add('done');
+      return;
+    }
+    if (p.state === 'waiting') status.textContent = 'Retrying ' + p.attempt + '/' + Math.max(p.of, p.attempt);
+    else if (p.state === 'offline') status.textContent = 'Still nothing — giving up';
+  });
+
+  $('#give-up').onclick = () => window.dexerion.invoke('dex:net-give-up').catch(() => {});
+  $('#home').onclick = () => window.dexerion.invoke('dex:navigate', null, 'dexerion://newtab').catch(() => {});
+})();
+</script>
+</body></html>

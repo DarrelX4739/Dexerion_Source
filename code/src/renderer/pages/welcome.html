@@ -1,0 +1,100 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Welcome — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<script src="dexerion://assets/quotes.js"></script>
+<style>
+/* Welcome: one quiet page for the day. The greeting is the only voice; the
+   day's sentence is the same deterministic quote the new tab shows (Date.UTC
+   day index), so both agree all day. The entrance is a three-stage
+   choreography (body classes, added by the script): the mark revolves and
+   zooms in and settles, the words arrive, then the button appears — input is
+   only accepted once it has. Transitions, not fill-mode animations, so a
+   throttled renderer lands on the final state instead of a pinned frame. */
+html,body{height:100%}
+body{margin:0;display:flex;align-items:center;justify-content:center;
+  background:var(--pbg);color:var(--pfg);font-family:var(--font);overflow:hidden}
+.wrap{max-width:560px;padding:0 32px;text-align:center}
+.mark{width:64px;height:64px;margin:0 auto 22px}
+.mark img{width:100%;height:100%;border-radius:18px;border:1px solid var(--pborder)}
+h1{margin:0 0 6px;font-size:34px;font-weight:500;letter-spacing:-.01em}
+.sub{margin:0 0 10px;font-size:14px;color:var(--pfg-2)}
+.date{margin:0 0 26px;font-size:13px;color:var(--pmuted)}
+.qline{max-width:460px;margin:0 auto;padding-top:22px;border-top:1px solid var(--pborder)}
+.quote{margin:0;font-family:var(--dx-font-serif, Georgia, serif);font-style:italic;
+  font-size:17px;line-height:1.6;color:var(--pfg-2)}
+.author{margin:10px 0 0;font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--pfaint)}
+.quote:empty,.author:empty{display:none}
+.enter{display:inline-flex;align-items:center;gap:9px;margin-top:34px;height:34px;padding:0 18px;
+  border-radius:6px;background:var(--pfg);color:var(--pbg);border:1px solid transparent;
+  font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer}
+.enter:hover{filter:brightness(1.05)}
+.enter:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* ---------- entrance choreography (driven by body classes) ----------
+   s1: the mark revolves (-360deg) and zooms in and settles; s2: the words
+   arrive; s3: the button appears — and only then is input accepted. */
+.mark{opacity:0;transform:rotate(-360deg) scale(.35);
+  transition:transform .85s var(--ease),opacity .3s var(--ease)}
+body.s1 .mark{opacity:1;transform:none}
+h1,.sub,.date,.qline{opacity:0;transform:translateY(5px);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.date{transition-delay:.07s}
+.qline{transition-delay:.14s}
+body.s2 h1,body.s2 .sub,body.s2 .date,body.s2 .qline{opacity:1;transform:none}
+.enter{opacity:0;transform:translateY(4px);pointer-events:none;
+  transition:opacity .4s var(--ease),transform .4s var(--ease)}
+body.s3 .enter{opacity:1;transform:none;pointer-events:auto}
+@media (prefers-reduced-motion: reduce){ .mark,h1,.sub,.date,.qline,.enter{transition:none} }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="mark"><img src="dexerion://assets/logo.png" alt=""></div>
+  <h1 id="greet">Good morning.</h1>
+  <p class="sub" id="sub" hidden></p>
+  <p class="date" id="date"></p>
+  <div class="qline"><p class="quote" id="quote"></p><p class="author" id="author"></p></div>
+  <button class="enter" id="enter" type="button"><span id="enter-label">Start Browsing</span></button>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+(function welcome(){
+  const first = /[?&]first=1\b/.test(location.search);
+  const h = new Date().getHours();
+  const greet = document.getElementById('greet');
+  if (first) {
+    greet.textContent = 'Welcome to Dexerion.';
+    const sub = document.getElementById('sub');
+    sub.hidden = false;
+    sub.textContent = 'Everything is ready — the assistant lives behind the ✦ in the toolbar.';
+  } else {
+    greet.textContent = h < 12 ? 'Good morning.' : h < 18 ? 'Good afternoon.' : 'Good evening.';
+  }
+  // Entrance: mark revolves + zooms in (s1), words arrive (s2), the button
+  // appears last (s3) — and input is only accepted from s3 on.
+  const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) {
+    document.body.classList.add('s1', 's2', 's3');
+  } else {
+    setTimeout(() => document.body.classList.add('s1'), 60);
+    setTimeout(() => document.body.classList.add('s2'), 960);
+    setTimeout(() => document.body.classList.add('s3'), 1160);
+  }
+  const ready = () => document.body.classList.contains('s3');
+  document.getElementById('date').textContent = new Date().toLocaleDateString(undefined,
+    { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // Same day-fixed sentence as the new tab: derived from the calendar date
+  // alone (Date.UTC), never the clock, so it never changes under you.
+  const QUOTES = window.DEX_QUOTES || [];
+  if (QUOTES.length) {
+    const d = new Date();
+    const day = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+    const q = QUOTES[((day % QUOTES.length) + QUOTES.length) % QUOTES.length];
+    document.getElementById('quote').textContent = '“' + q.t + '”';
+    document.getElementById('author').textContent = q.a;
+  }
+  const close = () => { if (!ready()) return; window.dexerion.invoke('dex:close-tab', null).catch(() => {}); };
+  document.getElementById('enter').onclick = close;
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); close(); }
+  });
+})();
+</script></body></html>

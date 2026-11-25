@@ -1,0 +1,244 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Accounts — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+.acct{display:flex;gap:16px;align-items:center;padding:18px 22px}
+.acct + .acct{border-top:1px solid var(--pborder)}
+.avwrap{position:relative;width:48px;height:48px;flex:none}
+.avwrap .av{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  font-size:19px;font-weight:700;color:var(--pfg);letter-spacing:.02em;overflow:hidden}
+.avwrap .av img{width:100%;height:100%;object-fit:cover;display:block}
+.avwrap .avdot{position:absolute;right:-2px;bottom:-2px;width:19px;height:19px;border-radius:50%;
+  background:var(--pcard);border:1px solid var(--pborder-2);display:grid;place-items:center;
+  color:var(--muted);cursor:pointer;opacity:0;transition:opacity var(--dur) var(--ease)}
+.avwrap:hover .avdot{opacity:1}
+.avwrap .avdot:hover{color:var(--accent);border-color:var(--accent)}
+.avwrap input[type=file]{display:none}
+.acct .info{flex:1;min-width:0}
+.acct .info b{font-size:14.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.acct .info small{display:block;color:var(--muted);font-size:12px;margin-top:3px;
+  font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rename{display:flex;gap:6px;align-items:center;margin-top:9px}
+.rename input{flex:1;max-width:230px;padding:6px 10px;font-size:12.5px}
+.rename button{padding:6px 12px;font-size:12.5px}
+.acct .acts{display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end}
+/* Google link lives under its account, sharing the card's left edge */
+.gbox{padding:14px 22px 18px;border-top:1px solid var(--pborder);background:var(--pcard-2)}
+.grow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.gstat{color:var(--muted);font-size:12.5px}
+.gdot{width:7px;height:7px;border-radius:50%;background:var(--pfaint);flex:none}
+.gdot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 18%,transparent)}
+.gbtn{border:1px solid var(--pborder-2);background:var(--pbtn);color:var(--pfg);font-weight:600}
+.gbtn:hover{background:var(--phover-btn)}
+.grow input{flex:1;min-width:180px}
+.newbox{border:1px dashed var(--pborder-2);border-radius:var(--r-xl);padding:20px 22px;background:transparent}
+.newbox b{font-size:13.5px;display:block;margin-bottom:12px}
+.newbox input{width:100%;margin-bottom:8px}
+.newbox .row{display:flex;gap:10px;margin-top:6px}
+</style>
+</head><body><div class="dx-page">
+<div class="dx-head">
+  <div class="eyebrow">Profiles</div>
+  <h1>Dexerion accounts</h1>
+  <p>Each account keeps its own web logins, saved passwords, bookmarks and history. New windows open with your default account.</p>
+</div>
+
+<div class="dx-card" style="padding:0" id="list"></div>
+
+<div class="newbox">
+  <b>Add account</b>
+  <input type="text" id="nm" aria-label="Account name" placeholder="Name — e.g. Work" maxlength="40">
+  <input type="text" id="em" aria-label="Email (optional)" placeholder="Email (optional)" maxlength="80">
+  <input type="text" id="gm" aria-label="Google email (optional)" placeholder="Google email (optional) — for Docs, Drive, Gmail" maxlength="120">
+  <div class="row"><button class="btn primary" id="add">Create account</button></div>
+</div>
+
+<p class="dx-note" style="margin-top:18px">Signing in to Gmail, Teams or any site inside one account’s window stays in that account — other accounts remain signed out with nothing saved. Saved passwords are encrypted on this device.</p>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+function mkBtn(label,cls,fn){
+  const b=document.createElement('button');b.className='btn '+(cls||'');b.textContent=label;b.onclick=fn;return b;
+}
+
+async function load(){
+  // A failed load must not look like "no accounts yet": DexPage.guard shows
+  // what went wrong and offers a retry.
+  const d=await window.DexPage.guard(()=>window.dexerion.invoke('dex:account-list'),()=>load());
+  if(!d)return;
+  const l=document.getElementById('list');
+  l.innerHTML='';
+  if(!d.accounts.length){
+    const e=document.createElement('div');e.className='dx-empty';
+    e.innerHTML='<b>No accounts yet</b><span>Add one below to keep work and personal browsing separate.</span>';
+    l.appendChild(e);return;
+  }
+  for(const a of d.accounts){
+    const c=document.createElement('div');
+    c.className='acct';
+
+    // avatar + picker
+    const wrap=document.createElement('div');wrap.className='avwrap';
+    const av=document.createElement('div');av.className='av';
+    if(a.avatar){
+      const im=document.createElement('img');im.src=a.avatar+'?v='+(a.createdAt||0);im.alt='';
+      // fall back to initials if the file is gone
+       im.onerror=()=>{ av.textContent=(a.name||'?').trim()[0].toUpperCase(); av.style.background=`linear-gradient(150deg,${a.color},var(--paper-ink))`; };
+      av.appendChild(im);
+    }else{
+      av.textContent=(a.name||'?').trim()[0].toUpperCase();
+       av.style.background=`linear-gradient(150deg,${a.color},var(--paper-ink))`;
+    }
+    const pick=document.createElement('button');pick.className='avdot';pick.title='Change profile picture';
+    pick.innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+    const file=document.createElement('input');file.type='file';file.accept='image/*';
+    pick.onclick=()=>file.click();
+    file.onchange=async()=>{
+      const f=file.files&&file.files[0];if(!f)return;
+      try{
+        const png=await shrink(f,256);
+        await window.dexerion.invoke('dex:account-avatar',{id:a.id,dataUrl:png});
+        load();
+      }catch(err){alert('Could not use that image: '+err.message);}
+    };
+    wrap.append(av,pick,file);
+
+    const info=document.createElement('div');info.className='info';
+    const b=document.createElement('b');
+    const nm=document.createElement('span');nm.textContent=a.name;
+    b.appendChild(nm);
+    if(a.id===d.defaultAccountId){const badge=document.createElement('span');badge.className='dx-badge';badge.textContent='Default';b.appendChild(badge);}
+    const sm=document.createElement('small');sm.textContent=(a.email?a.email+' · ':'')+'id '+a.id;
+    info.append(b,sm);
+
+    // rename
+    const rn=document.createElement('div');rn.className='rename';
+    const rin=document.createElement('input');rin.type='text';rin.maxLength=40;rin.value=a.name;
+    rin.placeholder='Account name';
+    rin.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveName();}});
+    const saveName=async()=>{
+      const v=rin.value.trim();
+      if(!v||v===a.name){rin.value=a.name;return;}
+      try{await window.dexerion.invoke('dex:account-rename',{id:a.id,name:v});load();}
+      catch(err){alert('Could not rename: '+err.message);rin.value=a.name;}
+    };
+    const rbtn=document.createElement('button');rbtn.className='btn ghost';rbtn.textContent='Rename';
+    rbtn.onclick=saveName;
+    rn.append(rin,rbtn);
+    if(a.avatar){
+      const rclr=document.createElement('button');rclr.className='btn ghost';rclr.textContent='Remove picture';
+      rclr.onclick=async()=>{await window.dexerion.invoke('dex:account-avatar-clear',{id:a.id});load();};
+      rn.appendChild(rclr);
+    }
+    info.appendChild(rn);
+
+    const acts=document.createElement('div');acts.className='acts';
+    acts.append(
+      mkBtn('Open window','primary',()=>window.dexerion.invoke('dex:account-switch',a.id)),
+      mkBtn('','',async()=>{await window.dexerion.invoke('dex:account-default',a.id);load();}),
+    );
+    acts.lastChild.textContent=a.id===d.defaultAccountId?'Already default':'Make default';
+    acts.lastChild.disabled=a.id===d.defaultAccountId;
+    if(a.id!=='default'){
+      acts.appendChild(mkBtn('Delete','danger',async()=>{
+        try{if(await window.dexerion.invoke('dex:confirm',{message:'Delete account "'+a.name+'"? Its windows close and its saved data is removed.'})){await window.dexerion.invoke('dex:account-delete',a.id);}}catch(err){alert(err.message);}
+        load();
+      }));
+    }
+    c.append(wrap,info,acts);
+    l.appendChild(c);
+
+    const g=document.createElement('div');g.className='gbox';c.after(g);
+    renderGoogle(g,a);
+  }
+}
+
+// Downscale + centre-crop to a square PNG in the renderer, so the main process
+// only ever writes a small, already-valid image.
+function shrink(file,size){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read that file.'));
+    fr.onload=()=>{
+      const im=new Image();
+      im.onerror=()=>reject(new Error('That file is not an image Dexerion can read.'));
+      im.onload=()=>{
+        const c=document.createElement('canvas');
+        c.width=c.height=size;
+        const x=c.getContext('2d');
+        const side=Math.min(im.width,im.height);
+        x.drawImage(im,(im.width-side)/2,(im.height-side)/2,side,side,0,0,size,size);
+        resolve(c.toDataURL('image/png'));
+      };
+      im.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+async function renderGoogle(box,a){
+  box.innerHTML='';
+  const top=document.createElement('div');top.className='grow';
+  if(a.googleEmail){
+    const dot=document.createElement('span');dot.className='gdot';top.appendChild(dot);
+    const st=document.createElement('span');st.className='gstat';st.textContent='Checking Google sign-in…';top.appendChild(st);
+    const em=document.createElement('b');em.style.fontSize='13px';em.textContent=a.googleEmail;top.appendChild(em);
+    box.appendChild(top);
+    const row=document.createElement('div');row.className='grow';row.style.marginTop='10px';
+    for(const [svc,label] of [['gmail','Gmail'],['drive','Drive'],['docs','Docs']]){
+      row.appendChild(mkBtn(label,'',()=>window.dexerion.invoke('dex:google-open',{accountId:a.id,service:svc})));
+    }
+    row.appendChild(mkBtn('Unlink Google','danger',async()=>{await window.dexerion.invoke('dex:account-google-unlink',{id:a.id});load();}));
+    box.appendChild(row);
+    try{
+      const s=await window.dexerion.invoke('dex:google-status',{accountId:a.id});
+      if(s&&s.signedIn){
+        dot.classList.add('on');
+        const active=s.activeEmail||'';
+        if(active&&active!==a.googleEmail){
+          // The user signed in as somebody else. Respect that, but say so and
+          // offer to make it the default for future first sign-ins.
+          st.textContent='Signed in as ' + active;
+          const n=document.createElement('div');n.className='gstat';n.style.marginTop='10px';
+          n.appendChild(document.createTextNode('Signed in as ' + active + ' — '));
+          const mk=mkBtn('make it the default','gbtn',async()=>{
+            try{await window.dexerion.invoke('dex:account-google',{id:a.id,email:active});load();}
+            catch(err){alert(err.message);}
+          });
+          mk.style.padding='3px 9px';mk.style.fontSize='11.5px';
+          n.appendChild(mk);
+          n.appendChild(document.createTextNode(' for first sign-in (default is ' + a.googleEmail + ').'));
+          box.appendChild(n);
+        }else{
+          st.textContent='Signed in to Google in this account';
+        }
+      }
+      else st.textContent='Not signed in yet — open a service and sign in once';
+    }catch{st.textContent='Sign-in status unavailable';}
+  }else{
+    top.appendChild(mkBtn('Continue with Google','gbtn',()=>window.dexerion.invoke('dex:google-open',{accountId:a.id,service:'chooser'})));
+    box.appendChild(top);
+    const hint=document.createElement('div');hint.className='gstat';hint.style.marginTop='10px';
+    hint.textContent='Opens the real Google account chooser — sign in there and Dexerion links it automatically. ';
+    const man=document.createElement('button');man.className='btn ghost';man.textContent='Enter email manually';man.style.padding='4px 10px';man.style.fontSize='12px';
+    man.onclick=()=>{mrow.style.display='flex';man.remove();};
+    hint.appendChild(man);box.appendChild(hint);
+    const mrow=document.createElement('div');mrow.className='grow';mrow.style.display='none';mrow.style.marginTop='10px';
+    const inp=document.createElement('input');inp.type='text';inp.placeholder='you@gmail.com';inp.maxLength=120;
+    mrow.append(inp,mkBtn('Link','primary',async()=>{
+      try{await window.dexerion.invoke('dex:account-google',{id:a.id,email:inp.value.trim()});load();}
+      catch(err){alert(err.message);}
+    }));
+    box.appendChild(mrow);
+  }
+}
+
+document.getElementById('add').onclick=async()=>{
+  const nm=document.getElementById('nm').value.trim()||'Account';
+  try{
+    await window.dexerion.invoke('dex:account-create',{name:nm,email:document.getElementById('em').value.trim(),googleEmail:document.getElementById('gm').value.trim()});
+  }catch(err){alert(err.message);return;}
+  document.getElementById('nm').value='';document.getElementById('em').value='';document.getElementById('gm').value='';
+  load();
+};
+load();
+</script></body></html>

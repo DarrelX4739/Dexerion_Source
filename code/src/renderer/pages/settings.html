@@ -1,0 +1,494 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Settings — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+/* Settings: grouped bands inside hairline cards, controls right-aligned. */
+.dx-head .eyebrow{color:var(--pfaint)}
+
+/* theme picker — real miniature of the chrome, not a generic gradient */
+.themes{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 0 4px}
+.themeopt{
+  padding:0;cursor:pointer;background:var(--pfield);
+  border:1px solid var(--pborder);border-radius:var(--r-lg);
+  overflow:hidden;transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease);
+}
+.themeopt:hover{border-color:var(--pborder-2);transform:translateY(-2px)}
+.themeopt.sel{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
+/* The mock is a miniature of the chrome: a strip, a toolbar, a page. Every part
+   reads its colour and shape from --m-* variables, so one markup shape draws all
+   six previews and each theme is shown by its own geometry (squared key, rising
+   card, floating lozenge, printed block) rather than described in a caption. The
+   Dark/Light tiles set no variables, so they fall back to the live page tokens
+   and keep showing this theme in either mode. */
+.mock{height:74px;padding:7px 8px;display:flex;flex-direction:column;gap:5px;
+  --m-bg:var(--pbg);--m-line:var(--pborder);--m-page:var(--phover);
+  --m-tab:var(--pbtn);--m-on:var(--accent);--m-onmark:inset 0 2px 0 var(--accent);
+  --m-tab-r:3px;--m-bar-r:4px;--m-body-r:4px;--m-gmark:inset 2px 0 0 var(--m-gl);
+  --m-gl:#3ddc84;--m-onsh:none;
+  background:var(--m-bg)}
+/* the two mode tiles preview their mode rather than the one you are in */
+.mock.dark{--m-bg:#121110;--m-line:rgba(255,255,255,.10);--m-page:#161413;
+  --m-tab:rgba(255,255,255,.065);--m-on:var(--accent)}
+.mock.light{--m-bg:#f5f3ef;--m-line:rgba(30,28,25,.12);--m-page:#ffffff;
+  --m-tab:rgba(30,28,25,.05);--m-on:var(--accent)}
+.mock .mrow{display:flex;gap:4px;align-items:center}
+.mock .mtab{height:10px;border-radius:var(--m-tab-r);background:var(--m-tab);flex:1}
+.mock .mtab.on{background:var(--m-on);box-shadow:var(--m-onmark),var(--m-onsh)}
+.mock .mtab.g{box-shadow:var(--m-gmark)}
+.mock .mbar{height:13px;border-radius:var(--m-bar-r);background:var(--m-page);border:1px solid var(--m-line)}
+.mock .mbody{flex:1;border-radius:var(--m-body-r);background:var(--m-page)}
+
+/* Machined: cold graphite, squared keys, group underline, accent lamp under the key */
+[data-skin-opt="machined"] .mock{--m-bg:#141619;--m-line:rgba(255,255,255,.13);--m-page:#0e1013;
+  --m-tab:rgba(255,255,255,.085);--m-on:#1f2329;--m-tab-r:3px;--m-bar-r:2px;--m-body-r:2px;
+  --m-onmark:inset 0 -2px 0 #35c4ff;--m-gmark:inset 0 -2px 0 var(--m-gl)}
+/* Vellum: warm paper, cards rising into the toolbar, group running head on top */
+[data-skin-opt="vellum"] .mock{--m-bg:#f7f4ee;--m-line:rgba(33,29,23,.18);
+  --m-page:#fffdf8;--m-tab:rgba(33,29,23,.06);--m-on:#fffdf8;--m-tab-r:4px 4px 0 0;--m-bar-r:3px;
+  --m-onmark:inset 0 1px 0 #35c4ff,0 0 0 1px rgba(33,29,23,.16);--m-gmark:inset 0 2px 0 var(--m-gl)}
+/* Halo: deep indigo, lozenges that float, group ring, light spill under the active tab */
+[data-skin-opt="halo"] .mock{--m-bg:#0b0d16;--m-line:rgba(255,255,255,.15);--m-page:#191c30;
+  --m-tab:rgba(255,255,255,.1);--m-on:#232846;--m-tab-r:999px;--m-bar-r:999px;--m-body-r:999px;
+  --m-onmark:0 0 0 1px rgba(255,255,255,.18);--m-onsh:0 5px 10px -5px #35c4ff;
+  --m-gmark:inset 0 0 0 1.5px var(--m-gl)}
+/* Riso: newsprint, flush blocks, inverted active tab with a pink registration bar */
+[data-skin-opt="riso"] .mock{--m-bg:#e7e7e1;--m-line:#15161c;--m-page:#f3f3ee;
+  --m-tab:rgba(21,22,28,.08);--m-on:#15161c;--m-tab-r:0;--m-bar-r:0;--m-body-r:0;
+  --m-onmark:inset 0 -3px 0 #ff3d81;--m-gl:#ff3d81}
+.themeopt .lbl{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px;font-size:12.5px;font-weight:600;border-top:1px solid var(--pborder)}
+.themeopt .ltx{display:flex;flex-direction:column;gap:1px;min-width:0;text-align:left}
+.themeopt .ltx small{font-size:11px;font-weight:500;color:var(--pmuted);line-height:1.35}
+/* the theme grid flows so five tiles never leave a hole in the row */
+.themes.pick{grid-template-columns:repeat(auto-fill,minmax(176px,1fr))}
+.themeopt .tick{width:15px;height:15px;border-radius:50%;border:1px solid var(--pborder-2)}
+.themeopt.sel .tick{background:var(--accent);border-color:transparent;
+  box-shadow:inset 0 0 0 3px var(--pcard)}
+
+/* provider status block inside the AI card */
+.statusdot{width:7px;height:7px;border-radius:50%;background:var(--pfaint);flex:none;display:inline-block}
+.statusdot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 18%,transparent)}
+.statusdot.off{background:var(--pborder-2)}
+.about{display:flex;gap:16px;align-items:center}
+.dx-note code{font-family:var(--font-mono);font-size:11.5px;background:var(--pfield);
+  border:1px solid var(--pborder);border-radius:var(--r-xs);padding:1px 5px}
+
+@media (max-width:520px){.themes{grid-template-columns:1fr}}
+</style>
+</head><body><div class="dx-page">
+
+<div class="dx-head">
+  <div class="eyebrow">Dexerion</div>
+  <div class="dx-head-row">
+    <div><h1>Settings</h1><p>Every change applies immediately and is saved to this profile.</p></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Search</h3></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b>Default search engine</b><small>Used by the address bar and the new-tab search field</small></div>
+      <div class="ctl"><select id="se" aria-label="Default search engine"><option value="google">Google</option><option value="bing">Bing</option><option value="duckduckgo">DuckDuckGo</option></select></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Dexerion AI Search</h3><p>Search With Dexerion AI writes its own searches, reads the pages and answers with citations.</p></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b>Recommendations while typing</b><small>Google autocomplete in the Search With Dexerion AI bar. Off by default.</small></div>
+      <div class="ctl"><label class="dx-sw"><input type="checkbox" id="aisuggest"><i></i></label></div></div>
+    <div class="dx-row"><div class="tx"><b>Sources to read</b><small>How many pages each search reads before answering (4-16)</small></div>
+      <div class="ctl"><select id="aisources" aria-label="Sources to read"><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option></select></div></div>
+    <div class="dx-row"><div class="tx"><b>Question adaptations</b><small>Distinct searches the AI writes for one question (2-8)</small></div>
+      <div class="ctl"><select id="aiadapt" aria-label="Question adaptations"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Appearance</h3><p>The accent is a signal colour — it marks focus, the active tab and primary actions.</p></div>
+  <div class="dx-card-body">
+    <div class="themes">
+      <button class="themeopt" data-theme-opt="dark"><div class="mock"><div class="mrow"><span class="mtab on"></span><span class="mtab"></span><span class="mtab"></span></div><div class="mbar"></div><div class="mbody"></div></div><span class="lbl">Dark <span class="tick"></span></span></button>
+      <button class="themeopt" data-theme-opt="light"><div class="mock light"><div class="mrow"><span class="mtab on"></span><span class="mtab"></span><span class="mtab"></span></div><div class="mbar"></div><div class="mbody"></div></div><span class="lbl">Light <span class="tick"></span></span></button>
+    </div>
+    <div class="dx-row"><div class="tx"><b>Accent colour</b><small>Tints the active tab rail, focus rings and primary buttons</small></div>
+      <div class="ctl"><div class="dx-swatches" id="swatches"></div></div></div>
+    <div class="dx-row"><div class="tx"><b>Bookmarks bar</b><small>Show pinned bookmarks under the toolbar</small></div>
+      <div class="ctl"><label class="dx-sw"><input type="checkbox" id="bar"><i></i></label></div></div>
+    <div class="dx-row"><div class="tx"><b>Welcome page</b><small>Show a welcome page each time Dexerion opens</small></div>
+      <div class="ctl"><label class="dx-sw"><input type="checkbox" id="welcome"><i></i></label></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Performance</h3><p>Memory Saver keeps Dexerion inside a memory budget by putting background tabs to sleep. A slept tab reloads when you click it.</p></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b>Memory Saver</b><small>Sleep background tabs while the browser is over its memory budget</small></div>
+      <div class="ctl"><label class="dx-sw"><input type="checkbox" id="memsaver"><i></i></label></div></div>
+    <div class="dx-row"><div class="tx"><b>Memory cap</b><small>Keep total memory under this budget when possible</small></div>
+      <div class="ctl"><select id="memcap" aria-label="Memory cap"><option value="1024">1 GB</option><option value="1536">1.5 GB</option><option value="2048">2 GB</option><option value="3072">3 GB</option><option value="4096">4 GB</option></select></div></div>
+    <div class="dx-row"><div class="tx"><b>GPU acceleration</b><small>Hardware helps games and video. Balanced keeps it lean. Restart to apply.</small></div>
+      <div class="ctl"><select id="gpumode" aria-label="GPU acceleration"><option value="balanced">Balanced (recommended)</option><option value="full">Full</option><option value="off">Off</option></select></div></div>
+    <div class="dx-row"><div class="tx"><b>Current usage</b><small id="memline">Measuring…</small></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Downloads</h3></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b>Download location</b><small>Where files are saved on this device</small></div>
+      <div class="ctl"><input type="text" id="dl" aria-label="Download location" style="width:290px"></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Default browser</h3></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><span class="dx-status"><span class="statusdot" id="defdot"></span></span><b id="defstate">Checking…</b><small id="defsub">Dexerion registers itself with Windows so you can pick it in Settings.</small></div>
+      <div class="ctl"><button class="btn primary" id="defmake">Make default</button></div></div>
+    <p class="dx-note" style="margin-top:12px">Clicking Make default registers Dexerion and opens the Windows Default apps page — choose Dexerion there. Windows does not let apps flip that switch themselves.</p>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Dexerion Assistant</h3><p>Powered by NVIDIA NIM. Connect once with a free key, pick a model, and it remembers things across chats for this account.</p></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b><span class="statusdot" id="aistat-dot"></span> <span id="aistate">Checking…</span></b><small id="aisub">Get a key in ~1 minute:<br>1. Open build.nvidia.com and sign in (free).<br>2. Generate an API key starting with <code>nvapi-</code>.<br>3. Paste it on the right, then Save &amp; test.</small></div>
+      <div class="ctl"><input type="password" id="aikey" aria-label="Provider API key" style="width:230px" placeholder="Paste nvapi-… key here" autocomplete="off"></div></div>
+    <div class="dx-row"><div class="tx"><b>Connection</b><small id="aikeymsg">Not connected yet</small></div>
+      <div class="ctl"><button class="btn ghost" id="aikeyopen">Get a free key</button><button class="btn primary" id="aisave">Save &amp; test</button><button class="btn ghost" id="aiclear">Remove key</button></div></div>
+    <div class="dx-row"><div class="tx"><b>Model</b><small id="aimodelsub">Loads from NVIDIA when you connect</small></div>
+      <div class="ctl"><select id="aimodel" aria-label="Model" style="min-width:300px" disabled></select><button class="btn ghost" id="aimodels">Refresh models</button><input id="aimodel-custom" type="text" aria-label="Custom model ID" placeholder="Or enter a custom model ID" style="min-width:200px;margin-left:8px" disabled></div></div>
+    <div class="dx-row"><div class="tx"><b>Base URL</b><small id="aibasesub">Custom API endpoint (leave blank for provider default)</small></div>
+      <div class="ctl"><input id="aibaseurl" type="text" aria-label="Base URL" placeholder="https://api.example.com/v1" style="min-width:300px" disabled></div></div>
+    <div class="dx-row"><div class="tx"><b>Memory</b><small id="aimemsub">What the assistant remembers about this account</small></div>
+      <div class="ctl"><button class="btn danger" id="aimemclear">Forget everything</button></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Privacy</h3></div>
+  <div class="dx-card-body">
+    <div class="dx-row"><div class="tx"><b>Browsing history</b><small>Clear all visited pages and top sites for this profile</small></div>
+      <div class="ctl"><button class="btn danger" id="clear">Clear history</button></div></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Passwords</h3><p>Saved for this account only, encrypted on this device. Dexerion offers to save whenever you sign in to a website.</p></div>
+  <div class="dx-card-body" id="logins"></div>
+</div>
+
+<div class="dx-card" id="about">
+  <div class="dx-card-head"><h3>About</h3></div>
+  <div class="dx-card-body">
+    <div class="about">
+      <img src="dexerion://assets/logo.png" alt="Dexerion" style="width:46px;height:46px;border-radius:13px;border:1px solid var(--pborder)">
+      <div><b style="font-size:14px">Dexerion V1</b><br><span class="dx-note">Standalone Chromium-based desktop browser. Profile data lives in your OS app-data directory under “Dexerion”.</span><br><span class="dx-note" id="memstat">Measuring memory…</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div id="saved" class="dx-toast">Saved</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+const PRESETS=['#35c4ff','#8b7bff','#3ddc84','#ffb020','#ff6b9d'];
+/* Browser themes. 'dexerion' is the shipped look — no stylesheet at all — and
+   each entry's caption says what the theme does to the chrome, so the choice is
+   legible before it is made. The tile itself is drawn by .mock rules further up. */
+const SKINS=[
+  ['dexerion','Dexerion','Quiet paper, hairline rules'],
+  ['machined','Machined','Cold graphite, uniform keys'],
+  ['vellum','Vellum','Warm paper, serif tab titles'],
+  ['halo','Halo','Deep indigo, floating tabs'],
+  ['riso','Riso','Newsprint, two spot inks'],
+];
+let theme='light', accent=PRESETS[0];
+let skin='dexerion';
+function toast(msg,err){
+  const t=document.getElementById('saved');
+  t.textContent=msg||'Saved';
+  t.classList.toggle('err',!!err);
+  t.classList.add('show');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('show'),err?4200:1700);
+}
+async function collect(){return{searchEngine:document.getElementById('se').value,showBookmarksBar:document.getElementById('bar').checked,theme,accent,skin,downloadDir:document.getElementById('dl').value,aiSearchSuggest:document.getElementById('aisuggest').checked,aiSearchSources:Number(document.getElementById('aisources').value),aiSearchAdaptations:Number(document.getElementById('aiadapt').value)};}
+async function save(){
+  // The page shows "Saved" only when the change is on disk. If the write
+  // failed, say so instead - an optimistic "Saved" on a full disk is a
+  // change that silently disappears on the next launch.
+  try{
+    await window.dexerion.invoke('dex:settings-save',await collect());
+    toast('Saved');
+  }catch(e){
+    toast((e&&e.message)||'Could not save your settings',true);
+  }
+}
+function paintTheme(){document.querySelectorAll('[data-theme-opt]').forEach(o=>o.classList.toggle('sel',o.dataset.themeOpt===theme));document.documentElement.dataset.theme=theme;}
+function paintAccent(){
+  document.documentElement.style.setProperty('--accent',accent);
+  document.querySelectorAll('#swatches .dx-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===accent));
+  const custom=document.getElementById('customAccent');if(custom)custom.value=accent;
+}
+function paintSkin(){
+  document.querySelectorAll('[data-skin-opt]').forEach(o=>{
+    const on=o.dataset.skinOpt===skin;
+    o.classList.toggle('sel',on);
+    o.setAttribute('aria-pressed',on?'true':'false');
+  });
+}
+function buildSkins(){
+  const box=document.getElementById('skins');if(!box)return;box.innerHTML='';
+  SKINS.forEach(([id,name,desc])=>{
+    const b=document.createElement('button');
+    b.type='button';b.className='themeopt';b.dataset.skinOpt=id;
+    b.innerHTML='<div class="mock"><div class="mrow"><span class="mtab on"></span>'
+      +'<span class="mtab g"></span><span class="mtab"></span></div>'
+      +'<div class="mbar"></div><div class="mbody"></div></div>'
+      +'<span class="lbl"><span class="ltx"><b></b><small></small></span><span class="tick"></span></span>';
+    b.querySelector('b').textContent=name;
+    b.querySelector('small').textContent=desc;
+    b.onclick=async()=>{skin=id;paintSkin();await save();};
+    box.appendChild(b);
+  });
+}
+(async()=>{
+  const s=await window.dexerion.invoke('dex:settings');
+  document.getElementById('se').value=s.searchEngine;
+  document.getElementById('bar').checked=!!s.showBookmarksBar;
+  document.getElementById('dl').value=s.downloadDir||'';
+  document.getElementById('aisuggest').checked=!!s.aiSearchSuggest;
+  document.getElementById('aisources').value=String(s.aiSearchSources||8);
+  document.getElementById('aiadapt').value=String(s.aiSearchAdaptations||4);
+  document.getElementById('memsaver').checked=s.memorySaver!==false;
+  document.getElementById('memcap').value=String(Math.min(4096,Math.max(1024,Math.floor(Number(s.memoryCapMB)||1536))));
+  document.getElementById('gpumode').value=['off','balanced','full'].includes(s.gpuMode)?s.gpuMode:'balanced';
+  document.getElementById('welcome').checked=s.welcomeDaily!==false;
+  theme=s.theme||'light';accent=s.accent||PRESETS[0];
+  skin=s.skin||'dexerion';
+  const box=document.getElementById('swatches');
+  PRESETS.forEach(c=>{const b=document.createElement('button');b.className='dx-swatch';b.dataset.c=c;b.style.background=c;b.title=c;
+    b.onclick=async()=>{accent=c;paintAccent();await save();};box.appendChild(b);});
+  const custom=document.createElement('input');custom.type='color';custom.id='customAccent';custom.title='Custom colour';
+  custom.oninput=async()=>{accent=custom.value;paintAccent();};
+  custom.onchange=save;box.appendChild(custom);
+  document.querySelectorAll('[data-theme-opt]').forEach(o=>o.onclick=async()=>{theme=o.dataset.themeOpt;paintTheme();await save();});
+  document.getElementById('se').onchange=save;
+  document.getElementById('bar').onchange=save;
+  document.getElementById('dl').onchange=save;
+  document.getElementById('aisuggest').onchange=save;
+  document.getElementById('aisources').onchange=save;
+  document.getElementById('aiadapt').onchange=save;
+  // These three save on their own (a patch, not the whole page), so they
+  // report the failure the same way save() does.
+  const savePatch=async(patch)=>{
+    try{await window.dexerion.invoke('dex:settings-save',patch);toast();}
+    catch(e){toast((e&&e.message)||'Could not save your settings',true);}
+  };
+  document.getElementById('memsaver').onchange=async()=>{await savePatch({memorySaver:document.getElementById('memsaver').checked});paintMem();};
+  document.getElementById('memcap').onchange=async()=>{await savePatch({memoryCapMB:Number(document.getElementById('memcap').value)});paintMem();};
+  document.getElementById('gpumode').onchange=async()=>{await savePatch({gpuMode:document.getElementById('gpumode').value});};
+  document.getElementById('welcome').onchange=async()=>{await savePatch({welcomeDaily:document.getElementById('welcome').checked});};
+  paintTheme();paintAccent();
+  buildSkins();paintSkin();
+  document.getElementById('clear').onclick=async()=>{try{if(await window.dexerion.invoke('dex:confirm',{message:'Clear all history?'})){await window.dexerion.invoke('dex:history-clear');toast();}}catch(err){alert(err.message);}};
+  async function loadLogins(){
+    const box=document.getElementById('logins');
+    const ls=await window.dexerion.invoke('dex:logins').catch(()=>[]);
+    box.innerHTML='';
+    if(!ls.length){
+      const p=document.createElement('div');p.className='dx-empty';
+      p.innerHTML='<b>No saved passwords</b><span>They appear here after you accept Dexerion’s save prompt on a site.</span>';
+      box.appendChild(p);return;
+    }
+    ls.forEach(l=>{
+      const r=document.createElement('div');r.className='dx-row';
+      const tx=document.createElement('div');tx.className='tx';
+      const b=document.createElement('b');b.textContent=l.origin;
+      const sm=document.createElement('small');sm.textContent=l.username||'(no username)';
+      tx.append(b,sm);
+      const del=document.createElement('button');del.className='btn danger';del.textContent='Delete';
+      del.onclick=async()=>{await window.dexerion.invoke('dex:login-delete',{origin:l.origin,username:l.username});loadLogins();};
+      const ctl=document.createElement('div');ctl.className='ctl';ctl.appendChild(del);
+      r.append(tx,ctl);box.appendChild(r);
+    });
+  }
+  loadLogins();
+  async function loadDef(){
+    const b=document.getElementById('defstate'),sub=document.getElementById('defsub'),m=document.getElementById('defmake'),dot=document.getElementById('defdot');
+    try{
+      const d=await window.dexerion.invoke('dex:default-status');
+      dot.className='statusdot';
+      if(!d.supported){b.textContent='Default browser: Windows only';m.style.display='none';return;}
+      if(d.isDefault){b.textContent='Dexerion is your default browser ✓';sub.textContent='Links and web pages open here.';m.style.display='none';dot.classList.add('on');}
+      else{b.textContent='Dexerion is not your default browser';sub.textContent=d.registered?'Registered with Windows — one click away.':'Not registered yet — Make default registers it first.';dot.classList.add('off');}
+    }catch(err){b.textContent='Could not check status';sub.textContent=String(err.message||err);}
+  }
+  document.getElementById('defmake').onclick=async()=>{
+    try{await window.dexerion.invoke('dex:default-make');}catch(err){alert(err.message);}
+    setTimeout(loadDef,2000);
+  };
+  loadDef();
+  // ---- Dexerion Assistant: guided NIM connect + live models + memory ----
+  const aikey=document.getElementById('aikey'), aimodel=document.getElementById('aimodel');
+  function modelName(st){return (st&&typeof st.model==='string'&&st.model)?st.model:'—';}
+  function fillModels(st){
+    const rec=st.models||[], all=st.allModels||[];
+    aimodel.innerHTML='';
+    if(!all.length){
+      aimodel.disabled=true;
+      document.getElementById('aimodelsub').textContent=st.hasKey?'No models loaded yet — loading…':'Loads from NVIDIA when you connect';
+      return;
+    }
+    aimodel.disabled=false;
+    const add=(label,ids)=>{
+      if(!ids.length)return;
+      const g=document.createElement('optgroup');g.label=label;
+      for(const id of ids){const o=document.createElement('option');o.value=id;o.textContent=id;g.appendChild(o);}
+      aimodel.appendChild(g);
+    };
+    add('Recommended for chat',rec);
+    add('All other models',all.filter(id=>!rec.includes(id)));
+    if(typeof st.model==='string'&&st.model&&all.includes(st.model))aimodel.value=st.model;
+    document.getElementById('aimodelsub').textContent=
+      all.length+' models available'+(st.modelAvailable?'':' — previous model retired, switched automatically');
+  }
+  function fillAi(st, testOk){
+    const dot=document.getElementById('aistat-dot');
+    dot.className='statusdot '+(st.hasKey?'on':'off');
+    document.getElementById('aistate').textContent=st.hasKey?('Connected ✓ '+st.keyMasked):'Not connected';
+    if(st.hasKey)document.getElementById('aisub').textContent=testOk===false
+      ? 'Key stored, but the last test failed — check the key, then Save & test again.'
+      : 'Using NVIDIA NIM · model '+modelName(st);
+    // When not connected the static 1-2-3 steps in the markup stay put.
+    if(!aikey.dataset.touched)aikey.placeholder=st.hasKey?('Saved '+st.keyMasked):'Paste key';
+    fillModels(st);
+    // Base URL and custom model ID — populated from provider summary
+    const baseInput=document.getElementById('aibaseurl');
+    const customInput=document.getElementById('aimodel-custom');
+    const prov=(st.providers||[]).find(p=>p.active);
+    if(baseInput){
+      baseInput.disabled=!st.hasKey;
+      baseInput.value=prov&&prov.baseUrl?prov.baseUrl:'';
+      baseInput.placeholder=st.hasKey?'Custom API endpoint (leave blank for provider default)':'Connect first';
+    }
+    if(customInput){
+      customInput.disabled=!st.hasKey;
+      customInput.placeholder=st.hasKey?'Or enter a custom model ID':'Connect first';
+    }
+  }
+  async function fillMem(){
+    const facts=await window.dexerion.invoke('dex:ai-memory-list').catch(()=>[]);
+    document.getElementById('aimemsub').textContent=facts.length
+      ? facts.length+' remembered — newest: “'+String(facts[facts.length-1].text).slice(0,60)+'”'
+      : 'Nothing remembered yet — type “remember …” in any chat';
+  }
+  aikey.oninput=()=>{aikey.dataset.touched='1';};
+  aikey.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('aisave').click();}});
+  document.getElementById('aikeyopen').onclick=()=>{
+    window.dexerion.invoke('dex:new-tab','https://build.nvidia.com',false).catch(()=>{});
+  };
+  document.getElementById('aisave').onclick=async()=>{
+    const btn=document.getElementById('aisave');btn.disabled=true;btn.textContent='Testing…';
+    const msg=document.getElementById('aikeymsg');
+    try{
+      const typed=aikey.value.trim();
+      // Commit the endpoint first. A detached onchange can otherwise land
+      // after Save & test has already loaded the catalogue and sent the test
+      // probe to the previous host — the custom-provider connect failure.
+      const baseInput=document.getElementById('aibaseurl');
+      if(baseInput)await window.dexerion.invoke('dex:ai-baseurl-set',baseInput.value).catch(()=>{});
+      if(typed)await window.dexerion.invoke('dex:ai-key-set',typed);
+      const cat=await window.dexerion.invoke('dex:ai-models-refresh').catch(e=>({ok:false,error:e.message}));
+      const r=await window.dexerion.invoke('dex:ai-test');
+      if(!r.ok){
+        // The key is stored but unproven: say exactly that, keep the key in
+        // the box so a typo can be fixed, and show stored state honestly.
+        msg.textContent='Saved, but the test failed: '+r.error;
+        fillAi(await window.dexerion.invoke('dex:ai-status'), false);
+        return;
+      }
+      if(cat&&!cat.ok)msg.textContent='Connected, but the model list failed: '+(cat.error||'unknown error');
+      else{msg.textContent='Connected ✓ — model '+(r.model||'ready');}
+      aikey.value='';aikey.dataset.touched='';
+      fillAi(await window.dexerion.invoke('dex:ai-status'), true);
+      toast();
+    }catch(err){msg.textContent='Could not save: '+err.message;}
+    btn.disabled=false;btn.textContent='Save & test';
+  };
+  document.getElementById('aimodels').onclick=async()=>{
+    const b=document.getElementById('aimodels');b.disabled=true;b.textContent='Loading…';
+    const r=await window.dexerion.invoke('dex:ai-models-refresh').catch(e=>({ok:false,error:e.message}));
+    b.disabled=false;b.textContent='Refresh models';
+    if(r&&r.ok){fillAi(r);toast();}
+    else document.getElementById('aikeymsg').textContent='Could not load models: '+(r.error||'unknown error');
+  };
+  document.getElementById('aiclear').onclick=async()=>{
+    if(!confirm('Remove the stored NVIDIA key?'))return;
+    try{
+      const st=await window.dexerion.invoke('dex:ai-key-clear');
+      aikey.value='';aikey.dataset.touched='';
+      fillAi(st);toast();
+    }catch(err){alert('Could not remove the key: '+err.message);}
+  };
+  document.getElementById('aimemclear').onclick=async()=>{
+    if(!confirm('Forget everything the assistant remembers about this account?'))return;
+    await window.dexerion.invoke('dex:ai-memory-clear').catch(()=>{});
+    fillMem();toast();
+  };
+  // The pick is verified against the live key before it sticks; an
+  // unprovisioned model reverts to the previous choice with the reason shown.
+  const applyModel=async(id)=>{
+    const sub=document.getElementById('aimodelsub');
+    const r=await window.dexerion.invoke('dex:ai-model-set',id).catch(e=>({ok:false,error:String(e&&e.message||e)}));
+    if(r&&r.ok===false){
+      if(sub)sub.textContent=r.error||'That model is not available on your account.';
+      if(r.model&&aimodel){aimodel.value=r.model;}
+      return r;
+    }
+    if(r&&r.warning&&sub)sub.textContent=r.warning;
+    toast();
+    return r;
+  };
+  aimodel.onchange=async()=>{await applyModel(aimodel.value);};
+  const aibase=document.getElementById('aibaseurl');
+  if(aibase)aibase.onchange=async()=>{await window.dexerion.invoke('dex:ai-baseurl-set',aibase.value).catch(()=>{});toast();};
+  const aimodelCustom=document.getElementById('aimodel-custom');
+  if(aimodelCustom)aimodelCustom.onchange=async()=>{await applyModel(aimodelCustom.value);};
+  // The catalogue lives in the main process and resets on restart, so a
+  // stored key alone leaves the picker empty — reload it automatically.
+  window.dexerion.invoke('dex:ai-status').then(async st=>{
+    fillAi(st);
+    if(st&&st.hasKey&&!st.modelsLoaded){
+      const r=await window.dexerion.invoke('dex:ai-models-refresh').catch(e=>({ok:false,error:e.message}));
+      if(r&&r.ok)fillAi(r);
+      else document.getElementById('aimodelsub').textContent='Could not load models: '+(r.error||'unknown error');
+    }
+  }).catch(()=>{});
+  fillMem();
+  if (window.dexerion.on) window.dexerion.on('dex:ai-memory-updated', () => fillMem());
+  // Memory figures: the About line (one number) and the Performance card
+  // (budget, pressure hint, asleep count). Live while the page is open. A
+  // rejected call means this page lost its window (preview/closed tab) — stop
+  // the loop instead of retrying into the rejection.
+  let memTimer=null;
+  function paintMem(){
+    window.dexerion.invoke('dex:memory').then(m=>{
+      if(!m)return;
+      const about=document.getElementById('memstat');
+      if(about)about.textContent='Using ~'+m.workingSetMB+' MB across '+m.processes+' processes';
+      const line=document.getElementById('memline');
+      if(!line)return;
+      const fmt=(mb)=>((mb>=1536)?((mb/1024).toFixed(1)+' GB'):(mb+' MB'));
+      let text;
+      if(m.saverOn===false)text='Using '+fmt(m.workingSetMB)+' — Memory Saver is off';
+      else{
+        text='Using '+fmt(m.workingSetMB)+' of '+fmt(m.capMB||2048)+' — '+(m.asleep||0)+' tab'+(m.asleep===1?'':'s')+' asleep';
+        if(m.workingSetMB>(m.capMB||0)&&!m.asleep)text+=' · This cap is below what Dexerion needs — try a higher value.';
+      }
+      line.textContent=text;
+    }).catch(()=>{if(memTimer){clearInterval(memTimer);memTimer=null;}});
+  }
+  memTimer=setInterval(paintMem,10000);
+  paintMem();
+})();
+</script></body></html>

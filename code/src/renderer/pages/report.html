@@ -1,0 +1,1349 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Report — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/ai-artifacts.css">
+<style>
+/* Full-page report: a sticky design bar, then the document. This is the view
+   that opens beside the AI sidebar, so restyling never hides the chat. */
+body{margin:0;background:var(--pbg);color:var(--pfg)}
+/* Native select dropdowns: `color-scheme` in page-theme.css makes Chromium
+   render the popup in the right theme; these rules style the closed control
+   and the options so entries are always readable on both themes. */
+.bar select option{background:var(--pbg);color:var(--pfg);padding:8px 14px;font-size:12px}
+.bar select option:checked,.bar select option:hover{background:color-mix(in srgb,var(--accent) 14%,var(--pbg));color:var(--pfg)}
+/* Accent used AS TEXT (raw accent ~2.7:1 on light paper); mixed toward the
+   system text colour it clears 4.5:1 in light and stays bright in dark. */
+:root{--accent-text:color-mix(in srgb,var(--accent,#35c4ff) 74%,CanvasText 26%)}
+.bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 28px;background:color-mix(in srgb,var(--pbg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--pborder);font-size:12px}
+.bar[hidden]{display:none}
+.bar label{color:var(--pmuted);font-size:11px;font-weight:600}
+.bar select{font:12px/1.4 inherit;color:var(--pfg);background:color-mix(in srgb,var(--pfg) 5%,transparent);border:1px solid var(--pborder);border-radius:6px;padding:3px 6px}
+.bar select:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:1px}
+.papers{display:inline-flex;gap:5px;align-items:center}
+.pdot{width:16px;height:16px;border-radius:50%;border:1px solid var(--pborder);padding:0;cursor:pointer}
+.pdot.sel{outline:2px solid var(--pfg);outline-offset:1px}
+.pdot[data-paper="paper"]{background:#efece6}
+.pdot[data-paper="white"]{background:#ffffff}
+.pdot[data-paper="pink"]{background:#f6e8ea}
+.pdot[data-paper="blue"]{background:#e8eef5}
+.pdot[data-paper="green"]{background:#e9f0e8}
+.pdot[data-paper="lavender"]{background:#eee9f4}
+.pdot[data-paper="peach"]{background:#f8ece2}
+.pdot[data-paper="grey"]{background:#eeeeee}
+.pdot[data-paper="sand"]{background:#f3efe7}
+.pdot[data-paper="slate"]{background:#e7e9ec}
+.pdot[data-paper="ivory"]{background:#fbfaf5}
+.pdot[data-paper="mist"]{background:#eef3f3}
+.spacer{flex:1}
+.hint{color:var(--pmuted);font-size:10.5px}
+.copy-status{color:var(--accent-text,#35c4ff);font-size:10.5px;font-weight:600;min-height:1em}
+.copy-status:empty,.copy-status[hidden]{display:none}
+.wrap{max-width:840px;margin:0 auto;padding:34px 28px 96px}
+.wrap .dxa-report{margin:0;border:1px solid var(--pborder);box-shadow:var(--sh-2)}
+.err{padding:80px 24px;text-align:center;color:var(--pmuted);font-size:13.5px}
+.btn{appearance:none;border:1px solid var(--pborder);border-radius:6px;background:color-mix(in srgb,var(--pfg) 5%,transparent);color:var(--pfg);font:600 10.5px var(--font-ui,"Segoe UI",system-ui,sans-serif);padding:3px 8px;cursor:pointer}
+.btn:hover{background:color-mix(in srgb,var(--pfg) 10%,transparent)}
+.btn:focus-visible{outline:2px solid color-mix(in srgb,var(--pfg) 60%,transparent);outline-offset:1px}
+/* Primary actions (Contents, Save note, Add note) keep the design-system
+   primary from page-theme.css: solid accent background with --accent-ink
+   text. This file once re-coloured the label to the raw accent — accent on
+   accent — which rendered "Contents" as an unreadable solid green pill. */
+
+/* Feature panels (search / toc / annotations / versions / deps / conditions) */
+.panel{position:fixed;top:0;left:0;width:340px;height:100vh;background:var(--pcard,#fff);color:var(--pfg);border-right:1px solid var(--pborder);z-index:20;transform:translateX(-104%);transition:transform 220ms cubic-bezier(.22,.61,.36,1);overflow:auto;display:flex;flex-direction:column;font:13px/1.5 var(--font-ui,"Segoe UI",system-ui,sans-serif)}
+.panel.open{transform:translateX(0)}
+.panel-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--pborder);background:color-mix(in srgb,var(--pbg) 80%,transparent);flex:none}
+.panel-head h3{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--pmuted);flex:1}
+.panel-head .close{background:none;border:0;font:14px/1 var(--font-mono,"Cascadia Mono",Consolas,monospace);color:var(--pfg);cursor:pointer;padding:2px}
+.panel-body{padding:10px 14px;flex:1}
+.panel-foot{padding:8px 14px;border-top:1px solid var(--pborder);flex:none;display:flex;gap:8px;flex-wrap:wrap}
+.overlay{position:fixed;inset:0;background:rgba(18,17,16,.35);z-index:15;opacity:0;transition:opacity 220ms ease;pointer-events:none}
+.overlay.open{opacity:1;pointer-events:auto}
+.toc-item{display:flex;gap:8px;align-items:center;padding:5px 0;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--pfg)}
+.toc-item:hover{background:color-mix(in srgb,var(--pfg) 6%,transparent)}
+.toc-item b{color:var(--pfg);font-weight:600}
+.toc-item .page{margin-left:auto;font-size:10.5px;color:var(--pmuted);font-family:var(--font-mono,"Cascadia Mono",Consolas,monospace)}
+.toc-item .level{font-size:10px;color:var(--pmuted);flex:none}
+.search-box{position:relative;margin-bottom:10px}
+.search-box input{width:100%;border:1px solid var(--pborder);border-radius:6px;background:color-mix(in srgb,var(--pfg) 5%,transparent);color:var(--pfg);font:inherit;padding:6px 8px;outline:none}
+.search-box input:focus{border-color:color-mix(in srgb,var(--pfg) 60%,transparent)}
+.search-box .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;font:14px/1 var(--font-mono);color:var(--pmuted);cursor:pointer}
+.search-box-row{display:flex;align-items:center;gap:8px}
+.search-box-row .search-box{flex:1;min-width:0;margin-bottom:10px}
+.search-count{flex:none;min-width:38px;text-align:right;font:700 11px var(--font-mono,"Cascadia Mono",Consolas,monospace);color:var(--pmuted);font-variant-numeric:tabular-nums}
+.search-help{margin:8px 0 0;font-size:11px;line-height:1.45;color:var(--pmuted)}
+.search-result{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid color-mix(in srgb,var(--pborder) 50%,transparent);font:inherit;font-size:12.5px;color:var(--pfg);cursor:pointer;padding:6px 0}
+.search-result:hover,.search-result.is-active{background:color-mix(in srgb,var(--pfg) 6%,transparent)}
+.search-result.is-active{box-shadow:inset 2px 0 0 var(--accent,#35c4ff)}
+.search-result:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:-2px}
+.search-result .match{font-weight:700;color:var(--accent-text,#35c4ff)}
+.search-result .ctx{font-size:11px;color:var(--pmuted);margin-top:2px}
+/* Search match highlight inside the rendered document. Exactly one mark is
+   active while cycling; the rest of the document keeps its normal ink. */
+.dxa-search-match{background:color-mix(in srgb,var(--accent,#35c4ff) 22%,transparent);color:inherit;padding:0 2px;border-radius:2px}
+.dxa-search-match.is-active{background:color-mix(in srgb,var(--accent,#35c4ff) 42%,transparent);outline:2px solid color-mix(in srgb,var(--accent,#35c4ff) 70%,transparent);outline-offset:1px}
+/* Heading hierarchy: h1 largest, h2 mid, h3 smallest. Each theme can override. */
+.dxa-report .dxa-h1{font-size:1.25em;font-weight:700;margin:18px 0 8px}
+.dxa-report .dxa-h2{font-size:1.1em;font-weight:700;margin:14px 0 6px}
+.dxa-report .dxa-h3{font-size:1em;font-weight:650;margin:10px 0 4px}
+.empty{color:var(--pmuted);font-size:12px;padding:10px 0;text-align:center}
+/* Selection-anchored annotations (V15). Highlights use the CSS Custom
+   Highlight API: they are painted behind the glyphs, inside the text boxes,
+   so a highlight can never cover or obscure the text it marks. Only colour/
+   background/text-decoration apply to ::highlight() — which is exactly the
+   readable set. */
+::highlight(dxa-note){background-color:rgba(53,196,255,.18);background-color:color-mix(in srgb,var(--accent,#35c4ff) 20%,transparent);text-decoration:underline;text-decoration-color:rgba(53,196,255,.65);text-decoration-thickness:2px;text-underline-offset:3px}
+::highlight(dxa-note-active){background-color:rgba(53,196,255,.32);background-color:color-mix(in srgb,var(--accent,#35c4ff) 32%,transparent)}
+.anno{display:block;padding:9px 0;border-bottom:1px solid color-mix(in srgb,var(--pborder) 50%,transparent)}
+.anno .quote{display:block;font-size:12px;font-style:italic;color:var(--pmuted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+.anno .note{display:block;font-size:12.5px;color:var(--pfg);white-space:pre-wrap}
+.anno .meta{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap}
+.anno .who{font:700 10px var(--font-mono);color:var(--accent-text,#35c4ff)}
+.anno .at{font-size:10px;color:var(--pmuted);font-family:var(--font-mono)}
+.anno .badge{font:700 9.5px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--dx-warn,#a56a00)}
+.anno .acts{margin-left:auto;display:flex;gap:4px}
+.anno .acts button{background:none;border:1px solid color-mix(in srgb,var(--pborder) 80%,transparent);border-radius:5px;color:var(--pmuted);font:600 10px var(--font-mono);padding:2px 6px;cursor:pointer}
+.anno .acts button:hover{color:var(--pfg);border-color:color-mix(in srgb,var(--pfg) 40%,transparent)}
+.anno .acts button:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:1px}
+.anno .acts button.danger{color:#c0392b;border-color:rgba(192,57,43,.5)}
+.anno textarea{width:100%;min-height:56px;resize:vertical;border:1px solid var(--pborder);border-radius:6px;background:color-mix(in srgb,var(--pfg) 5%,transparent);color:var(--pfg);font:12.5px/1.45 var(--font-ui,system-ui);padding:6px 8px;box-sizing:border-box}
+.anno-compose{width:100%;display:grid;gap:6px;margin-bottom:6px;text-align:left}
+.anno-compose[hidden]{display:none}
+.anno-compose textarea{min-height:66px}
+.anno-quote{margin:0;font-size:12px;font-style:italic;color:var(--pmuted);max-height:54px;overflow:hidden}
+.anno-hint{margin:0 0 6px;font-size:11.5px;line-height:1.45;color:var(--dx-warn,#a56a00);width:100%;text-align:left}
+.anno-hint[hidden]{display:none}
+/* Reading typography (V16): prose gets a measure (~70ch), numbers get tabular
+   figures, sections breathe a little more. Scoped to the viewer so the chat
+   card keeps its compact shape. */
+#wrap .dxa-report .dxa-md{max-width:70ch}
+#wrap .dxa-report .dxa-h{max-width:70ch}
+#wrap .dxa-report .dxa-quote,#wrap .dxa-report .dxa-callout,#wrap .dxa-report .dxa-subtitle,#wrap .dxa-report .dxa-kicker{max-width:70ch}
+#wrap .dxa-report .dxa-stat-value,#wrap .dxa-report .dxa-stat-label,#wrap .dxa-report .dxa-metric-value,#wrap .dxa-report table,#wrap .dxa-report .dxa-timeline .dxa-when{font-variant-numeric:tabular-nums}
+#wrap .dxa-report .dxa-section{margin-top:6px}
+/* The viewer is the report's own page, so it carries the report's real
+   heading. The chat card keeps its compact h3 title - the title is announced
+   once per surface, not twice on the same screen. */
+#wrap .dxa-report h1.dxa-report-title{
+  margin:0 0 6px; max-width:70ch; font-family:var(--dxa-report-face,var(--dxa-font));
+  font-size:23px; line-height:1.22; font-weight:700; letter-spacing:-.012em;
+  color:var(--dxa-report-ink,#1c1a17); overflow-wrap:anywhere;
+}
+#wrap .dxa-report h1.dxa-report-title + .dxa-kicker{margin-top:0}
+/* The TOC rows are real buttons now, and the current section carries the
+   accent signal (never a wash). */
+.toc-item{background:none;border:0;width:100%;text-align:left;font-family:inherit}
+.toc-item.active{background:color-mix(in srgb,var(--accent,#35c4ff) 13%,transparent)}
+.toc-item.active b{color:var(--accent-text,#35c4ff)}
+.toc-item:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:1px}
+/* A deep link (?b=N) flashes the section it lands on; reduced motion gets a
+   static ring instead of the fade. */
+.dxa-flash{animation:dxaFlash 1.4s ease-out 1}
+@keyframes dxaFlash{0%{background-color:color-mix(in srgb,var(--accent,#35c4ff) 26%,transparent)}100%{background-color:transparent}}
+.panel[inert]{pointer-events:none}
+.shortcut-list{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin:0;font-size:12.5px}
+.shortcut-list dt{font:700 11px var(--font-mono,"Cascadia Mono",Consolas,monospace);color:var(--accent-text,#35c4ff)}
+.shortcut-list dd{margin:0;color:var(--pmuted)}
+@media (prefers-reduced-motion:reduce){
+  .panel{transition:none}
+  .dxa-flash{animation:none;outline:2px solid color-mix(in srgb,var(--accent,#35c4ff) 60%,transparent);outline-offset:2px}
+}
+@media (forced-colors:active){
+  .panel,.search-box input,.bar select{border:1px solid CanvasText}
+  .btn:focus-visible,.close:focus-visible,.clear:focus-visible,.search-result:focus-visible,
+  .toc-item:focus-visible,.anno .acts button:focus-visible,.top-btn:focus-visible{
+    outline:2px solid Highlight;outline-offset:2px
+  }
+  .dxa-search-match,.dxa-search-match.is-active{forced-color-adjust:none;background:Highlight;color:HighlightText;outline:2px solid Highlight}
+  .toc-item.active,.search-result.is-active{outline:2px solid Highlight;outline-offset:-2px}
+}
+.top-btn{position:fixed;right:16px;bottom:16px;z-index:20;width:36px;height:36px;border-radius:50%;border:1px solid var(--pborder);background:var(--pcard,#fff);color:var(--pfg);font:16px/1 var(--font-mono,"Cascadia Mono",Consolas,monospace);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.top-btn[hidden]{display:none}
+.top-btn:hover{border-color:color-mix(in srgb,var(--pfg) 40%,transparent)}
+.top-btn:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:2px}
+.ver-row{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--pborder) 50%,transparent);font-size:12.5px;color:var(--pfg)}
+.ver-row .v{flex:none;font:700 10px var(--font-mono);color:var(--pmuted)}
+.dep-row{padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--pborder) 50%,transparent);font-size:12.5px;color:var(--pfg)}
+.dep-row b{color:var(--pfg)}
+.cond-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--pborder);border-radius:99px;font:600 9.5px var(--font-mono);color:var(--pfg);margin-right:6px}
+.cond-chip .remove{background:none;border:0;font:12px/1 var(--font-mono);color:var(--pmuted);cursor:pointer}
+.dyn-row{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--pborder) 50%,transparent);font-size:12.5px;color:var(--pfg)}
+.dyn-row select{font:inherit;padding:3px 6px;border:1px solid var(--pborder);border-radius:4px;background:color-mix(in srgb,var(--pfg) 5%,transparent);color:var(--pfg)}
+.block-meta{font-size:10px;color:var(--pmuted);font-family:var(--font-mono);margin-top:3px}
+.block-meta .cond{color:var(--accent,#35c4ff)}
+.block-meta .dep{color:var(--accent,#35c4ff)}
+.block-meta .ver{color:var(--pmuted)}
+.block-meta .anno{color:var(--accent,#35c4ff)}
+/* Print/export polish: a clean single-column article with no viewer chrome.
+   Interactive blocks print fully expanded and cards/tables never split. */
+@page{size:A4;margin:16mm 14mm}
+@media print{
+  html,body{background:#fff!important;color:#111!important}
+  .bar,.panel,.overlay,.top-btn,.copy-status,.hint,
+  #bar,#panelToc,#panelSearch,#panelNotes,#panelVersions,#panelDeps,
+  #panelConditions,#panelDynamic,#overlay,.anno-edit,.dxa-anno-editor,
+  button,.btn,.pdot,#btnCopy,#btnExportHtml,#btnExportMd,#btnExportPdf{display:none!important}
+  .wrap{max-width:none;margin:0;padding:0}
+  .wrap .dxa-report{margin:0;border:0;box-shadow:none}
+  h1,h2,h3,h4,.dxa-h2,.dxa-h3,table,.dxa-card,.dxa-callout,
+  .dxa-chart,.dxa-stats,.dxa-table,.dxa-section{break-inside:avoid;page-break-inside:avoid}
+  .dxa-section{break-after:avoid-page}
+  a{color:#111!important;text-decoration:underline}
+  details,details[open],.dxa-accordion,.dxa-tabs{display:block!important}
+  details>*:not(summary),.dxa-accordion>*,.dxa-tabs>*,
+  [hidden]:not(.dxa-report){display:block!important}
+  details summary{list-style:none}
+  .print-only,.dxa-print-only{display:block!important;margin-top:18px;
+    padding-top:8px;border-top:1px solid #bbb;font-size:9pt;color:#555}
+  .dxa-report a[href^="http"]::after{content:" (" attr(href) ")";font-size:8pt;color:#555}
+}
+.print-only,.dxa-print-only{display:none}
+</style></head><body>
+<div class="bar" id="bar" hidden>
+  <button type="button" class="btn" id="btnCloseOverlay" title="Close (Esc)" aria-label="Close this report" hidden>✕</button>
+  <label for="theme">Design</label>
+  <select id="theme" aria-label="Design"></select>
+  <label>Page colour</label>
+  <span class="papers" id="papers" role="group" aria-label="Page colour"></span>
+  <label for="font">Font</label>
+  <select id="font" aria-label="Font"></select>
+  <button type="button" class="btn primary" id="btnToc" title="Table of contents">Contents</button>
+  <button type="button" class="btn" id="btnSearch" title="Search in report">Search</button>
+  <button type="button" class="btn" id="btnAnnotations" title="Annotations">Notes</button>
+  <button type="button" class="btn" id="btnCopy" title="Copy report HTML to clipboard">Copy</button>
+  <button type="button" class="btn" id="btnExportHtml" title="Export this report as a standalone HTML file">Export HTML</button>
+  <button type="button" class="btn" id="btnExportMd" title="Export this report as Markdown">Markdown</button>
+  <button type="button" class="btn" id="btnExportPdf" title="Print or save this report as PDF">Print / PDF</button>
+  <span class="spacer"></span>
+  <span class="copy-status" id="copyStatus" role="status" aria-live="polite" aria-atomic="true"></span>
+  <span class="copy-status" id="overlayStatus" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+  <span class="hint" id="lookHint">Style is saved with the report</span>
+  <button type="button" class="btn" id="btnFullscreen" title="Fill the whole window (Esc to exit)" hidden>Fullscreen</button>
+  <button type="button" class="btn" id="btnOpenTab" title="Open in a new tab" hidden>Open in tab</button>
+</div>
+<div class="wrap" id="wrap"><p class="err">Loading…</p></div>
+<button type="button" class="top-btn" id="btnTop" hidden aria-label="Back to top" title="Back to top">↑</button>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="panel" id="panelToc" role="dialog" aria-modal="true" aria-labelledby="tocTitle" aria-hidden="true" inert>
+  <div class="panel-head"><h3 id="tocTitle">Contents</h3><button type="button" class="close" id="closeToc" aria-label="Close contents">✕</button></div>
+  <div class="panel-body" id="tocBody"></div>
+  <div class="panel-foot"><button type="button" class="btn" id="tocRefresh">Refresh</button></div>
+</div>
+
+<div class="panel" id="panelSearch" role="dialog" aria-modal="true" aria-labelledby="searchTitle" aria-hidden="true" inert>
+  <div class="panel-head"><h3 id="searchTitle">Search in report</h3><button type="button" class="close" id="closeSearch" aria-label="Close search">✕</button></div>
+  <div class="panel-body">
+    <div class="search-box-row">
+      <div class="search-box"><input type="search" id="searchInput" aria-label="Find in this report" placeholder="Find in this report…"><button type="button" class="clear" id="searchClear" aria-label="Clear search">✕</button></div>
+      <span class="search-count" id="searchCount" aria-live="polite" aria-atomic="true">0/0</span>
+    </div>
+    <div id="searchResults"></div>
+    <p class="search-help">Enter for next · Shift+Enter for previous · Esc to close</p>
+  </div>
+</div>
+
+<div class="panel" id="panelAnnotations" role="dialog" aria-modal="true" aria-labelledby="annotationsTitle" aria-hidden="true" inert>
+  <div class="panel-head"><h3 id="annotationsTitle">Annotations</h3><button type="button" class="close" id="closeAnnotations" aria-label="Close notes">✕</button></div>
+  <div class="panel-body" id="annotationsBody"></div>
+  <div class="panel-foot">
+    <p class="anno-hint" id="annoHint" hidden></p>
+    <div class="anno-compose" id="annoCompose" hidden>
+      <p class="anno-quote" id="annoQuote"></p>
+      <textarea id="annoNote" placeholder="Your note about the highlighted text…" aria-label="Note text"></textarea>
+      <div class="anno-compose-row">
+        <button type="button" class="btn primary" id="annoSave">Save note</button>
+        <button type="button" class="btn" id="annoCancel">Cancel</button>
+      </div>
+    </div>
+    <button type="button" class="btn primary" id="annoAdd">Add note</button>
+  </div>
+</div>
+
+<div class="panel" id="panelHelp" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-hidden="true" inert>
+  <div class="panel-head"><h3 id="helpTitle">Keyboard shortcuts</h3><button type="button" class="close" id="closeHelp" aria-label="Close shortcuts">✕</button></div>
+  <div class="panel-body">
+    <dl class="shortcut-list">
+      <dt>c</dt><dd>Contents</dd>
+      <dt>/ or s</dt><dd>Search in this report</dd>
+      <dt>Enter</dt><dd>Next search match (Shift+Enter goes back)</dd>
+      <dt>n</dt><dd>Annotations</dd>
+      <dt>e / d / v</dt><dd>First note: edit / arm delete / scroll to text</dd>
+      <dt>?</dt><dd>This shortcut list</dd>
+      <dt>Esc</dt><dd>Close the open panel, fullscreen, or overlay</dd>
+    </dl>
+  </div>
+</div>
+
+<script src="dexerion://assets/page-theme.js"></script>
+<script src="dexerion://assets/ai-markdown.js"></script>
+<script src="dexerion://assets/ai-artifacts.js"></script>
+<script>
+(async () => {
+  const wrap = document.getElementById('wrap');
+  const bar = document.getElementById('bar');
+  const overlay = document.getElementById('overlay');
+  const params = new URLSearchParams(location.search);
+  let chatId = params.get('chat') || '';
+  let index = parseInt(params.get('i'), 10);
+  let message = null;
+
+  // ---------- feature state ----------
+  // One panel at a time behaves as a dialog: it is focus-trapped, Escape
+  // closes it, and focus returns to whatever opened it. Closed panels are
+  // inert so their buttons never sit in the Tab order behind the document.
+  const PANEL_NAMES = ['toc', 'search', 'annotations', 'help'];
+  const panels = { toc: false, search: false, annotations: false, help: false };
+  const panelEl = (name) => document.getElementById('panel' + name[0].toUpperCase() + name.slice(1));
+  const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let activePanel = '';
+  let panelReturnFocus = null;
+  function focusableIn(root) {
+    if (!root) return [];
+    return Array.from(root.querySelectorAll(FOCUSABLE)).filter((el) =>
+      !el.hidden && el.getAttribute('aria-hidden') !== 'true' && (el.offsetWidth > 0 || el.offsetHeight > 0));
+  }
+  function openPanel(name, returnFocus) {
+    if (!Object.prototype.hasOwnProperty.call(panels, name)) return;
+    const el = panelEl(name);
+    if (!el) return;
+    if (activePanel && activePanel !== name) closePanel(activePanel, false);
+    if (!activePanel) panelReturnFocus = returnFocus || panelReturnFocus || document.activeElement;
+    panels[name] = true;
+    activePanel = name;
+    el.inert = false;
+    el.setAttribute('aria-hidden', 'false');
+    el.classList.add('open');
+    overlay.classList.add('open');
+    if (name === 'toc') spyToc();
+    // Keyboard users land inside the dialog, not behind it.
+    const initial = el.querySelector('[data-panel-initial-focus]') ||
+      (name === 'search' ? document.getElementById('searchInput') : el.querySelector('.close'));
+    try { if (initial) initial.focus(); } catch { /* best effort */ }
+  }
+  function closePanel(name, restoreFocus = true) {
+    if (!Object.prototype.hasOwnProperty.call(panels, name)) return;
+    if (name === 'search') clearHighlight();
+    const el = panelEl(name);
+    panels[name] = false;
+    if (el) {
+      el.classList.remove('open');
+      el.inert = true;
+      el.setAttribute('aria-hidden', 'true');
+    }
+    if (activePanel === name) {
+      activePanel = '';
+      if (restoreFocus) {
+        if (panelReturnFocus && document.contains(panelReturnFocus) && !panelReturnFocus.closest('[inert]')) {
+          try { panelReturnFocus.focus(); } catch { /* best effort */ }
+        }
+        panelReturnFocus = null;
+      }
+      // A false restore means another dialog is taking over; keep the original
+      // trigger so focus still returns outside the dialog family on Escape.
+    }
+    if (!PANEL_NAMES.some((k) => panels[k])) overlay.classList.remove('open');
+  }
+  function closeAll(restoreFocus = true) {
+    if (activePanel) closePanel(activePanel, restoreFocus);
+  }
+  overlay.onclick = () => closeAll();
+  document.addEventListener('keydown', (ev) => {
+    if (!ev || ev.key !== 'Tab' || !activePanel) return;
+    const el = panelEl(activePanel);
+    const items = focusableIn(el);
+    if (!items.length) { ev.preventDefault(); return; }
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!el.contains(document.activeElement)) { ev.preventDefault(); first.focus(); return; }
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  });
+  // Escape works even from the search field, where the input-safe shortcut
+  // handler deliberately stands down. Stop here so overlay mode cannot also
+  // tear down the whole preview on the same keypress.
+  document.addEventListener('keydown', (ev) => {
+    if (!ev || ev.key !== 'Escape' || !activePanel) return;
+    if (activePanel === 'search') clearHighlight();
+    closePanel(activePanel);
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+  });
+
+  function fail(text) {
+    wrap.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'err';
+    p.textContent = text || 'Could not open the report.';
+    wrap.appendChild(p);
+    bar.hidden = true;
+  }
+
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // ---------- table of contents (V16) ----------
+  // Rows are real buttons keyed to block identity, so a duplicate heading text
+  // can never scroll to the wrong place; the current row follows the reading
+  // position (DexArtifacts.tocActiveIndex) and carries aria-current.
+  function buildToc(artifact) {
+    const body = document.getElementById('tocBody');
+    body.replaceChildren();
+    const blocks = Array.isArray(artifact && artifact.blocks) ? artifact.blocks : [];
+    const items = [];
+    blocks.forEach((block, i) => {
+      if (block && block.type === 'heading' && String(block.text || '').trim()) {
+        items.push({ level: block.level === 3 ? 3 : 2, text: block.text, index: i });
+      }
+    });
+    if (!items.length) {
+      body.appendChild(document.createTextNode('No headings found.'));
+      return;
+    }
+    for (const item of items) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toc-item';
+      btn.dataset.blockIndex = String(item.index);
+      const lvl = document.createElement('span');
+      lvl.className = 'level';
+      lvl.textContent = item.level === 3 ? 'H3' : 'H2';
+      const b = document.createElement('b');
+      b.textContent = item.text;
+      const page = document.createElement('span');
+      page.className = 'page';
+      page.textContent = 'section';
+      btn.append(lvl, b, page);
+      btn.addEventListener('click', () => {
+        goToBlock(item.index);
+        closePanel('toc');
+      });
+      body.appendChild(btn);
+    }
+    spyToc();
+  }
+
+  // ---------- reading navigation (V16) ----------
+  // Smooth scrolling honours prefers-reduced-motion (V20 polish pass).
+  function scrollBehavior() {
+    try {
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return 'auto';
+    } catch {}
+    return 'smooth';
+  }
+
+  function goToBlock(blockIndex, opts) {
+    const el = blockElFor(blockIndex);
+    if (!el) return false;
+    try { el.scrollIntoView({ behavior: (opts && opts.instant) ? 'auto' : scrollBehavior(), block: 'start' }); } catch { /* best effort */ }
+    try {
+      el.classList.remove('dxa-flash');
+      void el.offsetWidth;
+      el.classList.add('dxa-flash');
+      setTimeout(() => { try { el.classList.remove('dxa-flash'); } catch {} }, 1600);
+    } catch {}
+    syncBlockParam(blockIndex);
+    return true;
+  }
+
+  // Highlight one match inside a rendered block. clearHighlight() removes the
+  // previous mark, so cycling never leaves a trail of highlighted matches;
+  // the current hit gets `is-active` and every other hit stays plain text.
+  function highlightMatch(blockIndex, matchText, occurrence = 0) {
+    clearHighlight();
+    const el = blockElFor(blockIndex);
+    const needle = String(matchText || '').toLowerCase();
+    if (!el || !needle) return false;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node, seen = 0, fallback = null;
+    while ((node = walker.nextNode())) {
+      const text = node.nodeValue || '';
+      const lower = text.toLowerCase();
+      let from = 0;
+      let idx = lower.indexOf(needle, from);
+      while (idx >= 0) {
+        if (seen === occurrence) { fallback = { node, text, idx }; break; }
+        if (!fallback) fallback = { node, text, idx };
+        seen++;
+        from = idx + needle.length;
+        idx = lower.indexOf(needle, from);
+      }
+      if (fallback && seen === occurrence) break;
+    }
+    if (!fallback) return false;
+    const mark = document.createElement('mark');
+    mark.className = 'dxa-search-match is-active';
+    mark.textContent = fallback.text.slice(fallback.idx, fallback.idx + needle.length);
+    const before = document.createTextNode(fallback.text.slice(0, fallback.idx));
+    const after = document.createTextNode(fallback.text.slice(fallback.idx + needle.length));
+    fallback.node.parentNode.replaceChild(mark, fallback.node);
+    mark.parentNode.insertBefore(before, mark);
+    mark.parentNode.insertBefore(after, mark.nextSibling);
+    return true;
+  }
+
+  // Remove all search match highlights from the document.
+  function clearHighlight() {
+    document.querySelectorAll('mark.dxa-search-match').forEach((m) => {
+      const parent = m.parentNode;
+      if (!parent) return;
+      const text = document.createTextNode(m.textContent || '');
+      parent.replaceChild(text, m);
+      parent.normalize();
+    });
+  }
+
+  function syncBlockParam(blockIndex) {
+    // Best effort: ?b=N is the deep link other surfaces can hand back. A
+    // non-standard scheme may refuse History writes; the catch keeps
+    // navigation working either way.
+    try {
+      const url = new URL(location.href);
+      if (Number.isInteger(blockIndex) && blockIndex >= 0) url.searchParams.set('b', String(blockIndex));
+      else url.searchParams.delete('b');
+      history.replaceState(null, '', url.toString());
+    } catch { /* no deep-link sync here */ }
+  }
+
+  // The current row follows what is actually on screen; positions are read at
+  // call time (one heading per section, never the whole document).
+  function spyToc() {
+    const rows = Array.from(document.querySelectorAll('#tocBody .toc-item'));
+    if (!rows.length) return;
+    let positions;
+    try {
+      positions = rows.map((r) => {
+        const el = blockElFor(Number(r.dataset.blockIndex));
+        return el ? (el.getBoundingClientRect().top + (window.scrollY || 0)) : Number.POSITIVE_INFINITY;
+      });
+    } catch { positions = rows.map(() => 0); }
+    const active = window.DexArtifacts.tocActiveIndex(positions, (window.scrollY || 0) + 110);
+    rows.forEach((r, i) => {
+      const on = i === active;
+      r.classList.toggle('active', on);
+      if (on) r.setAttribute('aria-current', 'location');
+      else r.removeAttribute('aria-current');
+    });
+  }
+
+  // Back to top: appears once the report has been scrolled past the first
+  // screen, so it never floats over a short document.
+  const topBtn = document.getElementById('btnTop');
+  function paintTop() {
+    try { topBtn.hidden = (window.scrollY || 0) < 480; } catch { topBtn.hidden = true; }
+  }
+  topBtn.addEventListener('click', () => {
+    try { window.scrollTo({ top: 0, behavior: scrollBehavior() }); }
+    catch { try { window.scrollTo(0, 0); } catch { /* best effort */ } }
+  });
+  paintTop();
+
+  {
+    // One rAF-throttled handler drives both the TOC spy and the top button.
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      const run = () => { ticking = false; spyToc(); paintTop(); };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+      else setTimeout(run, 60);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+  }
+
+  // ---------- report search ----------
+  let searchMatches = [];
+  let searchIndex = -1;
+  const searchCountEl = document.getElementById('searchCount');
+  function paintSearchCount() {
+    if (!searchCountEl) return;
+    searchCountEl.textContent = searchMatches.length
+      ? (searchIndex + 1) + '/' + searchMatches.length
+      : '0/0';
+  }
+  function searchReport(query, artifact) {
+    const results = [];
+    const q = String(query || '').toLowerCase().trim();
+    if (!q) return results;
+    const blocks = Array.isArray(artifact && artifact.blocks) ? artifact.blocks : [];
+    // blockIndex is 0-based everywhere (block hooks, ?b= deep links) — the
+    // viewer label adds one for reading. `occurrence` identifies which copy
+    // of the phrase inside the block owns the single active mark.
+    for (let idx = 0; idx < blocks.length; idx++) {
+      const block = blocks[idx];
+      const text = blockText(block);
+      const hay = text.toLowerCase();
+      let pos = hay.indexOf(q);
+      let occurrence = 0;
+      while (pos >= 0) {
+        results.push({
+          block,
+          blockIndex: idx,
+          pos,
+          occurrence,
+          match: text.slice(pos, pos + q.length),
+        });
+        occurrence++;
+        pos = hay.indexOf(q, pos + q.length);
+      }
+    }
+    return results;
+  }
+
+  function blockText(block) {
+    if (!block) return '';
+    switch (block.type) {
+      case 'heading': return block.text;
+      case 'paragraph': return block.text;
+      case 'list': return (block.items || []).join(' ');
+      case 'table': return (block.columns || []).join(' ') + ' ' + (block.rows || []).map(r => r.join(' ')).join(' ');
+      case 'stats': return (block.items || []).map(i => i.value + ' ' + i.label).join(' ');
+      case 'chart': return (block.chart && block.chart.title ? block.chart.title : '') + ' ' + ((block.chart && block.chart.labels) || []).join(' ');
+      case 'timeline': return (block.items || []).map(i => i.when + ' ' + i.text).join(' ');
+      case 'proscons': return (block.pros || []).join(' ') + ' ' + (block.cons || []).join(' ');
+      case 'cards': return (block.items || []).map(i => i.title + ' ' + i.text).join(' ');
+      case 'steps': return (block.items || []).map(i => i.title + ' ' + i.text).join(' ');
+      case 'quote': return block.text + ' ' + (block.attribution || '');
+      case 'callout': return (block.label || '') + ' ' + block.text;
+      case 'code': return (block.lang || '') + ' ' + block.text;
+      case 'image': return (block.alt || '') + ' ' + (block.caption || '');
+      case 'embed': return (block.title || '') + ' ' + (block.caption || '');
+      case 'accordion': return (block.items || []).map(i => i.heading + ' ' + i.body).join(' ');
+      case 'tabs': return (block.tabs || []).map(i => i.heading + ' ' + i.body).join(' ');
+      case 'metric': return block.value + ' ' + (block.subtitle || '') + ' ' + (block.delta || '');
+      case 'checklist': return (block.items || []).map(i => i.text).join(' ');
+      case 'comparison': return [block.title, block.left && block.left.heading, block.right && block.right.heading, (block.left && block.left.items || []).map(i => i.label + ' ' + i.value).join(' '), (block.right && block.right.items || []).map(i => i.label + ' ' + i.value).join(' ')].join(' ');
+      default: return '';
+    }
+  }
+
+  function activateSearchResult(nextIndex, opts) {
+    if (!searchMatches.length) return;
+    const count = searchMatches.length;
+    searchIndex = ((nextIndex % count) + count) % count;
+    const hit = searchMatches[searchIndex];
+    document.querySelectorAll('#searchResults .search-result').forEach((btn, i) => {
+      const active = i === searchIndex;
+      btn.classList.toggle('is-active', active);
+      if (active) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
+    });
+    paintSearchCount();
+    if (!hit) return;
+    if (!opts || opts.jump !== false) goToBlock(hit.blockIndex);
+    highlightMatch(hit.blockIndex, hit.match, hit.occurrence);
+    if (opts && opts.scrollIntoResult) {
+      const btn = document.querySelectorAll('#searchResults .search-result')[searchIndex];
+      try { if (btn) btn.scrollIntoView({ block: 'nearest' }); } catch { /* best effort */ }
+    }
+  }
+
+  function paintSearch(query, artifact) {
+    const box = document.getElementById('searchResults');
+    box.replaceChildren();
+    searchMatches = searchReport(query, artifact);
+    searchIndex = searchMatches.length ? 0 : -1;
+    clearHighlight();
+    paintSearchCount();
+    if (!query) { box.appendChild(document.createTextNode('Type to search within this report.')); return; }
+    if (!searchMatches.length) { box.appendChild(document.createTextNode('No matches.')); return; }
+    searchMatches.forEach((r, i) => {
+      // A real button (V20 polish): search hits were divs with onclick - a
+      // keyboard user could search but never jump. Landing uses the block
+      // identity (goToBlock), not text matching, so duplicate headings and
+      // paragraphs (the old selector list skipped them) are safe.
+      const div = document.createElement('button');
+      div.type = 'button';
+      div.className = 'search-result' + (i === searchIndex ? ' is-active' : '');
+      if (i === searchIndex) div.setAttribute('aria-current', 'true');
+      const head = document.createElement(
+'div'
+);
+      const label = document.createElement(
+'span'
+);
+      label.className = 'match';
+      label.textContent = r.match;
+      const rest = document.createElement(
+'span'
+);
+      rest.textContent = blockText(r.block).replace(r.match, '').slice(0, 90);
+      head.append(label, rest);
+      div.appendChild(head);
+      const ctx = document.createElement(
+'div'
+);
+      ctx.className = 'ctx';
+      ctx.textContent = 'Section ' + (r.blockIndex + 1) + ' - ' + r.block.type;
+      div.appendChild(ctx);
+      div.onclick = () => activateSearchResult(i);
+      box.appendChild(div);
+    });
+    // One active mark in the document even before the first Enter.
+    if (searchMatches.length) activateSearchResult(searchIndex, { jump: false });
+  }
+
+  // ---------- annotations (V15) ----------
+  // Notes anchor to a selected passage (block + quote + context + offset) and
+  // are painted with the CSS Custom Highlight API — the platform renders those
+  // behind the glyphs inside the text boxes, so a highlight structurally
+  // cannot cover or obscure text. Anchors re-resolve on every render through
+  // the cascade in DexArtifacts.resolveAnchor, and the rail says when a
+  // note's text moved or is gone — a note is never silently dropped.
+  const ANNO_NOTE_MAX = 2000;
+  const ANNO_MAX = 200;
+  const HL_NAME = 'dxa-note';
+  const HL_ACTIVE = 'dxa-note-active';
+
+  function getAnnotations(artifact) {
+    return Array.isArray(artifact && artifact.annotations) ? artifact.annotations : [];
+  }
+
+  function highlightRegistry() {
+    try {
+      if (typeof Highlight === 'function' && window.CSS && CSS.highlights && typeof CSS.highlights.set === 'function') {
+        return CSS.highlights;
+      }
+    } catch { /* fall through */ }
+    return null;   // notes still work; only the paint step is skipped
+  }
+
+  function blockElFor(index) {
+    for (const el of wrap.querySelectorAll('[data-block-index]')) {
+      if (Number(el.dataset.blockIndex) === Number(index)) return el;
+    }
+    return null;
+  }
+
+  function resolveAll() {
+    // One DOM scan shared by every note (V20 polish): the old per-note
+    // querySelectorAll was O(notes × blocks) on each render.
+    const byIndex = new Map();
+    for (const el of wrap.querySelectorAll('[data-block-index]')) {
+      byIndex.set(Number(el.dataset.blockIndex), el);
+    }
+    return getAnnotations(message && message.artifact).map((a) => {
+      const el = byIndex.get(Number(a.blockId));
+      return el ? window.DexArtifacts.resolveAnchor(el, a) : { status: 'orphaned', range: null };
+    });
+  }
+
+  function paintHighlights(resolved) {
+    const registry = highlightRegistry();
+    if (!registry) return;
+    try {
+      const ranges = (resolved || []).map((r) => r.range).filter(Boolean);
+      if (ranges.length) registry.set(HL_NAME, new Highlight(...ranges));
+      else registry.delete(HL_NAME);
+    } catch { /* painting is decoration; the rail remains the record */ }
+  }
+
+  function showAnnotation(id) {
+    const annos = getAnnotations(message && message.artifact);
+    const i = annos.findIndex((a) => String(a.id) === String(id));
+    if (i === -1) return;
+    const res = resolveAll()[i];
+    if (!res || !res.range) return;
+    // Showing a note is navigation too: the URL keeps the section it lives in.
+    const blockNo = Number(annos[i].blockId);
+    if (Number.isInteger(blockNo) && blockNo >= 0) syncBlockParam(blockNo);
+    const registry = highlightRegistry();
+    if (registry) {
+      try { registry.set(HL_ACTIVE, new Highlight(res.range)); } catch { /* decoration */ }
+    }
+    try {
+      const node = res.range.startContainer;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+    } catch { /* scrolling is best effort */ }
+  }
+
+  let pendingAnchor = null;
+  const composer = document.getElementById('annoCompose');
+  const composerQuote = document.getElementById('annoQuote');
+  const composerNote = document.getElementById('annoNote');
+  const addNoteBtn = document.getElementById('annoAdd');
+  const annoHint = document.getElementById('annoHint');
+  const showHint = (text) => { annoHint.textContent = text; annoHint.hidden = false; };
+  const hideHint = () => { annoHint.hidden = true; annoHint.textContent = ''; };
+
+  function closeComposer() {
+    pendingAnchor = null;
+    composer.hidden = true;
+    addNoteBtn.hidden = false;
+    composerNote.value = '';
+    hideHint();
+  }
+
+  // The live selection, if it is a clean passage inside one block.
+  function captureSelection() {
+    const sel = window.getSelection ? window.getSelection() : null;
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+    let range = null;
+    try { range = sel.getRangeAt(0); } catch { return null; }
+    if (!range || !wrap.contains(range.startContainer) || !wrap.contains(range.endContainer)) return null;
+    const startEl = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+    const endEl = range.endContainer.nodeType === 1 ? range.endContainer : range.endContainer.parentElement;
+    const aBlock = startEl && startEl.closest ? startEl.closest('[data-block-index]') : null;
+    const bBlock = endEl && endEl.closest ? endEl.closest('[data-block-index]') : null;
+    if (!aBlock || !bBlock || aBlock !== bBlock) return null;   // one block per note
+    return window.DexArtifacts.anchorFromRange(aBlock, range);
+  }
+
+  // Every change paints locally first (this panel is the truth of what the
+  // person sees), then persists; writes serialize so a quick edit→delete
+  // sequence can never race the same patch and resurrect an older array. A
+  // failed write is NOT lost: the local state stays, the hint says it will be
+  // retried, and the next change (or the page being hidden) writes the whole
+  // state again — a note must survive a flaky moment, not vanish on reload.
+  let annoSaveChain = Promise.resolve();
+  let annoDirty = false;
+  function persistAnnotations() {
+    const snapshot = getAnnotations(message && message.artifact).map((a) => Object.assign({}, a));
+    annoSaveChain = annoSaveChain.then(() => window.dexerion.invoke('dex:ai-artifact-patch', {
+      chatId, index, patch: { annotations: snapshot },
+    })).then((res) => {
+      if (res && res.ok && res.artifact) {
+        annoDirty = false;
+        message.artifact.annotations = res.artifact.annotations;
+        return;
+      }
+      annoDirty = true;
+      showHint('Could not save the note — it stays on screen and is retried on the next change.');
+    }).catch(() => {
+      annoDirty = true;
+      showHint('Could not save the note — it stays on screen and is retried on the next change.');
+    });
+    return annoSaveChain;
+  }
+  // The last moment a person can notice a pending write: leaving the page
+  // retries once with the freshest state.
+  document.addEventListener('visibilitychange', () => {
+    try {
+      if (annoDirty && (document.visibilityState === 'hidden' || document.visibilityState === 'visible')) persistAnnotations();
+    } catch { /* retry is best effort */ }
+  });
+
+  function repaintAnnotations() {
+    const resolved = resolveAll();
+    paintAnnotations(message && message.artifact, resolved);
+    paintHighlights(resolved);
+  }
+
+  function deleteAnnotation(id) {
+    const art = message && message.artifact;
+    if (!art) return;
+    const annos = getAnnotations(art);
+    const i = annos.findIndex((a) => String(a.id) === String(id));
+    if (i === -1) return;
+    annos.splice(i, 1);
+    repaintAnnotations();
+    persistAnnotations();
+  }
+
+  function startEditAnnotation(row, a) {
+    const note = row.querySelector('.note');
+    if (!note || row.querySelector('textarea')) return;
+    const area = document.createElement('textarea');
+    area.value = a.note || '';
+    area.setAttribute('aria-label', 'Edit note text');
+    const actions = document.createElement('div');
+    actions.className = 'meta';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Save note';
+    save.className = 'btn primary';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.className = 'btn';
+    actions.append(save, cancel);
+    note.replaceWith(area);
+    area.after(actions);
+    try { area.focus(); } catch {}
+    cancel.onclick = () => repaintAnnotations();
+    save.onclick = () => {
+      const text = String(area.value || '').trim().slice(0, ANNO_NOTE_MAX);
+      if (!text) { showHint('A note needs text.'); return; }
+      a.note = text;
+      a.at = Date.now();
+      repaintAnnotations();
+      persistAnnotations();
+    };
+  }
+
+  function paintAnnotations(artifact, resolvedList) {
+    const body = document.getElementById('annotationsBody');
+    body.replaceChildren();
+    const annos = getAnnotations(artifact);
+    if (!annos.length) {
+      body.appendChild(document.createTextNode('No annotations yet. Select a passage in the report, then choose Add note.'));
+      return;
+    }
+    annos.forEach((a, i) => {
+      const res = (resolvedList && resolvedList[i]) || { status: 'ok', range: null };
+      const row = document.createElement('div');
+      row.className = 'anno';
+      row.dataset.id = String(a.id || i);
+      const quote = document.createElement('span');
+      quote.className = 'quote';
+      quote.textContent = '“' + String(a.quote || '(no text)') + '”';
+      quote.title = a.quote || '';
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = a.note || '';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = a.who || 'You';
+      const at = document.createElement('span');
+      at.className = 'at';
+      at.textContent = new Date(a.at || 0).toLocaleString();
+      meta.append(who, at);
+      if (res.status !== 'ok') {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = res.status === 'orphaned' ? 'Text not found' : 'Moved';
+        badge.title = res.status === 'orphaned'
+          ? 'The annotated text is no longer in the report. The note is kept.'
+          : 'The report changed; the highlight follows the text to its new place.';
+        meta.appendChild(badge);
+      }
+      const acts = document.createElement('span');
+      acts.className = 'acts';
+      const show = document.createElement('button');
+      show.type = 'button';
+      show.textContent = 'Show';
+      show.title = 'Scroll to the highlighted text';
+      show.onclick = () => showAnnotation(a.id);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.textContent = 'Edit';
+      edit.title = 'Edit this note';
+      edit.onclick = () => startEditAnnotation(row, a);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = 'Delete';
+      del.title = 'Delete this note';
+      // Two-step: the first click arms, a second click deletes — no native
+      // dialog, and no accidental loss on a single stray click.
+      del.onclick = () => {
+        if (del.dataset.armed !== '1') {
+          del.dataset.armed = '1';
+          del.textContent = 'Sure?';
+          del.classList.add('danger');
+          try {
+            setTimeout(() => {
+              if (del.isConnected && del.dataset.armed === '1') {
+                del.textContent = 'Delete';
+                del.dataset.armed = '0';
+                del.classList.remove('danger');
+              }
+            }, 2500);
+          } catch {}
+          return;
+        }
+        deleteAnnotation(a.id);
+      };
+      acts.append(show, edit, del);
+      meta.appendChild(acts);
+      row.append(quote, note, meta);
+      body.appendChild(row);
+    });
+  }
+
+  // ---------- render ----------
+  function render() {
+    wrap.replaceChildren();
+    const body = window.DexArtifacts.renderBody(wrap, message.artifact, { onToast: () => {} });
+    // The report viewer is a document of its own, so it needs a real <h1>.
+    // It is inserted here - in the viewer path only - so the sidebar card
+    // keeps its compact title and the title is never announced twice.
+    const art = message && message.artifact;
+    if (body && art && art.title) {
+      const h1 = document.createElement('h1');
+      h1.className = 'dxa-report-title';
+      h1.textContent = String(art.title);
+      body.insertBefore(h1, body.firstChild);
+    }
+    paintControls();
+    // Attach meta badges to blocks (conditions, deps, versions, annotations)
+    buildToc(message.artifact);
+    // Notes re-resolve against the fresh DOM and repaint (the cascade moves
+    // highlights when text shifted; orphaned notes stay listed).
+    repaintAnnotations();
+    // The design bar belongs to the viewer: restyling happens right here.
+    bar.hidden = false;
+  }
+
+
+  // Sync the design bar to the artifact: theme, font and the paper swatch.
+  function paintControls() {
+    const art = message && message.artifact;
+    if (!art) return;
+    const theme = document.getElementById('theme');
+    if (theme) theme.value = (art.theme && window.DexArtifacts.REPORT_THEMES.includes(art.theme)) ? art.theme : 'clean';
+    const font = document.getElementById('font');
+    if (font) font.value = (art.font && window.DexArtifacts.REPORT_FONTS.includes(art.font)) ? art.font : 'neutral';
+    const papers = document.getElementById('papers');
+    if (papers) {
+      const current = art.paper || 'paper';
+      for (const dot of papers.querySelectorAll('.pdot')) {
+        const sel = dot.dataset.paper === current;
+        dot.classList.toggle('sel', sel);
+        dot.setAttribute('aria-pressed', sel ? 'true' : 'false');
+      }
+    }
+  }
+
+  // Reverting a failed look matters: an optimistic paint with a swallowed
+  // failure shows a style the store does not have — the design would silently
+  // reset on the next open, looking like data loss.
+  let lookHintTimer = 0;
+  function showLookHint(text) {
+    const hint = document.getElementById('lookHint');
+    if (!hint) return;
+    hint.textContent = text;
+    clearTimeout(lookHintTimer);
+    lookHintTimer = setTimeout(() => {
+      hint.textContent = 'Style is saved with the report';
+    }, 3200);
+  }
+
+  // A look change repaints the whole body. Keep the reader's place and the
+  // ?b=N deep link across every optimistic/reverted/stored render; otherwise
+  // changing paper colour silently jumps to the top of the report.
+  function renderPreservingView() {
+    const y = window.scrollY || 0;
+    let block = -1;
+    try {
+      const raw = new URLSearchParams(location.search).get('b');
+      const parsed = parseInt(raw, 10);
+      if (Number.isInteger(parsed) && parsed >= 0) block = parsed;
+    } catch { /* no deep link to restore */ }
+    render();
+    if (block >= 0) syncBlockParam(block);
+    try { window.scrollTo(0, y); } catch { /* best effort */ }
+    paintTop();
+  }
+
+  async function applyLook(patch) {
+    if (!message) return;
+    const previous = message.artifact;
+    message.artifact = Object.assign({}, message.artifact, patch);
+    renderPreservingView(); // optimistic paint; the stored reply follows
+    try {
+      const res = await window.dexerion.invoke('dex:ai-artifact-look', { chatId, index, look: patch });
+      if (res && res.ok && res.artifact) { message.artifact = res.artifact; renderPreservingView(); }
+      else {
+        message.artifact = previous;
+        renderPreservingView();
+        showLookHint('Could not save the style — reverted.');
+      }
+    } catch {
+      message.artifact = previous;
+      renderPreservingView();
+      showLookHint('Could not save the style — reverted.');
+    }
+  }
+
+  if (window.DexArtifacts) {
+    const label = (value) => value ? value[0].toUpperCase() + value.slice(1) : value;
+    const theme = document.getElementById('theme');
+    for (const t of window.DexArtifacts.REPORT_THEMES) theme.appendChild(new Option(label(t), t));
+    const font = document.getElementById('font');
+    for (const f of window.DexArtifacts.REPORT_FONTS) font.appendChild(new Option(label(f), f));
+    const papers = document.getElementById('papers');
+    for (const p of window.DexArtifacts.REPORT_PAPERS) {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'pdot';
+      dot.dataset.paper = p;
+      dot.title = label(p);
+      dot.setAttribute('aria-label', 'Page colour: ' + p);
+      dot.setAttribute('aria-pressed', 'false');
+      dot.addEventListener('click', () => applyLook({ paper: p }));
+      papers.appendChild(dot);
+    }
+    theme.addEventListener('change', () => applyLook({ theme: theme.value }));
+    font.addEventListener('change', () => applyLook({ font: font.value }));
+  }
+
+  // panel wiring
+  document.getElementById('btnToc').addEventListener('click', () => { closeAll(); openPanel('toc'); });
+  document.getElementById('btnSearch').addEventListener('click', () => { closeAll(); openPanel('search'); });
+  document.getElementById('btnAnnotations').addEventListener('click', () => { closeAll(); openPanel('annotations'); });
+  let copyStatusTimer = 0;
+  const copyStatus = document.getElementById('copyStatus');
+  function showCopyStatus(text) {
+    if (!copyStatus) return;
+    copyStatus.textContent = text;
+    clearTimeout(copyStatusTimer);
+    copyStatusTimer = setTimeout(() => { copyStatus.textContent = ''; }, 3200);
+  }
+  document.getElementById('btnCopy').addEventListener('click', async () => {
+    const art = message && message.artifact;
+    if (!art) return;
+    const html = window.DexArtifacts.artifactHtml(art);
+    try {
+      await navigator.clipboard.writeText(html);
+      showCopyStatus('Copied to clipboard.');
+    } catch { showCopyStatus('Copy not available here.'); }
+  });
+  // Export controls: real, functional format actions with a visible text
+  // status line. Busy state disables every export button while work is in
+  // progress and is always cleared, so a failed or cancelled export can never
+  // leave the toolbar stuck.
+  const EXPORT_BUTTONS = [
+    ['btnExportHtml', 'html', 'HTML'],
+    ['btnExportMd', 'md', 'Markdown'],
+    ['btnExportPdf', 'pdf', 'PDF'],
+  ];
+  let exportBusy = false;
+  function setExportBusy(busy) {
+    exportBusy = busy;
+    for (const [id] of EXPORT_BUTTONS) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = busy;
+    }
+  }
+  async function runExport(format, label) {
+    const art = message && message.artifact;
+    if (!art || exportBusy) return;
+    setExportBusy(true);
+    showCopyStatus(label + ' export preparing…');
+    try {
+      const res = await window.dexerion.invoke('dex:ai-report-export', {
+        format,
+        name: String(art.title || 'report'),
+        // An empty html string lets the main process build the authoritative
+        // standalone document; Markdown is produced by the shared renderer.
+        html: '',
+        markdown: format === 'md' ? window.DexArtifacts.toMarkdown(art) : '',
+        artifact: art,
+      });
+      if (res && res.ok) showCopyStatus(label + ' exported.');
+      else if (res && res.canceled) showCopyStatus('Export cancelled.');
+      else showCopyStatus(label + ' export failed: ' + ((res && res.error) || 'unknown error'));
+    } catch (e) {
+      showCopyStatus(label + ' export failed: ' + ((e && e.message) || 'unknown error'));
+    } finally {
+      setExportBusy(false);
+    }
+  }
+  for (const [id, format, label] of EXPORT_BUTTONS) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', () => runExport(format, label));
+  }
+  document.getElementById('closeToc').addEventListener('click', () => closePanel('toc'));
+  document.getElementById('closeSearch').addEventListener('click', () => { closePanel('search'); clearHighlight(); });
+  document.getElementById('closeHelp').addEventListener('click', () => closePanel('help'));
+  document.getElementById('closeAnnotations').addEventListener('click', () => closePanel('annotations'));
+  document.getElementById('tocRefresh').addEventListener('click', () => buildToc(message && message.artifact));
+  const searchInput = document.getElementById('searchInput');
+  searchInput.addEventListener('input', () => paintSearch(searchInput.value, message && message.artifact));
+  searchInput.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    activateSearchResult(searchIndex + (ev.shiftKey ? -1 : 1), { scrollIntoResult: true });
+  });
+  document.getElementById('searchClear').addEventListener('click', () => {
+    searchInput.value = '';
+    paintSearch('', message && message.artifact);
+  });
+  // Single-letter shortcuts are deliberately input-safe: a field owns its own
+  // keys, modifier chords belong to the shell, and a panel owns Escape/Tab.
+  document.addEventListener('keydown', (ev) => {
+    if (!ev || ev.defaultPrevented) return;
+    const t = ev.target;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable]')) return;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    if (ev.key === '?') { closeAll(false); openPanel('help'); ev.preventDefault(); return; }
+    if (ev.key === 'c' || ev.key === 'C') { closeAll(false); openPanel('toc'); spyToc(); ev.preventDefault(); return; }
+    if (ev.key === '/' || ev.key === 's' || ev.key === 'S') { closeAll(false); openPanel('search'); ev.preventDefault(); return; }
+    if (ev.key === 'n' || ev.key === 'N') { closeAll(false); openPanel('annotations'); ev.preventDefault(); return; }
+    // Annotation keyboard shortcuts (annotations panel open): e = edit first row,
+    // d = arm delete on first row, v = scroll to first row.
+    if ((ev.key === 'e' || ev.key === 'E') && activePanel === 'annotations') {
+      const first = document.querySelector('#annotationsBody .anno');
+      if (first) { const b = first.querySelector('.acts button[title="Edit this note"]'); if (b) b.click(); ev.preventDefault(); return; }
+    }
+    if ((ev.key === 'd' || ev.key === 'D') && panels.annotations) {
+      const first = document.querySelector('#annotationsBody .anno');
+      if (first) { const b = first.querySelector('.acts button[title="Delete this note"]'); if (b) b.click(); ev.preventDefault(); return; }
+    }
+    if ((ev.key === 'v' || ev.key === 'V') && panels.annotations) {
+      const first = document.querySelector('#annotationsBody .anno');
+      if (first) { const b = first.querySelector('.acts button[title="Scroll to the highlighted text"]'); if (b) b.click(); ev.preventDefault(); return; }
+    }
+  });
+  // The old flow asked for a block number in a prompt; notes now anchor to
+  // what the person selected, which is the only honest way to place one.
+  addNoteBtn.addEventListener('click', () => {
+    if (!message) return;
+    const anchor = captureSelection();
+    if (!anchor) {
+      showHint('Select a passage in the report first — a note is anchored to the text it is about.');
+      return;
+    }
+    hideHint();
+    pendingAnchor = anchor;
+    composerQuote.textContent = '“' + anchor.quote + '”';
+    composerNote.value = '';
+    composer.hidden = false;
+    addNoteBtn.hidden = true;
+    try { composerNote.focus(); } catch {}
+  });
+  document.getElementById('annoCancel').addEventListener('click', closeComposer);
+  document.getElementById('annoSave').addEventListener('click', () => {
+    if (!pendingAnchor) return;
+    const note = String(composerNote.value || '').trim().slice(0, ANNO_NOTE_MAX);
+    if (!note) { showHint('Write the note first.'); return; }
+    const art = message && message.artifact;
+    if (!art) return;
+    if (!Array.isArray(art.annotations)) art.annotations = [];
+    if (art.annotations.length >= ANNO_MAX) {
+      showHint('This report already carries the maximum number of notes (' + ANNO_MAX + ').');
+      return;
+    }
+    const ann = Object.assign({
+      id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      who: 'You',
+      at: Date.now(),
+      note,
+    }, pendingAnchor);
+    art.annotations.push(ann);
+    closeComposer();
+    repaintAnnotations();
+    persistAnnotations();
+  });
+
+  // Overlay mode (?overlay=1): the viewer layered over the current tab, with
+  // its own × and an escape hatch to a full tab. The chat stays beside it.
+  const overlayMode = params.get('overlay') === '1';
+  if (overlayMode) {
+    const closeBtn = document.getElementById('btnCloseOverlay');
+    const tabBtn = document.getElementById('btnOpenTab');
+    const fsBtn = document.getElementById('btnFullscreen');
+    const statusEl = document.getElementById('overlayStatus');
+    closeBtn.hidden = false;
+    tabBtn.hidden = false;
+    fsBtn.hidden = false;
+    let statusTimer = 0;
+    const showOverlayStatus = (text) => {
+      statusEl.textContent = String(text || '');
+      statusEl.hidden = !statusEl.textContent;
+      clearTimeout(statusTimer);
+      if (statusEl.textContent) statusTimer = setTimeout(() => { statusEl.textContent = ''; statusEl.hidden = true; }, 8000);
+    };
+    const setFsLabel = (on) => {
+      const active = Boolean(on);
+      fsBtn.textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+      fsBtn.title = active ? 'Return the preview to the page area (Esc)' : 'Fill the whole window (Esc to exit)';
+      fsBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    };
+    setFsLabel(false);
+    fsBtn.addEventListener('click', () => {
+      window.dexerion.invoke('dex:overlay-fullscreen', { kind: 'report' })
+        .then((r) => setFsLabel(!!(r && r.fullscreen))).catch(() => showOverlayStatus('Could not change fullscreen mode.'));
+    });
+    if (typeof window.dexerion.onRendererEvent === 'function') {
+      window.dexerion.onRendererEvent('dex:overlay-fullscreen-changed', (state) => {
+        setFsLabel(state && typeof state === 'object' ? state.fullscreen : state);
+      });
+    }
+    closeBtn.addEventListener('click', () => {
+      window.dexerion.invoke('dex:report-overlay-close').catch(() => {});
+    });
+    tabBtn.addEventListener('click', () => {
+      const q = [];
+      if (chatId) q.push('chat=' + encodeURIComponent(chatId));
+      if (Number.isInteger(index) && index >= 0) q.push('i=' + String(index));
+      showOverlayStatus('');
+      tabBtn.disabled = true;
+      // Keep the preview if the tab fails: losing the artifact would be worse
+      // than a momentary disabled button with a visible explanation.
+      Promise.resolve(window.dexerion.invoke('dex:new-tab', 'dexerion://report' + (q.length ? '?' + q.join('&') : ''), false)).then((res) => {
+        tabBtn.disabled = false;
+        if (!res) { showOverlayStatus('The tab could not be opened. The preview is still open.'); return; }
+        window.dexerion.invoke('dex:report-overlay-close').catch(() => {});
+      }).catch((err) => {
+        tabBtn.disabled = false;
+        showOverlayStatus('The tab could not be opened: ' + ((err && err.message) || err || 'unknown error') + '. The preview is still open.');
+      });
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      if (activePanel) { closeAll(); return; }
+      // Escape first leaves fullscreen, then closes the preview.
+      window.dexerion.invoke('dex:overlay-fullscreen-state', { kind: 'report' })
+        .then((on) => {
+          if (on) {
+            window.dexerion.invoke('dex:overlay-fullscreen', { kind: 'report', fullscreen: false })
+              .then((r) => setFsLabel(!!(r && r.fullscreen))).catch(() => {});
+          } else {
+            window.dexerion.invoke('dex:report-overlay-close').catch(() => {});
+          }
+        }).catch(() => {
+          window.dexerion.invoke('dex:report-overlay-close').catch(() => {});
+        });
+    });
+  }
+
+  try {
+    if (!window.dexerion || !window.DexArtifacts) throw new Error('The report renderer did not load.');
+    let chat = null;
+    if (chatId) {
+      chat = await window.dexerion.invoke('dex:ai-chat-open', chatId).catch(() => null);
+    } else {
+      const list = await window.dexerion.invoke('dex:ai-chats-list').catch(() => []);
+      for (const row of list || []) {
+        const candidate = await window.dexerion.invoke('dex:ai-chat-open', row.id).catch(() => null);
+        if (candidate && (candidate.messages || []).some((m) => m.artifact && m.artifact.kind === 'report')) {
+          chat = candidate;
+          break;
+        }
+      }
+    }
+    if (!chat) throw new Error('This report is no longer available.');
+    chatId = chat.id;
+    const messages = chat.messages || [];
+    const found = Number.isInteger(index) && messages[index]
+      ? messages[index]
+      : messages.find((m) => m.artifact && m.artifact.kind === 'report');
+    if (!found || !found.artifact) throw new Error('This report is no longer available.');
+    message = found;
+    index = messages.indexOf(found);
+    if (!params.get('chat')) {
+      try { history.replaceState(null, '', location.pathname + '?chat=' + encodeURIComponent(chatId) + '&i=' + index); } catch {}
+    }
+    document.title = (found.artifact.title || 'Report') + ' — Dexerion';
+    render();
+    // Deep link (?b=N): land on that section and flash it. One short delay so
+    // the freshly rendered document has layout to scroll against.
+    try {
+      const bParam = parseInt(params.get('b'), 10);
+      if (Number.isInteger(bParam) && bParam >= 0) {
+        setTimeout(() => { goToBlock(bParam, { instant: true }); }, 120);
+      }
+    } catch { /* no deep link */ }
+    // Panel deep link (?panel=notes|toc|search): the card's notes chip and
+    // any other surface can open the report ready to use.
+    try {
+      const wantPanel = params.get('panel');
+      const panelName = wantPanel === 'notes' ? 'annotations' : wantPanel;
+      if (['toc', 'search', 'annotations'].includes(panelName)) {
+        openPanel(panelName);
+        if (panelName === 'toc') spyToc();
+        if (panelName === 'search') { try { searchInput.focus(); } catch {} }
+      }
+    } catch { /* no panel */ }
+  } catch (error) {
+    fail(error && error.message);
+  }
+})();
+</script>
+</body></html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Downloads — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+.st{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:var(--r-xs);border:1px solid var(--pborder);color:var(--muted);background:var(--pbtn);flex:none;margin-top:1px}
+.st::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.st.done{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent);border-color:color-mix(in srgb,var(--ok) 26%,transparent)}
+.st.progress{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 26%,transparent)}
+.st.progress::before{animation:dl-pulse 1.5s ease-in-out infinite}
+.st.paused{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-color:color-mix(in srgb,var(--warn) 28%,transparent)}
+.st.cancelled{color:var(--pfaint)}
+.st.interrupted{color:var(--err);background:color-mix(in srgb,var(--err) 10%,transparent);border-color:color-mix(in srgb,var(--err) 26%,transparent)}
+.dl-row{align-items:flex-start;padding:16px 18px;gap:15px}
+.dl-icon{margin-top:2px}
+.dl-body{flex:1;min-width:0}
+.dl-title{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:5px}
+.dl-meta small{color:var(--pmuted);font-family:var(--font-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-percent{color:var(--pfg-2);font-family:var(--font-mono);font-size:11px;flex:none}
+.dl-path{display:block;color:var(--pfaint);font-family:var(--font-mono);font-size:10.5px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-error{display:block;color:var(--err);font-size:11px;margin-top:6px}
+.dl-progress{height:5px;margin-top:10px;overflow:hidden;background:var(--pfield);border:1px solid var(--pborder);border-radius:var(--r-pill)}
+.dl-progress span{display:block;width:0;height:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 65%,var(--pfg)),var(--accent));border-radius:inherit;box-shadow:0 0 10px color-mix(in srgb,var(--accent) 45%,transparent);transition:width 160ms var(--ease)}
+.dl-progress.indeterminate span{width:34%;animation:dl-indeterminate 1.25s var(--ease) infinite}
+.dl-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:6px;max-width:310px;margin-top:1px}
+.dl-actions .btn{padding:7px 10px;font-size:11.5px}
+@keyframes dl-pulse{50%{opacity:.35;transform:scale(.75)}}
+@keyframes dl-indeterminate{from{transform:translateX(-110%)}to{transform:translateX(320%)}}
+@media(max-width:720px){.dl-row{flex-wrap:wrap}.dl-actions{max-width:none;width:100%;justify-content:flex-start;margin-left:43px}}
+</style>
+</head><body><div class="dx-page">
+<div class="dx-head">
+  <div class="dx-head-row">
+    <div>
+      <div class="eyebrow">Library</div>
+      <h1>Downloads</h1>
+      <p>Files this profile has saved, with live progress while transfers are active.</p>
+    </div>
+    <button class="btn ghost" id="folder">Open download folder</button>
+  </div>
+</div>
+<div class="dx-list" id="list"></div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+const list=document.getElementById('list');
+let refreshTimer=null;
+function clsFor(state){
+  const s=String(state||'').toLowerCase();
+  if(s==='complete'||s==='completed')return 'done';
+  if(s==='paused')return 'paused';
+  if(s==='interrupted')return 'interrupted';
+  if(s==='cancelled')return 'cancelled';
+  return 'progress';
+}
+function pretty(state){
+  const s=String(state||'').toLowerCase();
+  if(s==='complete'||s==='completed')return 'Complete';
+  if(s==='paused')return 'Paused';
+  if(s==='cancelled')return 'Cancelled';
+  if(s==='interrupted')return 'Interrupted';
+  return 'Downloading';
+}
+function bytes(n){
+  n=Number(n)||0;
+  if(n<1024)return n+' B';
+  if(n<1048576)return (n/1024).toFixed(1)+' KB';
+  if(n<1073741824)return (n/1048576).toFixed(1)+' MB';
+  return (n/1073741824).toFixed(2)+' GB';
+}
+function progressValue(x){
+  if(x.state==='completed')return 1;
+  let value=Number(x.percent)||0;
+  if(value>1)value/=100;
+  if(!value&&Number(x.total)>0)value=Number(x.received||0)/Number(x.total);
+  return Math.max(0,Math.min(1,value));
+}
+function actionButton(label,channel,id,danger){
+  const button=document.createElement('button');
+  button.className='btn ghost'+(danger?' danger':'');
+  button.textContent=label;
+  button.onclick=async()=>{
+    button.disabled=true;
+    try{await window.dexerion.invoke(channel,id);await load();}
+    finally{button.disabled=false;}
+  };
+  return button;
+}
+function deleteButton(x){
+  const button=actionButton('Delete','dex:download-delete',x.id,true);
+  const invoke=button.onclick;
+  button.onclick=async()=>{
+    const ok=await window.dexerion.invoke('dex:confirm',{message:'Delete '+x.fileName+'?'});
+    if(ok)await invoke();
+  };
+  return button;
+}
+function render(download){
+  const row=document.createElement('div');
+  row.className='dx-item dl-row';
+  const icon=document.createElement('span');
+  icon.className='fav dl-icon';
+  icon.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10.5l4 4 4-4"/><path d="5 19h14"/></svg>';
+  const body=document.createElement('div');
+  body.className='dl-body';
+  const title=document.createElement('b');
+  title.className='dl-title';
+  title.textContent=download.fileName||download.name||'Download';
+  const meta=document.createElement('div');
+  meta.className='dl-meta';
+  const transfer=document.createElement('small');
+  const received=bytes(download.received);
+  const total=Number(download.total)||0;
+  let transferText=total?received+' of '+bytes(total):received;
+  if(download.active||download.state==='paused')transferText+='  ·  '+(Number(download.bytesPerSecond||0)/1048576).toFixed(1)+' MB/s';
+  transfer.textContent=transferText;
+  const percent=document.createElement('span');
+  percent.className='dl-percent';
+  const value=progressValue(download);
+  const known=Boolean(total||value>0||download.state==='completed');
+  percent.textContent=known?Math.round(value*100)+'%':(download.state==='paused'?'Paused':'Calculating');
+  meta.append(transfer,percent);
+  const folder=document.createElement('small');
+  folder.className='dl-path';
+  folder.textContent=String(download.path||'').replace(/[\\/][^\\/]*$/,'');
+  body.append(title,meta,folder);
+  if(download.error){
+    const error=document.createElement('small');
+    error.className='dl-error';
+    error.textContent=download.error;
+    body.appendChild(error);
+  }
+  if(download.active||download.state==='paused'||download.state==='completed'){
+    const progress=document.createElement('div');
+    progress.className='dl-progress'+(download.active&&!known?' indeterminate':'');
+    progress.setAttribute('role','progressbar');
+    progress.setAttribute('aria-valuemin','0');
+    progress.setAttribute('aria-valuemax','100');
+    if(known)progress.setAttribute('aria-valuenow',String(Math.round(value*100)));
+    progress.setAttribute('aria-label',title.textContent+' progress');
+    const fill=document.createElement('span');
+    fill.style.width=(value*100)+'%';
+    progress.appendChild(fill);
+    body.appendChild(progress);
+  }
+  const status=document.createElement('span');
+  status.className='st '+clsFor(download.state);
+  status.textContent=pretty(download.state);
+  const actions=document.createElement('div');
+  actions.className='dl-actions';
+  if(download.active&&(download.state==='paused'||download.state==='interrupted')){
+    const resume=actionButton('Resume','dex:download-resume',download.id);
+    resume.disabled=!download.canResume;
+    actions.appendChild(resume);
+  }else if(download.active){
+    const pause=actionButton('Pause','dex:download-pause',download.id);
+    pause.disabled=!download.canResume;
+    actions.appendChild(pause);
+  }
+  if(download.active)actions.appendChild(actionButton('Cancel','dex:download-cancel',download.id));
+  if(download.state==='completed'){
+    const open=document.createElement('button');
+    open.className='btn ghost';
+    open.textContent='Open';
+    open.onclick=()=>window.dexerion.invoke('dex:download-open',download.id);
+    actions.appendChild(open);
+  }
+  if(!download.active&&(download.state==='interrupted'||download.state==='cancelled')&&download.url){
+    const retry=actionButton('Retry','dex:download-retry',download.id);
+    actions.appendChild(retry);
+  }
+  actions.appendChild(deleteButton(download));
+  row.append(icon,body,status,actions);
+  return row;
+}
+async function load(){
+  // A failed load must not look like "no downloads yet": DexPage.guard shows
+  // what went wrong and offers a retry.
+  const downloads=await window.DexPage.guard(()=>window.dexerion.invoke('dex:downloads'),()=>load());
+  if(!downloads)return;
+  list.replaceChildren();
+  if(!downloads.length){
+    const empty=document.createElement('div');
+    empty.className='dx-empty';
+    empty.innerHTML='<b>No downloads yet</b><span>Files you save will appear here automatically, with live progress and controls.</span>';
+    list.appendChild(empty);
+    return;
+  }
+  for(const download of downloads)list.appendChild(render(download));
+}
+function scheduleLoad(){
+  clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(load,50);
+}
+document.getElementById('folder').onclick=()=>window.dexerion.invoke('dex:download-folder');
+window.dexerion.on('dex:downloads-updated',scheduleLoad);
+load();
+</script></body></html>

@@ -1,0 +1,513 @@
+/* ============================================================================
+    Dexerion design system — "nof1 paper atelier"
+   ----------------------------------------------------------------------------
+   A precision-instrument UI: neutral graphite ground, hairline rules, one
+   signal accent, tight radii, real iconography. Every dexerion:// page
+   includes this file; page-theme.js then applies the user's theme + accent.
+
+   Two rules keep the accent honest:
+     1. The accent is a SIGNAL, not a palette. It appears on focus rings,
+        active states, thin rails and primary actions — never as a background
+        wash. Change the accent and every surface still looks deliberate.
+     2. Depth comes from hairlines and inset highlights, never blur. Blur is
+        reserved for true overlays (menus, modals) where content floats.
+   ========================================================================= */
+
+/* ---------- tokens ----------
+   All raw values live in assets/tokens.css; this file only maps the names the
+   dexerion:// pages use onto them. That keeps the shell and the pages on one
+   palette, one type scale and one motion set. */
+@import url("dexerion://assets/tokens.css");
+
+/* Native form controls (select dropdowns, checkboxes, date pickers) must
+   match the theme. Without this, Chromium renders them in light mode even
+   on dark pages — the ugly white dropdown the person sees. */
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+
+:root {
+  --paper: var(--dx-bg);
+  --paper-raised: var(--dx-surface);
+  --paper-field: var(--dx-field);
+  --paper-ink: var(--dx-text);
+  --paper-ink-2: var(--dx-text-muted);
+  --paper-muted: var(--dx-text-faint);
+  --paper-faint: var(--dx-text-ghost);
+  --paper-line: var(--dx-border);
+  --paper-line-strong: var(--dx-border-strong);
+  --paper-hover: var(--dx-surface-hover);
+  --paper-active: var(--dx-surface-active);
+  --paper-highlight: transparent;
+
+  --ok: var(--dx-success);
+  --warn: var(--dx-warn);
+  --err: var(--dx-danger);
+  --rec: var(--dx-rec);
+
+  --r-xs: var(--dx-radius-sm);
+  --r-sm: var(--dx-radius-md);
+  --r-md: var(--dx-radius-md);
+  --r-lg: var(--dx-radius-lg);
+  --r-xl: var(--dx-radius-lg);
+  --r-pill: 999px;
+
+  --sh-1: var(--dx-shadow-1);
+  --sh-2: var(--dx-shadow-2);
+  --sh-3: var(--dx-shadow-3);
+  --sh-pop: var(--dx-shadow-3);
+
+  --font: var(--dx-font-sans);
+  --font-ui: var(--dx-font-sans);
+  --font-display: var(--dx-font-display);
+  --font-mono: var(--dx-font-mono);
+
+  --ease: var(--dx-ease);
+  --dur: var(--dx-dur);
+  --dur-slow: var(--dx-dur-slow);
+
+  --accent: var(--dx-accent);
+  --accent-ink: var(--dx-on-accent);
+
+  /* compatibility aliases used by the existing dexerion:// pages */
+  --pbg: var(--paper);
+  --pbg-2: color-mix(in srgb, var(--paper) 88%, var(--paper-ink));
+  --pcard: var(--paper-raised);
+  --pcard-2: var(--paper-field);
+  --pfield: var(--paper-field);
+  --phover: var(--paper-hover);
+  --pactive: var(--paper-active);
+  --pfg: var(--paper-ink);
+  --pfg-2: var(--paper-ink-2);
+  --pmuted: var(--paper-muted);
+  --pfaint: var(--paper-faint);
+  --pborder: var(--paper-line);
+  --pborder-2: var(--paper-line-strong);
+  --phl: var(--paper-highlight);
+  --pbtn: color-mix(in srgb, var(--paper-ink) 5%, transparent);
+  --pbtnfg: var(--paper-ink-2);
+  --phover-btn: color-mix(in srgb, var(--paper-ink) 8%, transparent);
+}
+
+
+/* ============================================================================
+   reset
+   ========================================================================= */
+* { box-sizing: border-box; }
+
+/* Author `display` rules outrank the UA sheet's `[hidden]{display:none}`, so any
+   element given a class that sets display would ignore its hidden attribute.
+   This makes `hidden` authoritative everywhere. */
+[hidden] { display: none !important; }
+
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--pbg);
+  color: var(--pfg);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* No page atmosphere: scTerra keeps the ground flat so content leads. The
+   element stays for skins that want to paint their own. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: none;
+}
+body > * { position: relative; z-index: 1; }
+
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.005em; margin: 0; }
+p { margin: 0; }
+a { color: var(--accent); }
+
+/* Text selection: the user's accent. Websites get the same 45% mix, injected as
+   a user-origin stylesheet from src/main/browser.js, so highlighting reads the
+   same on a dexerion:// page as it does on any site. */
+::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--pfg); }
+
+/* one focus treatment everywhere: a 2px ring in the focus-ring token, offset */
+:focus-visible {
+  outline: 2px solid var(--dx-focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--r-xs);
+}
+/* Text fields paint their own focus state (accent border + soft halo) below —
+   a second outline on top of that just reads as a double border. */
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ---------- scrollbars ---------- */
+* { scrollbar-width: thin; scrollbar-color: var(--pborder-2) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--pborder-2);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--pfg) 30%, transparent); background-clip: content-box; }
+
+/* ============================================================================
+   page scaffolding
+   ========================================================================= */
+.dx-page { max-width: 920px; margin: 0 auto; padding: 48px 32px 96px; }
+.dx-page.wide { max-width: 1120px; }
+
+/* Sticky page header: title, optional subtitle, optional action slot. */
+.dx-head { margin-bottom: 30px; }
+.dx-head .eyebrow {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.dx-head h1 { font-size: 27px; letter-spacing: -0.01em; }
+.dx-head p { color: var(--pmuted); font-size: 13.5px; margin-top: 7px; max-width: 62ch; }
+.dx-head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+
+/* ---------- cards ---------- */
+.dx-card {
+  background: var(--pcard);
+  border: 1px solid var(--pborder);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+/* the machined highlight: a 1px light line along the top edge */
+.dx-card { box-shadow: var(--sh-2), inset 0 1px 0 var(--phl); }
+
+.dx-card-head { padding: 18px 22px 0; }
+.dx-card-head h3 { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pmuted); font-family: var(--font-display); }
+.dx-card-head p { color: var(--pmuted); font-size: 12.5px; margin-top: 8px; line-height: 1.6; }
+.dx-card-body { padding: 14px 22px 20px; }
+
+/* A row that is its own hairline-separated band inside a card. */
+.dx-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 15px 0;
+  border-top: 1px solid var(--pborder);
+}
+.dx-row:first-child { border-top: none; }
+.dx-row .tx { flex: 1; min-width: 0; }
+.dx-row .tx b { display: block; font-size: 13.5px; font-weight: 600; }
+.dx-row .tx small { display: block; color: var(--pmuted); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+.dx-row .ctl { display: flex; align-items: center; gap: 8px; flex: none; }
+@media (max-width: 560px) {
+  .dx-row { flex-direction: column; align-items: stretch; }
+  .dx-row .ctl { justify-content: flex-start; }
+}
+
+/* ============================================================================
+   lists (history, bookmarks, downloads)
+   ========================================================================= */
+.dx-list {
+  background: var(--pcard);
+  border: 1px solid var(--pborder);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+  overflow: hidden;
+}
+.dx-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--pborder);
+  transition: background var(--dur) var(--ease);
+}
+.dx-item:first-child { border-top: none; }
+.dx-item:hover { background: var(--phover); }
+.dx-item .fav {
+  width: 28px; height: 28px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--pfield);
+  border: 1px solid var(--pborder);
+  font-size: 12px; font-weight: 600; color: var(--pfg-2);
+  overflow: hidden;
+}
+.dx-item .fav img { width: 100%; height: 100%; object-fit: cover; }
+.dx-item .main { flex: 1; min-width: 0; cursor: pointer; }
+.dx-item .main b {
+  display: block; font-size: 13.5px; font-weight: 550;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dx-item .main small {
+  display: block; color: var(--pmuted); font-size: 11.5px; margin-top: 2px;
+  font-family: var(--font-mono);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dx-item .actions { display: flex; gap: 6px; flex: none; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.dx-item:hover .actions, .dx-item:focus-within .actions { opacity: 1; }
+@media (hover: none) { .dx-item .actions { opacity: 1; } }
+
+/* ---------- empty state ---------- */
+.dx-empty {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--pmuted);
+}
+.dx-empty svg { opacity: 0.5; margin-bottom: 14px; }
+.dx-empty b { display: block; color: var(--pfg-2); font-size: 14px; margin-bottom: 6px; }
+.dx-empty span { font-size: 12.5px; }
+
+/* ---------- failure surface ---------- */
+/* A load that failed must not look like an empty list. The message says what
+   went wrong and the button offers the retry. */
+.dx-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 46px 24px;
+  color: var(--muted);
+}
+.dx-error b { color: var(--pfg-2); font-size: 14px; }
+.dx-error span { font-size: 12.5px; max-width: 46ch; overflow-wrap: anywhere; }
+.dx-error .btn { margin-top: 6px; }
+
+/* ---------- back affordance ---------- */
+/* The internal pages are their own tabs and have no navigation history, so
+   this is the way back to the New Tab page. */
+.dx-back {
+  margin-bottom: 12px;
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 6px 11px;
+}
+
+/* ---------- section label above a list ---------- */
+.dx-section { display: flex; align-items: center; gap: 12px; margin: 26px 0 11px; }
+.dx-section h2 { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pmuted); font-family: var(--font-display); }
+.dx-section::after { content: ""; flex: 1; height: 1px; background: var(--pborder); }
+
+/* ============================================================================
+   controls
+   ========================================================================= */
+input[type="text"], input[type="password"], input[type="search"], input:not([type]), select, textarea {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--pfg);
+  background: var(--pfield);
+  border: 1px solid var(--pborder);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  min-width: 0;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+input::placeholder, textarea::placeholder { color: var(--pfaint); }
+input:hover, select:hover, textarea:hover { border-color: var(--pborder-2); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--dx-border-strong);
+  box-shadow: 0 0 0 3px var(--dx-focus-ring);
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+input[type="color"] {
+  width: 40px; height: 32px; padding: 2px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--pborder);
+  background: var(--pfield);
+  cursor: pointer;
+}
+
+/* full-bleed search field with a leading glyph */
+.dx-search { position: relative; margin-bottom: 18px; }
+.dx-search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--pfaint); pointer-events: none; }
+.dx-search input { width: 100%; padding: 11px 14px 11px 38px; font-size: 13.5px; }
+
+/* ---------- buttons ---------- */
+button { font-family: inherit; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--pbtnfg);
+  background: var(--pbtn);
+  border: 1px solid var(--pborder);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.btn:hover { background: var(--phover-btn); border-color: var(--pborder-2); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+.btn.primary {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.btn.primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px -8px var(--accent); }
+
+.btn.ghost { background: transparent; }
+.btn.ghost:hover { background: var(--phover); }
+
+.btn.danger { color: var(--err); }
+.btn.danger:hover { background: color-mix(in srgb, var(--err) 14%, transparent); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+
+.btn:disabled { opacity: 0.4; cursor: default; transform: none; box-shadow: none; }
+
+/* ---------- toggle switch ---------- */
+.dx-sw { position: relative; width: 40px; height: 22px; flex: none; cursor: pointer; }
+.dx-sw input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 2; }
+.dx-sw i {
+  position: absolute; inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--pbtn);
+  border: 1px solid var(--pborder-2);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.dx-sw i::after {
+  content: "";
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--pfg-2);
+  box-shadow: var(--sh-1);
+  transition: left var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.dx-sw input:checked + i { background: var(--accent); border-color: transparent; }
+.dx-sw input:checked + i::after { left: 20px; background: #fff; }
+.dx-sw input:focus-visible + i { box-shadow: 0 0 0 3px var(--dx-focus-ring); }
+
+/* ---------- badges + chips ---------- */
+.dx-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-display);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--r-xs);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.dx-badge.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); border-color: color-mix(in srgb, var(--ok) 28%, transparent); }
+.dx-badge.err { color: var(--err); background: color-mix(in srgb, var(--err) 13%, transparent); border-color: color-mix(in srgb, var(--err) 28%, transparent); }
+.dx-badge.plain { color: var(--muted); background: var(--pbtn); border-color: var(--pborder); }
+
+.dx-chip {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--r-xs);
+  color: var(--pmuted);
+  background: var(--pbtn);
+  border: 1px solid var(--pborder);
+}
+.dx-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+
+/* ---------- helper copy ---------- */
+.dx-note { color: var(--muted); font-size: 12px; line-height: 1.65; }
+.dx-hint { color: var(--pfaint); font-size: 11.5px; }
+
+/* ---------- accent swatches (settings) ---------- */
+.dx-swatches { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dx-swatch {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.dx-swatch:hover { transform: scale(1.12); }
+.dx-swatch.sel { box-shadow: 0 0 0 2px var(--pbg), 0 0 0 4px var(--pfg-2); }
+
+/* ---------- toast ---------- */
+.dx-toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  z-index: 60;
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--pfg);
+  background: var(--pcard-2);
+  border: 1px solid var(--pborder-2);
+  border-radius: var(--r-pill);
+  box-shadow: var(--sh-3);
+  transform: translate(-50%, 16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
+}
+.dx-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.dx-toast::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
+/* The same toast, said in the negative: a change that did not reach the
+   disk must not read as "Saved". */
+.dx-toast.err::before {
+  background: var(--err);
+  box-shadow: 0 0 8px var(--err);
+}
+.dx-toast.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 42%, var(--pborder-2)); }
+
+/* ============================================================================
+   motion
+   ========================================================================= */
+@keyframes dx-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dx-pop {
+  from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dx-spin { to { transform: rotate(360deg); } }
+
+.dx-rise { animation: dx-rise var(--dur-slow) var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

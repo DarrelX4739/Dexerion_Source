@@ -1,0 +1,129 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Extensions — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+.ext{display:flex;gap:16px;align-items:flex-start;padding:18px 22px;border-top:1px solid var(--pborder)}
+.ext:first-child{border-top:none}
+.ext .ic{width:44px;height:44px;flex:none;border-radius:var(--r-lg);display:grid;place-items:center;
+  background:var(--pfield);border:1px solid var(--pborder);overflow:hidden;color:var(--muted)}
+.ext .ic img{width:100%;height:100%;object-fit:cover}
+.ext .body{flex:1;min-width:0}
+.ext h3{font-size:14.5px;font-family:var(--font);font-weight:600;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.ext .ver{font-family:var(--font-mono);font-size:11px;color:var(--pfaint);font-weight:400}
+.ext .desc{color:var(--muted);font-size:12.5px;margin-top:5px;line-height:1.6}
+.ext .acts{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.ext .err{margin-top:9px;font-size:12px;color:var(--err);
+  background:color-mix(in srgb,var(--err) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--err) 26%,transparent);
+  border-radius:var(--r-sm);padding:7px 10px;display:inline-block}
+.ext.off .ic,.ext.off h3{opacity:.55}
+.store-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.store-row input{flex:1;min-width:220px}
+#stormsg{color:var(--pmuted);font-size:12px;margin-top:10px;min-height:17px}
+</style>
+</head><body><div class="dx-page wide">
+<div class="dx-head">
+  <div class="eyebrow">Library</div>
+  <h1>Extensions</h1>
+  <p>Install Chrome-compatible extensions from the Web Store, or load your own from a folder or package.</p>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Chrome Web Store</h3><p>On any Web Store item page Dexerion offers the install automatically — or paste the item URL here.</p></div>
+  <div class="dx-card-body">
+    <div class="store-row">
+      <button class="btn primary" id="browsestore">Browse the Chrome Web Store</button>
+      <input type="text" id="storeurl" aria-label="Chrome Web Store item URL" placeholder="https://chromewebstore.google.com/detail/...">
+      <button class="btn" id="storego">Install from URL</button>
+    </div>
+    <div id="stormsg"></div>
+  </div>
+</div>
+
+<div class="dx-card">
+  <div class="dx-card-head"><h3>Developer mode</h3><p>Load an unpacked extension from a <b>folder or .zip/.crx file</b> (manifest.json + background, content scripts, popup). Folders load <b>in place</b> — edit the code, hit Reload, and the change goes live. Clicking the toolbar icon opens the popup, or quick actions when the extension has none.</p></div>
+  <div class="dx-card-body">
+    <div class="store-row">
+      <button class="btn primary" id="load">Load unpacked</button>
+      <button class="btn" id="fromfile">Install from .crx / .zip file</button>
+    </div>
+  </div>
+</div>
+
+<div class="dx-section"><h2>Installed</h2></div>
+<div class="dx-list" id="list"></div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+const list=document.getElementById('list');
+function mkBtn(label,cls,fn){
+  const b=document.createElement('button');b.className='btn '+(cls||'ghost');b.textContent=label;b.onclick=fn;return b;
+}
+async function load(){
+  // A failed load must not look like "no extensions installed": DexPage.guard
+  // shows what went wrong and offers a retry.
+  const xs=await window.DexPage.guard(()=>window.dexerion.invoke('dex:ext-list'),()=>load());
+  if(!xs)return;
+  list.innerHTML='';
+  if(!xs.length){
+    const e=document.createElement('div');e.className='dx-empty';
+    e.innerHTML='<b>No extensions installed</b><span>Install one from the Web Store above, or load your own from a folder.</span>';
+    list.appendChild(e);return;
+  }
+  for(const x of xs){
+    const row=document.createElement('div');
+    row.className='ext'+(x.enabled?'':' off');
+
+    const ic=document.createElement('span');ic.className='ic';
+    ic.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M10 4.5a2 2 0 1 1 4 0V6h2.5a2 2 0 1 1 0 4H16v3.5a2 2 0 1 1-4 0V13H9.5a2 2 0 1 1 0-4H10z"/></svg>';
+    window.dexerion.invoke('dex:ext-icon',x.id,64).then(src=>{
+      if(!src)return;
+      const im=document.createElement('img');im.src=src;im.alt='';ic.innerHTML='';ic.appendChild(im);
+    }).catch(()=>{});
+
+    const body=document.createElement('div');body.className='body';
+    const h=document.createElement('h3');
+    const nm=document.createElement('span');nm.textContent=x.name;
+    const ver=document.createElement('span');ver.className='ver';ver.textContent=x.version||'—';
+    h.append(nm,ver);
+    if(!x.enabled){const off=document.createElement('span');off.className='dx-badge plain';off.textContent='Disabled';h.appendChild(off);}
+    body.appendChild(h);
+
+    if(x.description){const d=document.createElement('p');d.className='desc';d.textContent=x.description;body.appendChild(d);}
+
+    const meta=document.createElement('div');meta.className='dx-chip-row';
+    const mv=document.createElement('span');mv.className='dx-chip';mv.textContent='MV'+(x.manifestVersion||'?');meta.appendChild(mv);
+    const kind=document.createElement('span');kind.className='dx-chip';kind.textContent=x.unpacked?'unpacked':'packaged';meta.appendChild(kind);
+    const idc=document.createElement('span');idc.className='dx-chip';idc.textContent=x.id||'';meta.appendChild(idc);
+    for(const p of (x.permissions||[])){const c=document.createElement('span');c.className='dx-chip';c.textContent=p;meta.appendChild(c);}
+    body.appendChild(meta);
+
+    if(x.loadError){
+      const er=document.createElement('div');er.className='err';
+      er.textContent='Error: '+x.loadError+(x.loadError.includes('not found')?' — remove and reinstall.':'');
+      body.appendChild(er);
+    }
+
+    const acts=document.createElement('div');acts.className='acts';
+    acts.append(
+      mkBtn(x.enabled?'Disable':'Enable',x.enabled?'':'primary',async()=>{await window.dexerion.invoke('dex:ext-toggle',x.id,!x.enabled);load();}),
+      mkBtn('Reload','',async()=>{await window.dexerion.invoke('dex:ext-reload',x.id);load();}),
+      mkBtn('Popup','',()=>window.dexerion.invoke('dex:ext-popup',x.id)),
+      mkBtn('Remove','danger',async()=>{try{if(await window.dexerion.invoke('dex:confirm',{message:'Remove '+x.name+'?'})){await window.dexerion.invoke('dex:ext-remove',x.id);}}catch(err){alert('Remove failed: '+err.message);}load();}),
+    );
+    body.appendChild(acts);
+
+    row.append(ic,body);
+    list.appendChild(row);
+  }
+}
+document.getElementById('load').onclick=async()=>{try{await window.dexerion.invoke('dex:ext-load-unpacked');load();}catch(e){alert('Load failed: '+e.message);}};
+document.getElementById('browsestore').onclick=()=>window.dexerion.invoke('dex:navigate',null,'https://chromewebstore.google.com/');
+document.getElementById('fromfile').onclick=async()=>{try{const r=await window.dexerion.invoke('dex:ext-install-file');if(r)load();}catch(e){alert('Install failed: '+e.message);}};
+document.getElementById('storego').onclick=async()=>{
+  const m=document.getElementById('stormsg');
+  m.textContent='Downloading from the Web Store…';
+  try{await window.dexerion.invoke('dex:ext-install-store',document.getElementById('storeurl').value.trim());m.textContent='Installed ✓';load();}
+  catch(e){m.textContent='Failed: '+e.message+' — if Google blocked the fetch, download the .zip from the developer and use “Install from .crx / .zip” or “Load unpacked”.';}
+};
+load();
+</script></body></html>

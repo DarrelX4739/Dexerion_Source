@@ -1,0 +1,166 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dexerion menu</title>
+<style>
+/* Overlay menu. Self-contained (it loads from disk, not dexerion://) but it
+   mirrors the shell's tokens so it reads as the same instrument. Glass is
+   correct here: this is true content floating over a page. */
+:root{
+  --bg:#f4f1eb; --bg2:#fbfaf7; --field:#fffefa;
+  --fg:#eceef3; --fg2:#c3c6d1; --muted:#8a8c99; --faint:#5c5e6b;
+  --hover:rgba(255,255,255,.05); --active:rgba(255,255,255,.085);
+  --hair:rgba(255,255,255,.075); --hair2:rgba(255,255,255,.13);
+  --r:7px; --ease:cubic-bezier(.2,0,0,1); --dur:150ms;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-display:"Bahnschrift","Segoe UI Variable Display","Segoe UI",sans-serif;
+  --font-mono:"Cascadia Mono",Consolas,ui-monospace,monospace;
+  --accent:#35c4ff; --err:#ff6b6b;
+}
+[data-theme="light"]{
+  --bg:#f6f6f4; --bg2:#ffffff; --field:#ffffff;
+  --fg:#15151a; --fg2:#3d3f49; --muted:#6b6d78; --faint:#9b9da6;
+  --hover:rgba(16,16,20,.045); --active:rgba(16,16,20,.08);
+  --hair:rgba(16,16,20,.1); --hair2:rgba(16,16,20,.16);
+}
+*{box-sizing:border-box;font-family:var(--font)}
+html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+body{padding:5px;color:var(--fg)}
+/* Sheet variant (search suggestions) is edge-to-edge: any body gutter would
+   expose the raw window surface as a pale frame wherever the OS can't
+   composite transparency, so the panel fills the window instead. The sheet
+   body is also painted the opaque panel color: the panel covers it entirely
+   in the normal case, but any subpixel slack between the window and the
+   panel must paint theme-colored, never white. */
+body.sheetmode{padding:0;background:var(--bg2)}
+#panel{
+  position:relative;
+  background:color-mix(in srgb,var(--bg2) 88%,transparent);
+  backdrop-filter:blur(28px) saturate(1.3);
+  -webkit-backdrop-filter:blur(28px) saturate(1.3);
+  border:1px solid var(--hair2);border-radius:12px;
+  box-shadow:0 24px 64px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.05);
+  padding:5px;overflow-y:auto;overflow-x:hidden;max-height:408px;
+  animation:pop .14s var(--ease) both;
+}
+[data-theme="light"] #panel{box-shadow:0 24px 60px -20px rgba(20,20,30,.28),inset 0 1px 0 #fff}
+#panel.sheet{border-radius:0;max-height:372px;animation:sheetin .16s var(--ease) both}
+@keyframes sheetin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.97) translateY(-4px)}to{opacity:1;transform:none}}
+.item{
+  display:flex;align-items:center;gap:11px;width:100%;
+  background:none;border:none;text-align:left;
+  padding:0 11px;height:33px;cursor:pointer;border-radius:var(--r);
+  font-size:13px;color:var(--fg);
+  transition:background var(--dur) var(--ease);
+}
+.item:hover:not(:disabled),.item.sel:not(:disabled){background:var(--hover)}
+.item:disabled{opacity:.32;cursor:default}
+.item .ic{width:18px;display:grid;place-items:center;color:var(--muted);flex:none}
+.item .ic svg{display:block}
+.item:hover:not(:disabled) .ic{color:var(--accent)}
+.item .tx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .tx small{display:block;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .tx b{font-weight:700}
+.item kbd{
+  font-family:var(--font-mono);font-size:10px;color:var(--faint);
+  background:var(--hover);border:1px solid var(--hair);
+  border-radius:4px;padding:2px 6px;flex:none;
+}
+.sep{height:9px;position:relative}
+.sep::after{content:"";position:absolute;left:11px;right:11px;top:4px;border-top:1px solid var(--hair)}
+.item.danger:hover{background:color-mix(in srgb,var(--err) 15%,transparent)}
+.item.danger:hover .ic{color:var(--err)}
+/* nof1 shared paper surface; runtime accent remains untouched */
+:root {
+  --bg:#f4f1eb; --bg2:#fbfaf7; --field:#fffefa; --fg:#24211d; --fg2:#5f5a51;
+  --muted:#817a70; --faint:#aaa196; --hover:rgba(36,33,29,.045); --active:rgba(36,33,29,.075);
+  --hair:rgba(36,33,29,.12); --hair2:rgba(36,33,29,.2); --r:10px; --err:#b23b35;
+  --font-display:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+}
+[data-theme="dark"] {
+  --bg:#171614; --bg2:#211f1c; --field:#1b1a17; --fg:#f4f0e8; --fg2:#c7c0b5;
+  --muted:#a49c90; --faint:#726d65; --hover:rgba(255,255,255,.055); --active:rgba(255,255,255,.09);
+  --hair:rgba(255,255,255,.11); --hair2:rgba(255,255,255,.18); --err:#e47c73;
+}
+#panel { border-radius:14px; background:color-mix(in srgb,var(--bg2) 97%,transparent); }
+.item { height:36px; border-radius:var(--r); }
+</style>
+
+</head><body><div id="panel" hidden></div>
+<script>
+const panel=document.getElementById('panel');
+
+/* The main process identifies menu items by unicode glyph. Map them to real
+   vector icons here so the menu matches the toolbar without changing IPC. */
+const S=(p,extra)=>'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"'+(extra||'')+'>'+p+'</svg>';
+const GLYPH={
+  '✓':S('<path d="M5 12.5 9.5 17 19 7"/>'),
+  '✕':S('<path d="M6 6l12 12M18 6L6 18"/>'),
+  '＋':S('<path d="M12 5v14M5 12h14"/>'),
+  '+':S('<path d="M12 5v14M5 12h14"/>'),
+  '❐':S('<rect x="3" y="5" width="12" height="14" rx="2"/><path d="M9 3h10a2 2 0 0 1 2 2v10"/>'),
+  '⧉':S('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
+  '⤓':S('<path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 19h14"/>'),
+  '⌕':S('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  '←':S('<path d="M19 12H6M11 5l-7 7 7 7"/>'),
+  '→':S('<path d="M5 12h13M12 5l7 7-7 7"/>'),
+  '↻':S('<path d="M20 11a8 8 0 1 0-1.6 6"/><path d="M20 4v7h-7"/>'),
+  '🖨':S('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v6H7z"/>'),
+  '◷':S('<circle cx="12" cy="12" r="8"/><path d="M12 8v4.4l3 1.8"/>'),
+  '★':S('<path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z"/>'),
+  '🧩':S('<path d="M10 4.5a2 2 0 1 1 4 0V6h2.5a2 2 0 1 1 0 4H16v3.5a2 2 0 1 1-4 0V13H9.5a2 2 0 1 1 0-4H10z"/>'),
+  '⏻':S('<path d="M12 4v8"/><path d="M7.5 6.8a7 7 0 1 0 9 0"/>'),
+  '⚙':S('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/>'),
+  '🗑':S('<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>'),
+  '✂':S('<circle cx="6" cy="6.5" r="2.6"/><circle cx="6" cy="17.5" r="2.6"/><path d="M8.2 8.1 20 18M20 6 8.2 15.9"/>'),
+};
+
+function renderTx(tx,label,boldFrom){
+  tx.textContent='';
+  if(boldFrom==null||boldFrom<0||boldFrom>=label.length){tx.textContent=label;return;}
+  tx.append(document.createTextNode(label.slice(0,boldFrom)));
+  const b=document.createElement('b');b.textContent=label.slice(boldFrom);tx.appendChild(b);
+}
+window.dexerion.on('dex:ctx-data',(d)=>{
+  window.__ctxId=d.id;
+  document.documentElement.dataset.theme=d.theme||'light';
+  document.documentElement.style.setProperty('--accent',d.accent||'#35c4ff');
+  document.body.classList.toggle('sheetmode',d.variant==='sheet');
+  panel.classList.toggle('sheet',d.variant==='sheet');
+  panel.innerHTML='';panel.hidden=false;
+  d.items.forEach((it,i)=>{
+    if(it.separator){const s=document.createElement('div');s.className='sep';panel.appendChild(s);return;}
+    const b=document.createElement('button');b.className='item'+(it.danger?' danger':'')+(i===(d.sel||0)&&d.variant==='sheet'?' sel':'');
+    b.disabled=!!it.disabled;
+    const tx=document.createElement('span');tx.className='tx';renderTx(tx,it.label,it.boldFrom);
+    if(it.sub){const sm=document.createElement('small');sm.textContent=it.sub;tx.appendChild(sm);}
+    const ic=document.createElement('span');ic.className='ic';
+    if(GLYPH[it.icon])ic.innerHTML=GLYPH[it.icon];
+    else if(it.icon)ic.textContent=it.icon;
+    b.append(ic,tx);
+    if(it.kbd){const k=document.createElement('kbd');k.textContent=it.kbd;b.appendChild(k);}
+    // Act on press, not release. Pressing an item moves focus out of the
+    // opener (the omnibox), whose blur handler dismisses the popup — so a
+    // click-driven selection races that dismissal and the popup can be
+    // destroyed before the click completes. preventDefault on mousedown also
+    // keeps the focus in the opener, so the dismissal never even starts.
+    let handled=false;
+    b.addEventListener('mousedown',(e)=>{
+      if(e.button!==0)return;
+      e.preventDefault();
+      handled=true;
+      window.dexerion.invoke('dex:ctx-result',{id:d.id,index:i});
+    });
+    b.onclick=()=>{
+      // keyboard / assistive activation still lands here
+      if(handled){handled=false;return;}
+      window.dexerion.invoke('dex:ctx-result',{id:d.id,index:i});
+    };
+    panel.appendChild(b);
+  });
+});
+window.dexerion.on('dex:ctx-select',(idx)=>{
+  panel.querySelectorAll('.item').forEach((b,i)=>b.classList.toggle('sel',i===idx));
+  const el=panel.querySelectorAll('.item')[idx];
+  if(el)el.scrollIntoView({block:'nearest'});
+});
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape')window.dexerion.invoke('dex:ctx-result',{id:window.__ctxId,index:-1});});
+</script></body></html>

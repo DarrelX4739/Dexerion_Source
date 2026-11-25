@@ -1,0 +1,348 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Artifact — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/tokens.css">
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/ai-artifacts.css">
+<style>
+/* Artifact viewer: any generated artifact as a full page, not a card. Sites get
+   a tall sandbox; the rest render through the same components the chat uses. */
+/* Flex column instead of a magic viewport offset: the page body fills whatever
+   is left under the bar, at any window size. */
+body { margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
+.dxa-page-bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; background: var(--surface, var(--pbg));
+  border-bottom: 1px solid var(--pborder);
+  font-family: var(--font-ui, system-ui);
+}
+.dxa-page-kind {
+  font: 9.5px var(--font-mono, ui-monospace); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 4px; padding: 2px 6px;
+}
+.dxa-page-title { font-size: 13.5px; font-weight: 650; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dxa-page-body { padding: 14px; max-width: 1100px; margin: 0 auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.dxa-page-body .dxa-site { border: 1px solid var(--pborder); border-radius: 10px; overflow: hidden; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.dxa-page-body:has(.dxa-site) { max-width: none; }
+.dxa-page-body .dxa-frame { flex: 1; height: auto; min-height: 320px; }
+.dxa-page-body .dxa-frame-phone { width: 390px; margin: 0 auto; }
+/* Print the artifact, not the toolbar. */
+@media print {
+  .dxa-page-bar { display: none; }
+  body { display: block; }
+  .dxa-page-body { padding: 0; max-width: none; }
+  .dxa-page-body .dxa-frame { height: 100vh; }
+}
+.dxa-page-empty { max-width: 460px; margin: 12vh auto; text-align: center; color: var(--pmuted); font: 13px/1.6 var(--font-ui, system-ui); }
+/* Standalone site preview: the page fills the viewport and the chrome floats
+   over it. The internal site bar stays in the DOM so the preview keeps working,
+   but it is visually retired here; only the top bar is shown. The standalone
+   view always uses the default full-pane width, never a remembered preset. */
+body.dxa-site-preview { overflow: hidden; height: 100vh; height: 100dvh; }
+body.dxa-site-preview .dxa-page-bar {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 50; width: min(1040px, calc(100% - 24px));
+  justify-content: center; flex-wrap: wrap;
+  padding: 7px 10px; border: 1px solid var(--pborder); border-radius: 10px;
+  background: color-mix(in srgb, var(--surface, var(--pbg)) 88%, transparent);
+  backdrop-filter: blur(10px); box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  opacity: .9; transition: opacity .18s ease;
+}
+body.dxa-site-preview .dxa-page-bar:hover,
+body.dxa-site-preview .dxa-page-bar:focus-within { opacity: 1; }
+body.dxa-site-preview .dxa-page-bar > :not(.dxa-page-title):not(#overlayStatus):not(#sitePages):not(#btnCopyHtml):not(#btnReload):not(#btnFullscreen):not(#btnOpenTab):not(#btnCloseOverlay) { display: none !important; }
+body.dxa-site-preview .dxa-page-title { flex: 0 1 auto; max-width: 220px; }
+body.dxa-site-preview .dxa-page-body { margin: 0; width: 100%; padding: 0; max-width: none; height: 100vh; height: 100dvh; }
+body.dxa-site-preview .dxa-site { position: relative; height: 100%; min-height: 0; border: 0; border-radius: 0; overflow: hidden; display: flex; flex-direction: column; }
+body.dxa-site-preview .dxa-site > .dxa-md { display: none; }
+body.dxa-site-preview .dxa-site > .dxa-sitebar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 1;
+  height: 0; padding: 0; border: 0; overflow: hidden;
+  opacity: 0; pointer-events: none;
+}
+body.dxa-site-preview .dxa-frame-box { display: flex; flex-direction: column; flex: 1; min-height: 0; height: auto; }
+body.dxa-site-preview .dxa-frame { display: block; flex: 1; width: 100%; max-width: none; height: 100%; min-height: 0; box-sizing: border-box; }
+body.dxa-site-preview .dxa-site.expanded .dxa-frame { height: 100%; }
+body.dxa-site-preview .dxa-site-pages { display: flex; align-items: center; gap: 4px; }
+body.dxa-site-preview .dxa-site-pages[hidden] { display: none; }
+body.dxa-site-preview .dxa-page-pick.on { color: var(--accent); border-color: var(--accent); }
+body.dxa-site-preview .dxa-page-pick { font-size: 11.5px; }
+/* Diagnostics stay in the chat card. The preview itself is never covered by
+   an issue strip, warning or error banner. */
+body.dxa-site-preview .dxa-issues,
+body.dxa-site-preview .dxa-preview-issues { display: none !important; }
+@media print { body.dxa-site-preview .dxa-page-bar { position: static; opacity: 1; } }
+</style>
+</head><body>
+<div class="dxa-page-bar">
+  <span class="dxa-page-kind" id="kind">Artifact</span>
+  <h1 class="dxa-page-title" id="title">Artifact</h1>
+  <span class="dxa-overlay-status" id="overlayStatus" role="status" aria-live="polite" hidden></span>
+  <span class="dxa-site-pages" id="sitePages" hidden></span>
+  <button class="btn ghost" id="btnCopyHtml" type="button" hidden>Copy HTML</button>
+  <button class="btn ghost primary" id="btnDownload" type="button">Download HTML</button>
+  <button class="btn ghost" id="btnZip" type="button" hidden>Project .zip</button>
+  <button class="btn ghost" id="btnPrint" type="button">Print</button>
+  <button class="btn ghost" id="btnReload" type="button" title="Reload the preview">Reload</button>
+  <button class="btn ghost" id="btnFullscreen" type="button" hidden title="Fill the whole window (Esc to exit)">Fullscreen</button>
+  <button class="btn ghost" id="btnOpenTab" type="button" hidden>Open in a tab</button>
+  <button class="btn ghost" id="btnCloseOverlay" type="button" hidden title="Close (Esc)" aria-label="Close the preview">✕</button>
+</div>
+<div class="dxa-page-body" id="body"></div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script src="dexerion://assets/ai-markdown.js"></script>
+<script src="dexerion://assets/ai-artifacts.js"></script>
+<script>
+(async function () {
+  const params = new URLSearchParams(location.search);
+  const chatId = params.get('chat') || '';
+  const index = Number(params.get('i'));
+  const body = document.getElementById('body');
+  const titleEl = document.getElementById('title');
+  const kindEl = document.getElementById('kind');
+
+  function empty(message) {
+    body.replaceChildren();
+    const p = document.createElement('div');
+    p.className = 'dxa-page-empty';
+    p.textContent = message;
+    body.appendChild(p);
+  }
+
+  try {
+    if (!window.dexerion || !window.DexArtifacts) throw new Error('The artifact renderer did not load.');
+    let chat = chatId ? await window.dexerion.invoke('dex:ai-chat-open', chatId).catch(() => null) : null;
+    if (!chat) {
+      // No handle (or a stale one): fall back to the newest artifact anywhere.
+      const list = await window.dexerion.invoke('dex:ai-chats-list').catch(() => []);
+      for (const row of list || []) {
+        const candidate = await window.dexerion.invoke('dex:ai-chat-open', row.id).catch(() => null);
+        const messages = (candidate && candidate.messages) || [];
+        if (messages.some((m) => m.artifact)) { chat = candidate; break; }
+      }
+    }
+    const messages = (chat && chat.messages) || [];
+    const at = Number.isInteger(index) && index >= 0 && messages[index] && messages[index].artifact
+      ? index
+      : messages.reduce((found, m, i) => (m && m.artifact ? i : found), -1);
+    const artifact = at >= 0 ? messages[at].artifact : null;
+    if (!artifact) { empty('No artifact found. Generate one in the assistant and open it again.'); return; }
+
+    document.title = (artifact.title || 'Artifact') + ' — Dexerion';
+    titleEl.textContent = artifact.title || 'Artifact';
+    kindEl.textContent = artifact.kind || 'artifact';
+    window.DexArtifacts.renderBody(body, artifact, { document });
+
+    if (artifact.kind === 'site') {
+      document.body.classList.add('dxa-site-preview');
+      const siteEl = body.querySelector('.dxa-site');
+      const sitePages = document.getElementById('sitePages');
+      const btnCopyHtml = document.getElementById('btnCopyHtml');
+      btnCopyHtml.hidden = false;
+
+      // This surface always uses the default full-pane preview. A remembered
+      // phone/tablet choice in the chat must not follow the site out here;
+      // clear the frame classes without touching the chat's own preference.
+      const previewFrame = siteEl ? siteEl.querySelector('iframe.dxa-frame') : null;
+      if (previewFrame) previewFrame.classList.remove('dxa-frame-phone', 'dxa-frame-tablet');
+
+      // The page buttons inside the card are the source of truth for navigation;
+      // the floating page switcher clicks those same buttons so nothing drifts.
+      const internalPages = Array.from(siteEl ? siteEl.querySelectorAll('.dxa-sitebar .dxa-page-btn') : []);
+      const syncPages = () => {
+        Array.from(sitePages.children).forEach((b, i) => {
+          b.classList.toggle('on', Boolean(internalPages[i] && internalPages[i].classList.contains('on')));
+          b.setAttribute('aria-pressed', internalPages[i] && internalPages[i].classList.contains('on') ? 'true' : 'false');
+        });
+      };
+      if (internalPages.length > 1) {
+        sitePages.hidden = false;
+        internalPages.forEach((p, i) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'btn ghost dxa-page-pick';
+          b.textContent = p.textContent;
+          b.title = p.title;
+          b.onclick = () => { p.click(); syncPages(); };
+          sitePages.appendChild(b);
+        });
+        syncPages();
+      }
+
+      btnCopyHtml.onclick = async () => {
+        const page = siteEl && typeof siteEl.__dxaPage === 'function' ? siteEl.__dxaPage() : '';
+        const res = await window.dexerion.invoke('dex:ai-artifact-html', { artifact, page }).catch(() => null);
+        if (!res || !res.ok || !res.html) return;
+        try {
+          await navigator.clipboard.writeText(res.html);
+          btnCopyHtml.textContent = 'Copied';
+          setTimeout(() => { btnCopyHtml.textContent = 'Copy HTML'; }, 1400);
+        } catch (err) { /* clipboard can be denied; leave the button quiet */ }
+      };
+
+      const fsBtn = document.getElementById('btnFullscreen');
+      if (params.get('overlay') !== '1') {
+        fsBtn.hidden = false;
+        fsBtn.onclick = async () => {
+          try {
+            if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+            else await document.exitFullscreen();
+          } catch (err) { /* fullscreen can be refused; the page stays usable */ }
+        };
+        document.addEventListener('fullscreenchange', () => {
+          fsBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+        });
+      }
+    }
+
+    document.getElementById('btnZip').hidden = artifact.kind !== 'site';
+    document.getElementById('btnDownload').onclick = async () => {
+      const res = await window.dexerion.invoke('dex:ai-artifact-html', { artifact }).catch(() => null);
+      if (!res || !res.ok) return;
+      const blob = new Blob([res.html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = String(artifact.title || 'dexerion-artifact').replace(/[^\w.-]+/g, '-').slice(0, 80) + '.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    document.getElementById('btnZip').onclick = () => {
+      window.dexerion.invoke('dex:ai-artifact-zip', { artifact }).catch(() => {});
+    };
+    document.getElementById('btnReload').onclick = () => { location.reload(); };
+    document.getElementById('btnPrint').onclick = () => {
+      // A served site prints through the real pipeline (hidden window, fonts,
+      // backgrounds, no chrome); everything else keeps the browser print.
+      if (artifact.kind === 'site' && window.dexerion) {
+        window.dexerion.invoke('dex:ai-site-pdf', { artifact }).catch(() => {});
+        return;
+      }
+      window.print();
+    };
+
+    // Focus preview (?overlay=1): the same page layered over the current tab
+    // with the chat beside it — its own escape hatch to a full tab and Esc.
+    if (params.get('overlay') === '1') {
+      const closeBtn = document.getElementById('btnCloseOverlay');
+      const tabBtn = document.getElementById('btnOpenTab');
+      const fsBtn = document.getElementById('btnFullscreen');
+      const statusEl = document.getElementById('overlayStatus');
+      closeBtn.hidden = false;
+      tabBtn.hidden = false;
+      fsBtn.hidden = false;
+      // This document IS the overlay surface. Dialog semantics + a focus trap
+      // keep keyboard users inside its chrome (and the preview frame) until it
+      // closes, without changing the page-area layout used by the full tab.
+      document.body.classList.add('dxa-overlay-active');
+      document.body.setAttribute('role', 'dialog');
+      document.body.setAttribute('aria-modal', 'true');
+      document.body.setAttribute('aria-label', 'Artifact preview');
+      const priorFocus = document.activeElement;
+      const focusables = () => Array.from(document.querySelectorAll(
+        'button:not([hidden]):not(:disabled), a[href], iframe, [tabindex]:not([tabindex="-1"])'
+      )).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      const restoreFocus = () => {
+        try { if (priorFocus && priorFocus !== document.body && typeof priorFocus.focus === 'function') priorFocus.focus(); } catch (err) {}
+      };
+      const closeOverlay = () => {
+        restoreFocus();
+        window.dexerion.invoke('dex:site-overlay-close').catch(() => {});
+      };
+
+      let statusTimer = null;
+      const clearStatus = () => {
+        if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+        statusEl.hidden = true;
+        statusEl.textContent = '';
+        statusEl.classList.remove('dxa-overlay-status-error', 'dxa-overlay-status-ok');
+      };
+      const showStatus = (message, kind) => {
+        if (statusTimer) clearTimeout(statusTimer);
+        statusEl.textContent = String(message || 'Something went wrong.');
+        statusEl.classList.toggle('dxa-overlay-status-error', kind === 'error');
+        statusEl.classList.toggle('dxa-overlay-status-ok', kind !== 'error');
+        statusEl.hidden = false;
+        statusTimer = setTimeout(clearStatus, 8000);
+      };
+
+      const setFsLabel = (on) => {
+        const state = Boolean(on);
+        fsBtn.textContent = state ? 'Exit fullscreen' : 'Fullscreen';
+        fsBtn.title = state ? 'Return the preview to the page area (Esc)' : 'Fill the whole window (Esc to exit)';
+        fsBtn.setAttribute('aria-pressed', state ? 'true' : 'false');
+      };
+      setFsLabel(false);
+      fsBtn.addEventListener('click', () => {
+        window.dexerion.invoke('dex:overlay-fullscreen', { kind: 'site' })
+          .then((r) => setFsLabel(!!(r && r.fullscreen)))
+          .catch(() => showStatus('Could not change fullscreen mode.', 'error'));
+      });
+      // The main process broadcasts on every exit path (close, Escape, window
+      // restore), so the button never disagrees with the actual state.
+      if (typeof window.dexerion.onRendererEvent === 'function') {
+        window.dexerion.onRendererEvent('dex:overlay-fullscreen-changed', (state) => {
+          setFsLabel(state && typeof state === 'object' ? state.fullscreen : state);
+        });
+      }
+      closeBtn.addEventListener('click', closeOverlay);
+      tabBtn.addEventListener('click', () => {
+        clearStatus();
+        tabBtn.disabled = true;
+        const q = [];
+        if (chatId) q.push('chat=' + encodeURIComponent(chatId));
+        if (Number.isInteger(index) && index >= 0) q.push('i=' + String(index));
+        const url = 'dexerion://artifact' + (q.length ? '?' + q.join('&') : '');
+        // Only close the overlay AFTER the tab exists. A failed open leaves the
+        // preview in place and explains why, instead of losing the artifact.
+        Promise.resolve(window.dexerion.invoke('dex:new-tab', url, false)).then((res) => {
+          tabBtn.disabled = false;
+          if (!res) { showStatus('The tab could not be opened. The preview is still open.', 'error'); return; }
+          closeOverlay();
+        }).catch((err) => {
+          tabBtn.disabled = false;
+          const why = (err && err.message) || err || 'unknown error';
+          showStatus('The tab could not be opened: ' + why + '. The preview is still open.', 'error');
+        });
+      });
+      const leaveFullscreenOrClose = () => {
+        window.dexerion.invoke('dex:overlay-fullscreen-state', { kind: 'site' })
+          .then((on) => {
+            if (on) {
+              window.dexerion.invoke('dex:overlay-fullscreen', { kind: 'site', fullscreen: false })
+                .then((r) => setFsLabel(!!(r && r.fullscreen))).catch(() => {});
+            } else {
+              closeOverlay();
+            }
+          }).catch(() => closeOverlay());
+      };
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Tab') {
+          const list = focusables();
+          if (!list.length) return;
+          const first = list[0];
+          const last = list[list.length - 1];
+          const inside = list.includes(document.activeElement);
+          if (ev.shiftKey && (document.activeElement === first || !inside)) {
+            ev.preventDefault(); last.focus();
+          } else if (!ev.shiftKey && (document.activeElement === last || !inside)) {
+            ev.preventDefault(); first.focus();
+          }
+          return;
+        }
+        if (ev.key !== 'Escape') return;
+        ev.preventDefault();
+        // Escape first leaves fullscreen, then closes the preview.
+        leaveFullscreenOrClose();
+      });
+      // The sandbox only forwards Escape its own page did not handle.
+      document.addEventListener('dex:preview-escape', leaveFullscreenOrClose);
+      try { closeBtn.focus(); } catch (err) { /* focus is a nicety, not a gate */ }
+    }
+  } catch (err) {
+    empty('This artifact could not be opened: ' + (err && err.message ? err.message : err));
+  }
+})();
+</script></body></html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Bookmarks — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+#bar,#other{min-height:0}
+</style>
+</head><body><div class="dx-page">
+<div class="dx-head">
+  <div class="eyebrow">Library</div>
+  <h1>Bookmarks</h1>
+  <p>Bookmarks in the bar appear under the toolbar. Everything else lives here until you pin it.</p>
+</div>
+
+<div class="dx-section"><h2>Bookmarks bar</h2></div>
+<div class="dx-list" id="bar"></div>
+
+<div class="dx-section"><h2>Other bookmarks</h2></div>
+<div class="dx-list" id="other"></div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+function hueOf(h){let n=0;for(const c of h)n=(n*31+c.charCodeAt(0))%360;return n;}
+function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u||'';}}
+
+async function load(){
+  // A failed load must not look like two empty lists: DexPage.guard shows
+  // what went wrong and offers a retry.
+  const s=await window.DexPage.guard(()=>window.dexerion.invoke('dex:get-state'),()=>load());
+  if(!s)return;
+  put('bar',s.bookmarks.roots.bar,'bar');
+  put('other',s.bookmarks.roots.other,'other');
+}
+
+function put(el,list,folder){
+  const box=document.getElementById(el);
+  box.innerHTML='';
+  if(!list.length){
+    const d=document.createElement('div');d.className='dx-empty';
+    d.innerHTML='<b></b><span></span>';
+    d.querySelector('b').textContent=folder==='bar'?'Nothing pinned yet':'Nothing saved here yet';
+    d.querySelector('span').textContent=folder==='bar'
+      ? 'Press ☆ in the toolbar on any page to pin it to the bar.'
+      : 'Starred pages land here until you move them to the bar.';
+    box.appendChild(d);
+    return;
+  }
+  for(const b of list){
+    const host=hostOf(b.url);
+    const row=document.createElement('div');row.className='dx-item';
+
+    const fav=document.createElement('span');fav.className='fav';
+    fav.style.setProperty('--h',hueOf(host));
+    fav.textContent=(host[0]||'◆').toUpperCase();
+
+    const main=document.createElement('div');main.className='main';
+    const t=document.createElement('b');t.textContent=b.title||host;
+    const sm=document.createElement('small');sm.textContent=host;
+    main.append(t,sm);
+    main.onclick=()=>window.dexerion.invoke('dex:navigate',null,b.url);
+    main.title='Open '+b.url;
+
+    const mv=document.createElement('button');mv.className='btn ghost';
+    mv.textContent=folder==='bar'?'Move to Other':'Pin to bar';
+    mv.onclick=async()=>{await window.dexerion.invoke('dex:bookmark-move',b.id,folder==='bar'?'other':'bar');load();};
+
+    const del=document.createElement('button');del.className='btn ghost';del.textContent='Remove';
+    del.onclick=async()=>{await window.dexerion.invoke('dex:bookmark-remove',b.url);load();};
+
+    const acts=document.createElement('div');acts.className='actions';acts.append(mv,del);
+    row.append(fav,main,acts);
+    box.appendChild(row);
+  }
+}
+load();
+</script></body></html>

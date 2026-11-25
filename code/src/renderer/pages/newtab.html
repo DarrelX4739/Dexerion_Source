@@ -1,0 +1,1083 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>New Tab — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/ai-artifacts.css">
+<script src="dexerion://assets/quotes.js"></script>
+<style>
+/* New tab: one centered column, hairline instrument feel. The accent is a
+   signal (focus ring, active rail) — never a background wash. */
+body{display:flex;flex-direction:column;align-items:center;padding:11vh 24px 56px;
+  background:var(--pbg);color:var(--pfg);font-family:var(--font)}
+
+/* ---------- wordmark ---------- */
+.mark{display:flex;flex-direction:column;align-items:center;animation:dx-rise .4s var(--ease) both}
+.mark .crest{width:74px;height:74px;border-radius:20px;display:grid;place-items:center;
+  background:linear-gradient(160deg,var(--pcard-2),var(--pcard));
+  border:1px solid var(--pborder-2);box-shadow:0 18px 44px -20px rgba(0,0,0,.75),inset 0 1px 0 var(--phl)}
+[data-theme="light"] .mark .crest{box-shadow:0 14px 30px -18px rgba(20,20,30,.3),inset 0 1px 0 #fff}
+.mark .crest img{width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block}
+.mark h1{font-family:var(--font-display);font-size:30px;letter-spacing:.14em;text-transform:uppercase;
+  margin:20px 0 0;font-weight:600;color:var(--pfg)}
+.mark .sub{color:var(--pmuted);font-size:13px;margin-top:7px;letter-spacing:.01em;
+  animation:dx-rise .4s .05s var(--ease) both}
+
+/* ---------- command bar ---------- */
+.cmd{position:relative;width:min(620px,92vw);margin-top:26px;animation:dx-rise .4s .1s var(--ease) both}
+#q{width:100%;height:54px;padding:0 88px 0 46px;border-radius:var(--r-lg);
+  font-size:14.5px;background:var(--pfield);border:1px solid var(--pborder-2);
+  box-shadow:var(--sh-2),inset 0 1px 0 var(--phl);
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+#q:hover{border-color:color-mix(in srgb,var(--pfg) 16%,transparent)}
+#q:focus{border-color:color-mix(in srgb,var(--accent) 70%,transparent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent),var(--sh-3)}
+.cmd .lead{position:absolute;left:17px;top:50%;transform:translateY(-50%);color:var(--pfaint);pointer-events:none}
+#q:focus ~ .lead{color:var(--accent)}
+.cmd .go{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-family:var(--font-display);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--pfaint);background:var(--pbtn);border:1px solid var(--pborder);
+  border-radius:var(--r-xs);padding:4px 7px;pointer-events:none}
+
+/* ---------- actions row ---------- */
+.acts{display:flex;gap:10px;margin-top:16px;animation:dx-rise .4s .16s var(--ease) both}
+#ai-btn{display:inline-flex;align-items:center;gap:9px;padding:10px 18px;border-radius:var(--r-md);
+  cursor:pointer;font-size:13px;font-weight:600;letter-spacing:.005em;color:var(--pfg);
+  background:var(--pcard);border:1px solid var(--pborder-2);
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl);
+  transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),color var(--dur) var(--ease)}
+#ai-btn:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  box-shadow:0 10px 26px -14px var(--accent);color:var(--accent)}
+#ai-btn svg{color:var(--accent)}
+
+/* ---------- starred ---------- */
+.sect{display:flex;align-items:center;gap:14px;width:min(620px,92vw);margin:40px 0 14px;
+  animation:dx-rise .4s .22s var(--ease) both}
+.sect h2{font-family:var(--font-display);font-size:10.5px;font-weight:600;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.sect .ln{flex:1;height:1px;background:var(--pborder)}
+.sect .n{font-family:var(--font-mono);font-size:11px;color:var(--pfaint)}
+#starred{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:9px;
+  width:min(620px,92vw)}
+.tile{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;text-align:left;
+  border-radius:var(--r-md);background:var(--pcard);border:1px solid var(--pborder);
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl);min-width:0;
+  transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease);
+  animation:dx-rise .34s var(--ease) both}
+.tile:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,transparent);
+  box-shadow:0 12px 28px -16px var(--accent)}
+/* letter avatar — deterministic hue from the hostname; the real favicon
+   (inlined by main as a data URL) replaces it once captured */
+.tile .fav,.msg .av,.ai-av{width:30px;height:30px;flex:none;border-radius:var(--r-sm);
+  display:grid;place-items:center;font-size:12.5px;font-weight:700;overflow:hidden;
+  background:hsl(var(--h,210) 34% 22%);color:hsl(var(--h,210) 72% 80%);
+  border:1px solid hsl(var(--h,210) 32% 32%)}
+[data-theme="light"] .tile .fav,[data-theme="light"] .msg .av{background:hsl(var(--h,210) 58% 93%);color:hsl(var(--h,210) 52% 34%);border-color:hsl(var(--h,210) 40% 84%)}
+.tile .fav img{width:100%;height:100%;object-fit:cover}
+/* with a real favicon the letter backdrop is pure chrome — no square at all */
+.tile .fav.has-icon{background:none;border:0}
+.tile .tx{min-width:0;flex:1}
+.tile b{display:block;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile small{display:block;color:var(--muted);font-size:11px;margin-top:2px;font-family:var(--font-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .pin{color:var(--warn);font-size:10px;flex:none}
+.tile{position:relative}
+.tile .x{position:absolute;top:6px;right:6px;width:22px;height:22px;display:grid;place-items:center;
+  border-radius:6px;border:1px solid transparent;background:transparent;color:var(--pfaint);
+  font-size:11px;line-height:1;cursor:pointer;opacity:0;
+  transition:opacity var(--dur) var(--ease),color var(--dur) var(--ease),background var(--dur) var(--ease)}
+.tile:hover .x,.tile:focus-within .x{opacity:1}
+.tile .x:hover{color:var(--err);background:color-mix(in srgb,var(--err) 14%,transparent);border-color:color-mix(in srgb,var(--err) 36%,transparent)}
+
+.empty{grid-column:1/-1;text-align:center;padding:34px 20px;color:var(--pfaint);
+  border:1px dashed var(--pborder-2);border-radius:var(--r-lg);font-size:12.5px;line-height:1.7}
+.empty b{color:var(--muted);font-weight:600}
+
+/* ---------- tasks: bottom-right panel, starting where Starred ends ----------
+   The Starred column is min(620px,92vw) centered, so its right edge sits at
+   50% + 310px on wide windows — the panel's left edge anchors there. Narrow
+   windows drop it back into the normal column below Starred. */
+#tasks-panel{position:fixed;right:24px;bottom:24px;left:calc(50% + 334px);z-index:1;
+  display:flex;flex-direction:column;max-height:52vh;overflow-y:auto;scrollbar-width:thin;
+  animation:dx-rise .4s .26s var(--ease) both}
+#tasks-panel .sect{width:100%;margin:0 0 10px}
+#tasks-nt{display:flex;flex-direction:column;gap:9px;width:100%;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.tk-todo{display:flex;align-items:center;gap:12px;padding:11px 13px;text-align:left;
+  border-radius:var(--r-md);background:var(--pcard);border:1px solid var(--pborder);
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl);min-width:0;
+  animation:dx-rise .34s var(--ease) both}
+.tk-todo .tk-box{flex:none;width:18px;height:18px;padding:0;display:grid;place-items:center;
+  color:transparent;background:var(--pfield);border:1px solid var(--pborder-2);
+  border-radius:5px;font-size:11px;cursor:pointer}
+.tk-todo .tk-box:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.tk-todo .tx{min-width:0;flex:1}
+/* Description preview: one clamped line (its literal first line, then "…")
+   plus an expand toggle that grows the card vertically — never sideways — so
+   the due line stays visible underneath. */
+.tk-todo .tk-desc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;
+  overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap;
+  color:var(--muted);font-size:11.5px;line-height:1.45;margin-top:2px}
+.tk-todo.expanded .tk-desc{display:block;overflow:visible}
+.tk-todo .tk-exp{flex:none;width:22px;height:22px;padding:0;display:grid;place-items:center;
+  color:var(--pmuted);background:var(--pfield);border:1px solid var(--pborder);border-radius:6px;
+  cursor:pointer;transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.tk-todo .tk-exp::before{content:'';width:0;height:0;
+  border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;
+  transition:transform var(--dur) var(--ease)}
+.tk-todo.expanded .tk-exp::before{transform:rotate(180deg)}
+.tk-todo .tk-exp:hover,.tk-todo .tk-exp:focus-visible{color:var(--accent);outline:none;
+  border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
+.tk-todo .tk-exp:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.tk-todo b{display:block;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-todo small{display:block;color:var(--muted);font-size:11px;margin-top:2px;font-family:var(--font-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tk-todo small.overdue{color:var(--err)}
+.tk-todo .tk-dot{flex:none;width:8px;height:8px;border-radius:50%}
+.tk-todo .tk-dot.high{background:var(--err)}
+.tk-todo .tk-dot.medium{background:var(--warn)}
+.tk-todo .tk-dot.low{background:var(--ok)}
+
+/* ---------- AI chat ---------- */
+#chat{width:min(720px,94vw);margin:34px auto 0;display:none;flex-direction:column;gap:16px;
+  animation:dx-rise .3s var(--ease) both}
+body.ai #chat{display:flex}
+body.ai .mark,body.ai .cmd,body.ai .acts,body.ai .sect,body.ai #starred,body.ai #tasks-nt,body.ai #tasks-panel{display:none}
+body.ai{padding-top:4vh}
+
+#ai-head{position:relative;display:flex;align-items:center;gap:13px;padding-bottom:16px}
+/* A hairline that fades out at both ends, so the header reads as a deliberate
+   edge on the panel rather than a divider somebody drew. */
+#ai-head::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--pborder-2) 16%,var(--pborder-2) 84%,transparent)}
+#ai-head .ai-av{width:34px;height:34px;border-radius:10px;background:var(--pfield);border-color:var(--pborder-2);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 10%,transparent),
+    0 8px 20px -10px color-mix(in srgb,var(--accent) 70%,transparent),
+    inset 0 1px 0 var(--phl)}
+#ai-head .ai-av img{width:100%;height:100%;object-fit:cover}
+#ai-head .tx{flex:1;min-width:0}
+#ai-head b{font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:-.012em;display:block}
+#ai-head small{color:var(--muted);font-size:10.5px;letter-spacing:.015em;display:block;margin-top:3px;
+  font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
+.hbtn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;font-size:12px;font-weight:550;
+  color:var(--pbtnfg);background:var(--pbtn);border:1px solid var(--pborder);
+  border-radius:var(--r-sm);cursor:pointer;white-space:nowrap;
+  transition:background var(--dur) var(--ease),color var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.hbtn:hover{background:var(--phover-btn);color:var(--pfg);border-color:var(--pborder-2)}
+.hbtn svg{opacity:.75}
+#ai-model{padding:7px 30px 7px 11px;font-size:12px;font-weight:550;cursor:pointer}
+
+/* Model reads as an instrument chip, not a form field. The caret is left to the
+   shared select styling so it keeps working in both themes. */
+#ai-model{padding:8px 30px 8px 13px;font-size:11.5px;font-weight:600;cursor:pointer;
+  font-family:var(--font-mono);letter-spacing:.01em;border-radius:999px;
+  border:1px solid var(--pborder-2);box-shadow:inset 0 1px 0 var(--phl);
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+#ai-model:hover{border-color:color-mix(in srgb,var(--accent) 52%,transparent);
+  box-shadow:inset 0 1px 0 var(--phl),0 0 0 3px color-mix(in srgb,var(--accent) 9%,transparent)}
+
+#ai-log{flex:1;min-height:120px;max-height:min(56vh,540px);overflow-y:auto;
+  display:flex;flex-direction:column;gap:24px;padding:12px 5px 14px;
+  scrollbar-width:thin;scrollbar-color:var(--pborder-2) transparent}
+#ai-log::-webkit-scrollbar{width:10px}
+#ai-log::-webkit-scrollbar-track{background:transparent}
+#ai-log::-webkit-scrollbar-thumb{background:var(--pborder-2);border-radius:99px;
+  border:3px solid transparent;background-clip:content-box}
+#ai-log::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:content-box}
+.msg{display:flex;gap:13px;align-items:flex-start;max-width:100%;
+  animation:ai-in .34s cubic-bezier(.2,.8,.25,1) both}
+@keyframes ai-in{from{opacity:0;transform:translateY(9px) scale(.986)}to{opacity:1;transform:none}}
+.msg .av{width:27px;height:27px;font-size:10px;border-radius:9px;margin-top:1px;
+  font-weight:650;letter-spacing:.04em}
+.msg .av img{width:100%;height:100%;object-fit:cover}
+.msg.me{flex-direction:row-reverse}
+.msg.me .av{background:color-mix(in srgb,var(--accent) 18%,transparent);
+  color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+/* Bubble and its provenance line share a column, so the caption sits under the
+   text it belongs to instead of being pushed to the far edge by the row. */
+.msg .body{display:flex;flex-direction:column;align-items:flex-start;gap:0;flex:1;min-width:0}
+.msg.me .body{align-items:flex-end}
+
+/* Asymmetry is what makes this read as designed: the assistant speaks directly
+   on the panel with nothing between it and the reader, while the user is a
+   contained object. The eye tracks the borderless column instantly. */
+.bubble{max-width:min(78%,60ch);font-size:14px;line-height:1.7;
+  white-space:pre-wrap;overflow-wrap:break-word;user-select:text}
+.msg.bot .bubble{max-width:min(86%,66ch);padding:1px 0 0;border:0;background:none;box-shadow:none}
+.msg.me .bubble{padding:11px 15px;border-radius:var(--r-lg);
+  background:color-mix(in srgb,var(--accent) 11%,var(--pcard));
+  border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl)}
+.msg.me .bubble{border-bottom-right-radius:var(--r-xs)}
+.bubble code{font-family:var(--font-mono);font-size:12px;background:var(--pfield);
+  border:1px solid var(--pborder);padding:1px 5px;border-radius:var(--r-xs)}
+.bubble pre{background:var(--pfield);border:1px solid var(--pborder);border-radius:var(--r-md);
+  padding:11px 13px;overflow-x:auto;margin:9px 0}
+.bubble pre code{background:none;border:none;padding:0;font-size:12px;line-height:1.55}
+/* ---------- thinking: "the core" ----------
+   Three stacked layers — a breathing glow, a counter-rotating hairline ring, and
+   a pulsing centre — paired with two skeleton lines carrying a travelling
+   highlight. It reads as an instrument spinning up and something being
+   composed, rather than the usual bouncing dots. */
+.think{display:flex;align-items:center;gap:13px;padding:8px 0 6px;
+  animation:ai-think-in .3s var(--ease) both}
+@keyframes ai-think-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+.core{position:relative;width:20px;height:20px;flex:none}
+.core::before{content:'';position:absolute;inset:-6px;border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 44%,transparent) 0%,transparent 68%);
+  animation:core-breathe 2.7s ease-in-out infinite}
+.core::after{content:'';position:absolute;inset:0;border-radius:50%;
+  border:1.5px solid color-mix(in srgb,var(--accent) 58%,transparent);
+  border-top-color:transparent;border-bottom-color:color-mix(in srgb,var(--accent) 20%,transparent);
+  animation:core-spin 1.2s linear infinite}
+.core i{position:absolute;inset:6.5px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 9px color-mix(in srgb,var(--accent) 72%,transparent);
+  animation:core-pulse 1.6s ease-in-out infinite}
+/* the dashed outer ring turns against the inner one, so the motion never
+   settles into an obvious loop */
+.core i:nth-child(2){inset:-3.5px;background:none;border-radius:50%;
+  border:1px dashed color-mix(in srgb,var(--accent) 28%,transparent);box-shadow:none;
+  animation:core-spin-rev 3.6s linear infinite}
+@keyframes core-spin{to{transform:rotate(360deg)}}
+@keyframes core-spin-rev{to{transform:rotate(-360deg)}}
+@keyframes core-pulse{0%,100%{transform:scale(.7);opacity:.6}50%{transform:scale(1);opacity:1}}
+@keyframes core-breathe{0%,100%{transform:scale(.8);opacity:.45}50%{transform:scale(1.14);opacity:.95}}
+
+.think .ln{display:flex;flex-direction:column;gap:6px}
+.think .ln span{display:block;height:5px;border-radius:99px;position:relative;overflow:hidden;
+  background:var(--pborder-2)}
+.think .ln span:nth-child(1){width:108px}
+.think .ln span:nth-child(2){width:64px}
+.think .ln span::after{content:'';position:absolute;inset:0;width:40%;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 82%,transparent),transparent);
+  animation:ln-sweep 1.6s var(--ease) infinite}
+.think .ln span:nth-child(2)::after{animation-delay:.24s}
+@keyframes ln-sweep{from{transform:translateX(-130%)}to{transform:translateX(290%)}}
+.think.out{animation:none;opacity:0;transform:translateY(-4px) scale(.97);
+  transition:opacity .23s var(--ease),transform .23s var(--ease)}
+
+/* Provenance line under a finished reply: which model, and how long it took. */
+.meta{margin-top:8px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--pfaint);animation:ai-meta-in .55s .12s both}
+@keyframes ai-meta-in{from{opacity:0;transform:translateY(-3px)}to{opacity:.72;transform:none}}
+
+/* DexMarkdown filter output: headings, lists, paragraphs, links */
+.md-h{margin:12px 0 6px;font-weight:700;line-height:1.4}
+.md-h:first-child{margin-top:0}
+h1.md-h{font-size:17px}h2.md-h{font-size:15.5px}h3.md-h{font-size:14.5px}h4.md-h{font-size:14px}
+.md-p{margin:0 0 8px}.md-p:last-child{margin-bottom:0}
+ul.md-ul,ol.md-ol{margin:7px 0 9px;padding-left:24px}
+ul.md-ul{list-style:disc}ol.md-ol{list-style:decimal}
+.md-ul li,.md-ol li{margin:4px 0}
+.md-ul li::marker,.md-ol li::marker{color:var(--accent)}
+a.md-a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+hr.md-hr{border:0;border-top:1px solid var(--pborder);margin:12px 0}
+table.md-table{width:100%;margin:8px 0 10px;border-collapse:collapse;font-size:13px;line-height:1.6}
+.md-table th,.md-table td{padding:7px 10px;border:1px solid var(--pborder);text-align:left;vertical-align:top}
+.md-table thead th{background:var(--pfield);font-weight:700}
+.md-math,.md-math-block{font-family:Georgia,"Times New Roman",serif;font-style:italic}
+.md-math-block{text-align:center;margin:11px 0;font-size:15px}
+
+#ai-form{display:flex;flex-direction:column;gap:8px}
+.ai-input-row{display:flex;gap:10px;align-items:flex-end}
+#ai-attachments{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px;
+  border-radius:var(--r-lg);background:var(--pcard);border:1px solid var(--pborder);
+  box-shadow:inset 0 1px 0 var(--phl)}
+#ai-attachments[hidden]{display:none}
+#ai-pending-images{display:flex;gap:8px;flex-wrap:wrap}
+.ai-pending{position:relative;width:64px;height:64px;flex:none}
+.ai-pending img{display:block;width:100%;height:100%;object-fit:cover;
+  border-radius:var(--r-md);border:1px solid var(--pborder-2);box-shadow:var(--sh-1)}
+.ai-remove{position:absolute;top:-5px;right:-5px;width:20px;height:20px;padding:0;
+  display:grid;place-items:center;border-radius:50%;border:1px solid var(--pborder-2);
+  background:var(--pcard);color:var(--muted);font:700 14px/1 var(--font-mono);cursor:pointer;
+  box-shadow:var(--sh-1);transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.ai-remove:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent);transform:scale(1.06)}
+#ai-attach-msg{font-size:10.5px;line-height:1.4;color:var(--pfaint)}
+#ai-attach-msg.err{color:var(--err)}
+#ai-files{display:none}
+#ai-attach{width:auto;min-width:48px;height:48px;flex:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 13px;
+  border-radius:var(--r-lg);color:var(--muted);background:var(--pfield);
+  border:1px solid var(--pborder);box-shadow:var(--sh-1),inset 0 1px 0 var(--phl);cursor:pointer;
+  font:600 12px/1 var(--font-ui);white-space:nowrap;
+  transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease),background var(--dur) var(--ease),transform var(--dur) var(--ease)}
+#ai-attach:hover:not(:disabled){color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+  background:color-mix(in srgb,var(--accent) 8%,var(--pfield));transform:translateY(-1px)}
+#ai-attach:active:not(:disabled){transform:scale(.97)}
+#ai-attach:disabled{opacity:.4;cursor:default;transform:none}
+#ai-box{flex:1;min-height:48px;max-height:160px;resize:none;padding:13px 16px;
+  border-radius:var(--r-lg);font:inherit;font-size:14px;line-height:1.5;
+  background:var(--pfield);box-shadow:var(--sh-1),inset 0 1px 0 var(--phl)}
+.msg-images{display:flex;flex-wrap:wrap;gap:6px;max-width:78%;margin-bottom:8px}
+.msg-images img{display:block;width:176px;height:176px;object-fit:cover;
+  border-radius:var(--r-md);border:1px solid var(--pborder-2);background:var(--pfield);box-shadow:var(--sh-1)}
+.msg-images.single img{width:min(420px,100%);height:auto;max-height:420px;object-fit:contain}
+#ai-box:focus{border-color:color-mix(in srgb,var(--accent) 62%,transparent);
+  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl),0 0 0 3.5px color-mix(in srgb,var(--accent) 13%,transparent)}
+#ai-send{width:48px;height:48px;flex:none;display:grid;place-items:center;padding:0;
+  border-radius:var(--r-lg);border:none;cursor:pointer;color:var(--accent-ink);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 88%,#fff 12%),var(--accent));
+  box-shadow:0 8px 22px -12px var(--accent),inset 0 1px 0 rgba(255,255,255,.2);
+  transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),filter var(--dur) var(--ease)}
+#ai-send:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px);
+  box-shadow:0 12px 26px -12px var(--accent),inset 0 1px 0 rgba(255,255,255,.26)}
+#ai-send:active:not(:disabled){transform:translateY(0) scale(.97)}
+#ai-send svg{transition:transform var(--dur) var(--ease)}
+#ai-send:hover:not(:disabled) svg{transform:translateX(2px)}
+#ai-send:disabled{opacity:.4;cursor:default;transform:none;
+  box-shadow:0 8px 22px -12px var(--accent)}
+#ai-note{text-align:center;font-size:10px;letter-spacing:.045em;color:var(--pfaint);opacity:.8}
+
+/* Motion is decoration here, not information — drop it entirely when asked. */
+@media (prefers-reduced-motion:reduce){
+  .msg,.think,.meta,.core::before,.core::after,.core i,.think .ln span::after{
+    animation:none!important}
+  .msg,.think,.meta{opacity:1;transform:none}
+}
+
+/* ---------- connect card ---------- */
+#ai-key-card{width:100%;padding:20px;border-radius:var(--r-xl);
+  text-align:left;background:var(--pcard);border:1px solid var(--pborder-2);
+  box-shadow:var(--sh-3),inset 0 1px 0 var(--phl);animation:dx-rise .28s var(--ease) both}
+#ai-key-card[hidden]{display:none}
+#ai-key-card h3{font-family:var(--font-display);font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+#ai-key-card>p{margin:0 0 16px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ai-row{display:flex;gap:8px}
+.ai-row input{flex:1}
+.ai-help{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:13px;
+  font-size:11.5px;color:var(--pfaint)}
+.ai-link{background:none;border:1px solid var(--pborder-2);color:var(--pfg-2);
+  border-radius:var(--r-pill);padding:5px 12px;font-size:11.5px;font-weight:550;cursor:pointer;
+  transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease),background var(--dur) var(--ease)}
+.ai-link:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 50%,transparent);
+  background:color-mix(in srgb,var(--accent) 10%,transparent)}
+#ai-key-msg{margin-top:13px;font-size:12px;min-height:17px;font-weight:550}
+#ai-key-msg.err{color:var(--err)}
+#ai-key-msg.ok{color:var(--ok)}
+#ai-key-msg:not(.err):not(.ok):not(:empty){color:var(--muted);font-weight:400}
+
+@media (max-width:600px){
+  body{padding:7vh 16px 40px}
+  .ai-row{flex-wrap:wrap}
+  .ai-row select{width:100%}
+  .msg .bubble{max-width:88%}
+}
+/* Tasks panel rejoins the column under Starred before it can get squeezed. */
+@media (max-width:1100px){
+  #tasks-panel{position:static;width:min(620px,92vw);margin:34px auto 0;max-height:none;overflow:visible}
+}
+
+/* ---------- daylight ----------
+   A start page is the one surface that is genuinely about *now*, so the room's
+   light is tied to the clock: three wide pools drift on very slow cycles and a
+   phase layer sits low and warm at dawn, high and wide at midday, sinking again
+   through dusk into night. Everything is built from the page's own tokens, so it
+   follows the user's light/dark choice and never fights the accent — the accent
+   stays a signal here, as it does everywhere else in the browser.
+
+   The pools are neutral light, not colour: white and a warm off-white on paper,
+   a low cool blue with a faint ember at night. Nothing is loud enough to touch
+   the contrast of the clock, the search field or the starred tiles. */
+html{background:var(--pbg)}
+body{background:transparent}
+.sky{position:fixed;inset:-14% -10%;z-index:-1;pointer-events:none;overflow:hidden;
+  animation:skyIn 1.6s var(--ease) both}
+@keyframes skyIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:none}}
+.sky .pool{position:absolute;border-radius:50%;will-change:transform,opacity}
+.sky .high{width:80vw;height:66vh;left:4vw;top:-28vh;
+  background:radial-gradient(closest-side,rgba(255,255,255,.95),rgba(255,255,255,0) 72%)}
+.sky .low{width:98vw;height:74vh;left:-16vw;bottom:-34vh;
+  background:radial-gradient(closest-side,rgba(255,252,243,.8),rgba(255,252,243,0) 74%)}
+.sky .warm{width:54vw;height:48vh;right:-8vw;bottom:-14vh;
+  background:radial-gradient(closest-side,rgba(255,243,224,.65),rgba(255,243,224,0) 76%)}
+/* Night needs a touch more presence than paper does before it reads as a room
+   rather than a flat panel — still well below the level that would touch text. */
+[data-theme="dark"] .sky .high{background:radial-gradient(closest-side,rgba(122,144,208,.21),rgba(122,144,208,0) 72%)}
+[data-theme="dark"] .sky .low{background:radial-gradient(closest-side,rgba(86,104,168,.19),rgba(86,104,168,0) 74%)}
+[data-theme="dark"] .sky .warm{background:radial-gradient(closest-side,rgba(196,158,120,.14),rgba(196,158,120,0) 76%)}
+/* different periods so the field never repeats itself in a way you can catch */
+@keyframes poolHigh{
+  from{transform:translate3d(0,0,0) scale(1);opacity:.85}
+  to{transform:translate3d(2.4vw,-1.5vh,0) scale(1.06);opacity:1}}
+@keyframes poolLow{
+  from{transform:translate3d(0,0,0) scale(1.05);opacity:.75}
+  to{transform:translate3d(-2vw,1.8vh,0) scale(1);opacity:.95}}
+@keyframes poolWarm{
+  from{transform:translate3d(0,0,0) scale(1);opacity:.7}
+  to{transform:translate3d(-1.6vw,-2vh,0) scale(1.08);opacity:.9}}
+/* A literal ease-in-out on purpose: this stylesheet defines --ease but not
+   --ease-in-out, and an unresolved var() inside the animation shorthand makes
+   the whole declaration invalid, which silently killed the drift. */
+.sky .high{animation:poolHigh 104s cubic-bezier(.42,0,.58,1) infinite alternate}
+.sky .low{animation:poolLow 148s cubic-bezier(.42,0,.58,1) infinite alternate}
+.sky .warm{animation:poolWarm 191s cubic-bezier(.42,0,.58,1) infinite alternate}
+/* the phase layer is not animated: it crossfades when the clock crosses a
+   boundary, which gradient interpolation could not do smoothly */
+.sky .phase{position:absolute;inset:0;opacity:1;transition:opacity .9s var(--ease)}
+.sky.phasing .phase{opacity:0}
+.sky[data-phase="dawn"] .phase{background:radial-gradient(62vw 42vh at 16% 94%,rgba(255,206,146,.22),transparent 70%)}
+.sky[data-phase="day"] .phase{background:radial-gradient(74vw 52vh at 54% 2%,rgba(255,255,255,.15),transparent 74%)}
+.sky[data-phase="dusk"] .phase{background:radial-gradient(66vw 46vh at 92% 90%,rgba(255,178,138,.2),transparent 70%)}
+.sky[data-phase="night"] .phase{background:radial-gradient(72vw 48vh at 38% 100%,rgba(118,140,212,.16),transparent 74%)}
+[data-theme="dark"] .sky[data-phase="dawn"] .phase{background:radial-gradient(62vw 42vh at 16% 94%,rgba(216,166,120,.17),transparent 70%)}
+[data-theme="dark"] .sky[data-phase="day"] .phase{background:radial-gradient(74vw 52vh at 54% 2%,rgba(158,178,232,.17),transparent 74%)}
+[data-theme="dark"] .sky[data-phase="dusk"] .phase{background:radial-gradient(66vw 46vh at 92% 90%,rgba(198,142,110,.16),transparent 70%)}
+[data-theme="dark"] .sky[data-phase="night"] .phase{background:radial-gradient(72vw 48vh at 38% 100%,rgba(104,126,196,.18),transparent 74%)}
+/* grain: not decoration — large soft gradients band on 8-bit panels, and a
+   little noise removes the rings at almost no cost */
+.sky .grain{position:absolute;inset:0;opacity:.04;background-repeat:repeat;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ---------- the day, in the corner ---------- */
+.daylight{position:fixed;top:30px;left:32px;z-index:1;width:min(300px,26vw);
+  animation:dx-rise .5s .08s var(--ease) both}
+.daylight .clock{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1;
+  color:var(--pfg);font-variant-numeric:tabular-nums}
+.daylight .date{margin-top:2px;font-size:12.5px;color:var(--pmuted)}
+.daylight .quote{margin:15px 0 0;padding-top:13px;border-top:1px solid var(--pborder);
+  font-family:var(--font-display);font-size:14.5px;line-height:1.6;color:var(--pfg-2)}
+.daylight .author{margin:7px 0 0;font-size:11.5px;color:var(--pmuted)}
+.daylight .author::before{content:'— '}
+/* the quote is a whole sentence, not a slogan: it wraps rather than truncates */
+.daylight .quote:empty,.daylight .author:empty{display:none}
+body.ai .daylight{display:none}
+
+/* Narrow windows: the corner is not a corner any more, so the block joins the
+   column above the wordmark and keeps only what fits. */
+@media (max-width:900px){
+  .daylight{position:static;width:min(620px,92vw);margin:0 auto;text-align:center}
+  .daylight .quote,.daylight .author{display:none}
+}
+</style>
+</head><body>
+
+<!-- The room, then the day. Two layers: a slow light field that answers the
+     clock, and one block of the day's information in the corner. -->
+<div class="sky" id="sky" aria-hidden="true">
+  <span class="pool high"></span><span class="pool low"></span><span class="pool warm"></span>
+  <span class="phase"></span><span class="grain"></span>
+</div>
+
+<aside class="daylight" aria-label="Today">
+  <div class="clock" id="clock">--:--</div>
+  <div class="date" id="date"></div>
+  <div class="qline">
+    <p class="quote" id="quote"></p>
+    <p class="author" id="author"></p>
+  </div>
+</aside>
+
+<div class="mark">
+  <div class="crest"><img src="dexerion://assets/logo.png" alt="Dexerion"></div>
+  <h1>Dexerion</h1>
+  <p class="sub">Search the web, or type any address</p>
+</div>
+
+<div class="cmd">
+  <input id="q" aria-label="Search Dexerion or type a URL" placeholder="Search Dexerion or type a URL" autocomplete="off" spellcheck="false">
+  <span class="lead" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+  <span class="go">Enter</span>
+</div>
+
+<div class="acts">
+  <button id="ai-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg>Search With Dexerion AI</button>
+</div>
+
+<div id="chat">
+  <div id="ai-head">
+    <span class="ai-av"><img src="dexerion://assets/logo.png" alt=""></span>
+    <span class="tx"><b>Dexerion AI</b><small id="ai-sub">Your Dexerion assistant</small></span>
+    <select id="ai-model" aria-label="AI model" title="Model"></select>
+    <button class="hbtn" id="ai-new">New chat</button>
+    <button class="hbtn" id="ai-back">Search</button>
+  </div>
+
+  <div id="ai-key-card" hidden>
+    <h3>Connect Dexerion Assistant — 3 quick steps</h3>
+    <p id="ai-key-help">Connect your provider API key. It stays encrypted on this device.</p>
+    <div class="ai-row"><button class="btn ghost" id="ai-key-open" type="button">Open build.nvidia.com</button></div>
+    <div class="ai-row"><input id="ai-key" type="password" aria-label="Provider API key" placeholder="Paste nvapi-… key here" autocomplete="off"><button class="btn primary" id="ai-key-save" type="button">Connect</button></div>
+    <div id="ai-key-msg"></div>
+  </div>
+
+  <div id="ai-log"></div>
+  <form id="ai-form">
+    <div id="ai-attachments" hidden>
+      <div id="ai-pending-images"></div>
+      <span id="ai-attach-msg" role="status">Ctrl+V to add more</span>
+    </div>
+    <div class="ai-input-row">
+      <button id="ai-attach" type="button" title="Attach images" aria-label="Add images to chat"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 0 1-2.8-2.8l8.9-8.9"/></svg><span>Add image</span></button>
+      <input id="ai-files" type="file" accept="image/*" multiple aria-label="Choose images to attach">
+      <textarea id="ai-box" rows="1" aria-label="Message Dexerion AI" placeholder="Message Dexerion AI…" autocomplete="off"></textarea>
+      <button id="ai-send" type="submit" title="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg></button>
+    </div>
+  </form>
+  <div id="ai-note">Enter sends · Shift+Enter for a new line · Ctrl+V attaches images · AI can make mistakes — check important details.</div>
+</div>
+
+<div class="sect" id="starred-title"><h2>Starred</h2><span class="ln"></span><span class="n" id="starred-n"></span></div>
+<div id="starred"></div>
+
+<div id="tasks-panel">
+<div class="sect" id="tasks-sect"><h2>Tasks</h2><span class="ln"></span><span class="n" id="tasks-n"></span></div>
+<div id="tasks-nt"></div>
+</div>
+
+<script src="dexerion://assets/page-theme.js"></script>
+<script src="dexerion://assets/ai-markdown.js"></script>
+<script src="dexerion://assets/ai-artifacts.js"></script>
+<script>
+const q=document.getElementById('q');
+let sugItems=[],sugIdx=0,sugT=null;
+function sugGo(item){
+  if(!item)return window.dexerion.invoke('dex:navigate',null,q.value);
+  if(item.kind==='goto'&&item.url)return window.dexerion.invoke('dex:navigate',null,item.url);
+  return window.dexerion.invoke('dex:navigate',null,item.phrase||item.label);
+}
+q.addEventListener('keydown',async e=>{
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    if(!sugItems.length)return;e.preventDefault();
+    sugIdx=(sugIdx+(e.key==='ArrowDown'?1:-1)+sugItems.length)%sugItems.length;
+    window.dexerion.invoke('dex:suggest-select',sugIdx).catch(()=>{});
+  }else if(e.key==='Enter'&&q.value.trim()){
+    clearTimeout(sugT);
+    const item=sugItems.length?await window.dexerion.invoke('dex:suggest-pick',sugIdx).catch(()=>null):null;
+    sugItems=[];sugIdx=0;
+    window.dexerion.invoke('dex:ctx-dismiss').catch(()=>{});
+    await sugGo(item);
+  }else if(e.key==='Escape'){sugItems=[];window.dexerion.invoke('dex:ctx-dismiss').catch(()=>{});}
+});
+q.addEventListener('input',()=>{
+  clearTimeout(sugT);
+  sugT=setTimeout(async()=>{
+    const v=q.value;
+    if(!v.trim()){sugItems=[];return;}
+    try{
+      const r=q.getBoundingClientRect();
+      sugItems=await window.dexerion.invoke('dex:suggest-show',v,{max:4,anchor:{x:r.left,y:r.bottom+6,width:r.width}})||[];
+      sugIdx=0;
+    }catch{sugItems=[];}
+  },180);
+});
+q.addEventListener('blur',()=>{setTimeout(()=>{sugItems=[];window.dexerion.invoke('dex:ctx-dismiss').catch(()=>{});},180);});
+q.focus();
+
+// deterministic hue for a hostname, so letter avatars look intentional
+function hueOf(host){let h=0;for(const c of host)h=(h*31+c.charCodeAt(0))%360;return h;}
+const hostOf=u=>{try{return new URL(u).hostname.replace(/^www\./,'');}catch{return u||'';}};
+// Swap a tile's letter avatar for the real site icon once it decodes; a
+// missing or broken image just leaves the letter in place.
+function paintFav(favEl,dataUrl){
+  if(!favEl||!dataUrl||!/^data:image\//i.test(dataUrl)||favEl.querySelector('img'))return;
+  const img=document.createElement('img');
+  img.src=dataUrl;img.alt='';img.draggable=false;
+  img.onload=()=>{favEl.classList.add('has-icon');favEl.textContent='';favEl.appendChild(img);};
+  img.onerror=()=>img.remove();
+}
+
+(async()=>{
+  const st=await window.dexerion.invoke('dex:get-state');
+  const s=document.getElementById('starred');s.innerHTML='';
+  const all=[...(st.bookmarks.roots.bar||[]),...(st.bookmarks.roots.other||[])];
+  const shown=all;
+  document.getElementById('starred-n').textContent=all.length?String(all.length):'';
+  if(!shown.length){
+    s.innerHTML='<div class="empty hint"><b>Nothing starred yet</b> Press <b>☆</b> in the toolbar on any page to pin it here.</div>';
+    return;
+  }
+  // Site icons for the grid: bookmark records carry the favicon the page
+  // reported, inlined as a data URL by main (the internal-page CSP only lets
+  // dexerion:/data: images through, so a remote icon URL would never paint).
+  // Asking also nudges main to fetch icons for bookmarks that predate this.
+  let favs={};
+  try{favs=await window.dexerion.invoke('dex:bookmark-favicons')||{};}catch{}
+  shown.forEach((b,i)=>{
+    const host=hostOf(b.url);
+    const d=document.createElement('div');
+    d.className='tile';d.style.animationDelay=(i*38)+'ms';
+    d.title=b.url;
+    d.dataset.url=b.url;
+    d.tabIndex=0;
+    const go=()=>window.dexerion.invoke('dex:navigate',null,b.url);
+    d.onclick=go;
+    d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};
+    const fav=document.createElement('span');
+    fav.className='fav';
+    fav.style.setProperty('--h',hueOf(host));
+    fav.textContent=(host[0]||'◆').toUpperCase();
+    paintFav(fav,favs[b.url]);
+    const tx=document.createElement('span');tx.className='tx';
+    const nm=document.createElement('b');nm.textContent=b.title||host;
+    const sm=document.createElement('small');sm.textContent=host;
+    tx.append(nm,sm);
+    const x=document.createElement('button');
+    x.className='x';x.type='button';x.title='Remove bookmark';x.setAttribute('aria-label','Remove bookmark');
+    x.textContent='✕';
+    x.onclick=(ev)=>{
+      ev.stopPropagation();ev.preventDefault();
+      window.dexerion.invoke('dex:bookmark-remove',b.url).catch(()=>{});
+      d.remove();
+      const left=s.querySelectorAll('.tile').length;
+      document.getElementById('starred-n').textContent=left?String(left):'';
+      if(!left)s.innerHTML='<div class="empty hint"><b>Nothing starred yet</b> Press <b>☆</b> in the toolbar on any page to pin it here.</div>';
+    };
+    d.append(fav,tx,x);
+    s.appendChild(d);
+  });
+  // Icons fetched in the background for older bookmarks land after this
+  // paint; pick them up once so a first visit already shows them.
+  setTimeout(async()=>{
+    try{
+      const later=await window.dexerion.invoke('dex:bookmark-favicons')||{};
+      for(const tile of s.querySelectorAll('.tile')){
+        const favEl=tile.querySelector('.fav');
+        if(favEl&&!favEl.querySelector('img'))paintFav(favEl,later[tile.dataset.url]);
+      }
+    }catch{}
+  },4000);
+})();
+
+/* ================= Tasks (read + toggle; add from the rail panel) ================= */
+(async function tasksNt(){
+  const box=document.getElementById('tasks-nt');
+  if(!box)return;
+  const nEl=document.getElementById('tasks-n');
+  function dueText(t){
+    const d=new Date(t.dueMs);
+    const day=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    return t.hasTime?day+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):day;
+  }
+  function paint(list){
+    box.innerHTML='';
+    const open=(Array.isArray(list)?list:[]).filter(t=>t&&!t.done);
+    if(nEl)nEl.textContent=open.length?String(open.length):'';
+    if(!open.length){
+      box.innerHTML='<div class="empty"><b>No open tasks</b><br>Add one from the tasks panel in the tab rail.</div>';
+      return;
+    }
+    open.forEach((t,i)=>{
+      const d=document.createElement('div');
+      d.className='tk-todo';d.style.animationDelay=(i*38)+'ms';d.title=t.notes||t.title;
+      const c=document.createElement('button');
+      c.className='tk-box';c.type='button';c.title='Mark done';
+      c.setAttribute('aria-label','Mark done: '+t.title);
+      c.onclick=async()=>{await window.dexerion.invoke('dex:tasks-toggle',t.id,true).catch(()=>{});load();};
+      const tx=document.createElement('span');tx.className='tx';
+      const b=document.createElement('b');b.textContent=t.title;
+      tx.appendChild(b);
+      const notes=(t.notes||'').trim();
+      if(notes){
+        const desc=document.createElement('span');
+        desc.className='tk-desc';desc.textContent=notes;
+        tx.appendChild(desc);
+      }
+      const sm=document.createElement('small');
+      sm.textContent=dueText(t);
+      if(t.dueMs<Date.now())sm.classList.add('overdue');
+      tx.appendChild(sm);
+      d.append(c,tx);
+      // Expand shows the whole description in place: the card grows vertically
+      // and the due line stays put, so when it is due never scrolls away.
+      if(notes){
+        const ex=document.createElement('button');
+        ex.className='tk-exp';ex.type='button';ex.setAttribute('aria-expanded','false');
+        ex.title='Show full description';ex.setAttribute('aria-label','Show full description');
+        ex.onclick=()=>{
+          const on=d.classList.toggle('expanded');
+          ex.setAttribute('aria-expanded',on?'true':'false');
+          ex.title=on?'Collapse description':'Show full description';
+          ex.setAttribute('aria-label',ex.title);
+        };
+        d.appendChild(ex);
+      }
+      const dot=document.createElement('span');
+      dot.className='tk-dot '+t.priority;dot.title=t.priority+' priority';
+      d.appendChild(dot);
+      box.appendChild(d);
+    });
+    // Top three stay in view on load; the rest arrive as the list itself
+    // scrolls. Measured from the 3rd card's bottom so nothing else shifts
+    // the fold (the entrance animation is transform/opacity only). The +2
+    // covers offsetTop/offsetHeight integer rounding — the 9px gap means it
+    // can only ever expose background, never a clipped card.
+    if(open.length>3&&box.children[2]&&box.children[2].offsetHeight){
+      const third=box.children[2];
+      box.style.maxHeight=(third.offsetTop+third.offsetHeight-box.offsetTop+2)+'px';
+    }else{
+      box.style.maxHeight='';
+    }
+  }
+  async function load(){
+    try{paint(await window.dexerion.invoke('dex:tasks-list'));}
+    catch{box.innerHTML='<div class="empty"><b>Tasks unavailable</b></div>';}
+  }
+  load();
+})();
+
+/* ================= Dexerion AI ================= */
+const aiBtn=document.getElementById('ai-btn'),
+      chat=document.getElementById('chat'),
+      log=document.getElementById('ai-log'),
+      form=document.getElementById('ai-form'),
+      box=document.getElementById('ai-box'),
+      sendBtn=document.getElementById('ai-send'),
+      attachBtn=document.getElementById('ai-attach'),
+      fileInput=document.getElementById('ai-files'),
+      attachTray=document.getElementById('ai-attachments'),
+      pendingImages=document.getElementById('ai-pending-images'),
+      attachMsg=document.getElementById('ai-attach-msg')
+let history=[], busy=false, reqId=null, aiReady=false, streamBubble=null, swapped=false, chunks=0;
+let attachments=[];
+
+const MAX_IMAGES=4, MAX_IMAGE_BYTES=20*1024*1024, MAX_IMAGE_EDGE=2048;
+const SEND_SVG='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg>';
+function setSend(state){
+  if(state==='busy'){sendBtn.innerHTML='<span style="font-weight:700">…</span>';attachBtn.disabled=true;}
+  else {sendBtn.innerHTML=SEND_SVG;attachBtn.disabled=false;}
+}
+
+function readDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||''));
+    reader.onerror=()=>reject(new Error('Could not read that image.'));
+    reader.readAsDataURL(blob);
+  });
+}
+async function normalizeImage(file){
+  if(!file||!/^image\//i.test(file.type||''))throw new Error('Only image files can be attached.');
+  if(file.size>MAX_IMAGE_BYTES)throw new Error('Images must be smaller than 20 MB.');
+  const source=await readDataUrl(file);
+  const image=await new Promise((resolve,reject)=>{
+    const im=new Image();
+    im.onload=()=>resolve(im);
+    im.onerror=()=>reject(new Error('That image could not be opened.'));
+    im.src=source;
+  });
+  const scale=Math.min(1,MAX_IMAGE_EDGE/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('That image could not be prepared.')),'image/jpeg',.86));
+  return {name:file.name||'Pasted image',type:'image/jpeg',url:await readDataUrl(blob)};
+}
+function setAttachMessage(text,error){attachMsg.textContent=text;attachMsg.classList=error?'err':'';}
+function renderAttachments(){
+  pendingImages.innerHTML='';
+  attachments.forEach((image,index)=>{
+    const item=document.createElement('div');item.className='ai-pending';
+    const im=document.createElement('img');im.src=image.url;im.alt=image.name;
+    const remove=document.createElement('button');remove.type='button';remove.className='ai-remove';remove.textContent='×';
+    remove.title='Remove image';remove.setAttribute('aria-label','Remove '+image.name);
+    remove.onclick=()=>{attachments.splice(index,1);renderAttachments();};
+    item.append(im,remove);pendingImages.appendChild(item);
+  });
+  attachTray.hidden=!attachments.length;
+  if(attachments.length)setAttachMessage(attachments.length+' of '+MAX_IMAGES+' images · Ctrl+V to add more');
+}
+function clearAttachments(){attachments=[];renderAttachments();}
+async function addImages(files){
+  const images=Array.from(files||[]).filter(file=>/^image\//i.test(file.type||''));
+  if(!images.length){attachTray.hidden=false;setAttachMessage('Choose an image file.',true);return;}
+  const room=MAX_IMAGES-attachments.length;
+  if(room<=0){attachTray.hidden=false;setAttachMessage('You can attach up to '+MAX_IMAGES+' images.',true);return;}
+  for(const file of images.slice(0,room)){
+    try{attachments.push(await normalizeImage(file));renderAttachments();}
+    catch(err){setAttachMessage(err.message||'That image could not be attached.',true);}
+  }
+  if(images.length>room)setAttachMessage('Only '+MAX_IMAGES+' images can be attached to a message.',true);
+}
+attachBtn.onclick=()=>fileInput.click();
+fileInput.addEventListener('change',()=>{const files=Array.from(fileInput.files||[]);fileInput.value='';addImages(files);});
+box.addEventListener('paste',e=>{
+  const files=Array.from(e.clipboardData&&e.clipboardData.items||[]).filter(item=>item.kind==='file'&&/^image\//i.test(item.type||'')).map(item=>item.getAsFile()).filter(Boolean);
+  if(!files.length)return;
+  e.preventDefault();addImages(files);
+});
+
+aiBtn.onclick=()=>window.dexerion.invoke('dex:aisearch-open').catch(()=>{});
+
+const modelSel=document.getElementById('ai-model');
+let lastNtStatus=null;
+function paintProviderHints(st){
+  if(!st)return;
+  lastNtStatus=st;
+  const help=document.getElementById('ai-key-help');
+  if(help){
+    help.textContent=st.providerId==='nim'
+      ?'Get a free NVIDIA key: open build.nvidia.com, sign in, generate an API key, and paste it below. It stays encrypted on this device.'
+      :'Create a key at '+(st.keyHint||'your provider')+', then paste it below. It stays encrypted on this device.';
+  }
+  if(keyInputEl&&st.keyPlaceholder)keyInputEl.placeholder=st.keyPlaceholder;
+  const open=document.getElementById('ai-key-open');
+  if(open)open.textContent=st.docsLabel||'Open provider page';
+}
+function paintModels(st){
+  if(!st||!modelSel)return;
+  lastNtStatus=st;
+  const rec=st.models||[], all=st.allModels||[];
+  if(typeof st.model==='string'&&st.model&&!all.includes(st.model))all.unshift(st.model);
+  if(!all.length){
+    // Stored key but nothing reachable: disable the picker and surface the
+    // connect card instead of leaving a dead UI.
+    modelSel.innerHTML='';
+    const o=document.createElement('option');o.textContent='No models — connect below';o.disabled=true;
+    modelSel.appendChild(o);modelSel.disabled=true;
+    if(keyCardEl)keyCardEl.hidden=false;
+    const sub=document.getElementById('ai-sub');
+    if(sub)sub.textContent='Dexerion Assistant · not connected';
+    return;
+  }
+  modelSel.innerHTML='';
+  const add=(label,ids)=>{
+    if(!ids.length)return;
+    const g=document.createElement('optgroup');g.label=label;
+    for(const id of ids){
+      const o=document.createElement('option');o.value=id;o.textContent=id;g.appendChild(o);
+    }
+    modelSel.appendChild(g);
+  };
+  add('Recommended for chat', rec);
+  add('All other models', all.filter(id=>!rec.includes(id)));
+  if(st.model&&all.includes(st.model))modelSel.value=st.model;
+  modelSel.disabled=false;
+  const sub=document.getElementById('ai-sub');
+  if(sub)sub.textContent='Dexerion Assistant · '+(st.model||'ready');
+}
+async function refreshModels(){
+  try{ paintModels(await window.dexerion.invoke('dex:ai-status')); }catch{}
+}
+modelSel.onchange=async()=>{await window.dexerion.invoke('dex:ai-model-set',modelSel.value).catch(()=>{});};
+
+// Guided connect: key → live catalogue → model picker → chat.
+const keyCardEl=document.getElementById('ai-key-card'),
+      keyInputEl=document.getElementById('ai-key'),
+      keyMsgEl=document.getElementById('ai-key-msg');
+function keyOk(msg){keyMsgEl.textContent=msg;keyMsgEl.className='ok';setTimeout(()=>{keyCardEl.hidden=true;box.focus();},1200);}
+function keyFail(msg){keyMsgEl.textContent=String(msg||'Something went wrong.');keyMsgEl.className='err';}
+async function connectKey(){
+  if(!keyInputEl||!keyMsgEl)return;
+  const key=keyInputEl.value.trim();
+  if(!key){keyFail('Paste your '+(lastNtStatus&&lastNtStatus.providerLabel||'provider')+' API key first.');keyInputEl.focus();return;}
+  keyMsgEl.textContent='Checking your key and loading models…';keyMsgEl.className='';
+  try{
+    await window.dexerion.invoke('dex:ai-key-set',key);
+    const cat=await window.dexerion.invoke('dex:ai-models-refresh');
+    const r=await window.dexerion.invoke('dex:ai-test');
+    if(!r.ok)throw new Error(r.error||'Connection failed.');
+    keyInputEl.value='';
+    paintModels(cat&&cat.ok?cat:await window.dexerion.invoke('dex:ai-status'));
+    keyOk('Connected ✓ — pick a model above if you like, then chat.');
+  }catch(err){keyFail(err.message||err);}
+}
+const elNT=(id)=>document.getElementById(id);
+const keySaveBtn=elNT('ai-key-save');if(keySaveBtn)keySaveBtn.onclick=connectKey;
+const keyOpenBtn=elNT('ai-key-open');if(keyOpenBtn)keyOpenBtn.onclick=()=>{
+  const url=(lastNtStatus&&lastNtStatus.docsUrl)||'https://build.nvidia.com';
+  window.dexerion.invoke('dex:new-tab',url,false).catch(()=>{});
+};
+if(keyInputEl)keyInputEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();connectKey();}});
+(async()=>{
+  const st0=await window.dexerion.invoke('dex:ai-status').catch(()=>null);
+  let st=st0;
+  if(st&&st.hasKey&&!st.modelsLoaded){
+    const r=await window.dexerion.invoke('dex:ai-models-refresh').catch(()=>null);
+    if(r&&r.ok)st=r;
+  }
+  paintProviderHints(st);
+  if(st&&st.hasKey){keyCardEl.hidden=true;paintModels(st);}
+  else{keyCardEl.hidden=false;modelSel.disabled=true;}
+})();
+function leaveAI(){document.body.classList.remove('ai');q.focus();}
+
+function addMsg(who,text,images=[]){
+  const wrap=document.createElement('div');
+  wrap.className='msg '+(who==='me'?'me':'bot');
+  const av=document.createElement('div');av.className='av';
+  if(who==='me'){av.textContent='You';}
+  else{const im=document.createElement('img');im.src=document.documentElement.dataset.theme==='light'?'dexerion://assets/logo-light.png':'dexerion://assets/logo.png';im.alt='Dexerion AI';av.appendChild(im);}
+  const body=document.createElement('div');body.className='body';
+  if(images.length){
+    const gallery=document.createElement('div');gallery.className='msg-images'+(images.length===1?' single':'');
+    for(const image of images){
+      const im=document.createElement('img');im.src=image.url;im.alt=image.name||'Attached image';gallery.appendChild(im);
+    }
+    body.appendChild(gallery);
+  }
+  const b=document.createElement('div');b.className='bubble';
+  b.textContent=text||'';
+  if(text||!images.length)body.appendChild(b);
+  wrap.append(av,body);log.appendChild(wrap);
+  log.scrollTop=log.scrollHeight;
+  return b;
+}
+function addBot(t){return addMsg('bot',t);}
+
+// Provenance: which model answered, and how long it took. Sits under the reply
+// rather than in it, so it never competes with the answer for attention.
+function setMeta(bubble,model,ms){
+  const body=bubble&&bubble.parentNode;if(!body||!body.classList.contains('body'))return;
+  let m=body.querySelector('.meta');
+  if(!m){m=document.createElement('div');m.className='meta';body.appendChild(m);}
+  const secs=(ms/1000).toFixed(ms<10000?1:0);
+  m.textContent=(model||'Dexerion Assistant')+' · '+secs+'s';
+}
+
+// Minimal, safe markdown via the shared DexMarkdown filter (bold, italic,
+// headings, lists, links, code) so replies render instead of leaking raw
+// symbols. No innerHTML from model output, so a reply can never inject
+// markup into the page. Falls back to code-only rendering if shared fails.
+function aiLink(url){window.dexerion.invoke('dex:navigate',null,url).catch(()=>{});}
+function renderMd(el,text){
+  if(window.DexMarkdown){window.DexMarkdown.render(el,text,{onLink:aiLink});return;}
+  el.textContent='';
+  const parts=String(text).split(/```/);
+  parts.forEach((part,i)=>{
+    if(i%2===1){
+      const pre=document.createElement('pre'),code=document.createElement('code');
+      code.textContent=part.replace(/^[a-zA-Z0-9+#-]*\n/,'');
+      pre.appendChild(code);el.appendChild(pre);return;
+    }
+    part.split(/`([^`\n]+)`/).forEach((seg,j)=>{
+      if(j%2===1){const c=document.createElement('code');c.textContent=seg;el.appendChild(c);}
+      else if(seg)el.appendChild(document.createTextNode(seg));
+    });
+  });
+}
+
+window.dexerion.on('dex:ai-chunk',({reqId:rid,full})=>{
+  if(rid!==reqId||!streamBubble)return;
+  const shown=window.DexArtifacts?window.DexArtifacts.visibleText(full):full;
+  if(!swapped){
+    // First token: retire the core, then let the text take its place, so the
+    // hand-off from thinking to answering is a crossfade instead of a snap.
+    // The delayed render is abandoned if any later chunk — or the final render
+    // in onsubmit — has already put newer text in the bubble.
+    swapped=true;chunks=0;
+    const th=streamBubble.querySelector('.think');
+    if(th){th.classList.add('out');setTimeout(()=>th.remove(),240);}
+    clearTimeout(streamBubble._t);
+    streamBubble._t=setTimeout(()=>{
+      if(!streamBubble||rid!==reqId||chunks>0)return;
+      renderMd(streamBubble,shown);log.scrollTop=log.scrollHeight;
+    },th?230:0);
+    return;
+  }
+  chunks++;
+  renderMd(streamBubble,shown);
+  log.scrollTop=log.scrollHeight;
+});
+
+box.addEventListener('input',()=>{box.style.height='auto';box.style.height=Math.min(box.scrollHeight,160)+'px';});
+box.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}
+});
+form.onsubmit=async e=>{
+  e.preventDefault();
+  const text=box.value.trim(),selected=attachments.slice();
+  if((!text&&!selected.length)||busy)return;
+  const st=await window.dexerion.invoke('dex:ai-status').catch(()=>({hasKey:false}));
+  if(!st.hasKey){
+    if(keyCardEl)keyCardEl.hidden=false;
+    if(keyMsgEl){keyMsgEl.textContent='Connect your '+((st.providerLabel)||'AI provider')+' key above to start chatting.';keyMsgEl.className='err';}
+    return;
+  }
+  history.push({role:'user',text,images:selected.map(image=>({name:image.name,url:image.url}))});
+  addMsg('me',text,selected);
+  box.value='';box.style.height='auto';clearAttachments();
+  busy=true;sendBtn.disabled=true;setSend('busy');
+  streamBubble=addBot('');
+  const thinking=document.createElement('span');thinking.className='think';
+  thinking.innerHTML='<span class="core"><i></i><i></i></span><span class="ln"><span></span><span></span></span>';
+  streamBubble.appendChild(thinking);
+  swapped=false;
+  reqId='ai'+Date.now()+Math.floor(Math.random()*1e5);
+  const sentAt=Date.now();
+  const r=await window.dexerion.invoke('dex:ai-send',{reqId, messages:history.slice(-20)}).catch(err=>({ok:false,error:err.message}));
+  busy=false;sendBtn.disabled=false;setSend('idle');
+  clearTimeout(streamBubble&&streamBubble._t);
+  if(r&&r.ok&&!r.cancelled){
+    const text2=r.text||'';
+    renderMd(streamBubble,text2);
+    if(r.artifact&&window.DexArtifacts&&streamBubble.parentNode){
+      window.DexArtifacts.render(streamBubble.parentNode,r.artifact,{
+        onLink:aiLink,
+        onToast:()=>{},
+        onGradeShort:(payload)=>window.dexerion.invoke('dex:ai-grade-short',payload),
+      });
+    }
+    history.push({role:'model',text:text2});
+    if(r.model&&[...modelSel.options].some(option=>option.value===r.model))modelSel.value=r.model;
+    setMeta(streamBubble,(r&&r.model)||st.model,Date.now()-sentAt);
+  }else if(!(r&&r.cancelled)){
+    renderMd(streamBubble,'⚠ '+((r&&r.error)||'Could not reach the provider.'));
+  }
+  streamBubble=null;reqId=null;
+  log.scrollTop=log.scrollHeight;
+};
+
+document.getElementById('ai-new').onclick=()=>{history=[];clearAttachments();log.innerHTML='';addBot('Fresh chat — what do you need?');box.focus();};
+document.getElementById('ai-back').onclick=leaveAI;
+
+
+</script></body></html>
+
+<script>
+/* ---------- daylight: the clock, the date, the day's sentence ----------
+   The quote is fixed for the whole local day — the same sentence at breakfast
+   and at midnight — and advances by one at local midnight, so it is a constant
+   to work next to rather than a slot machine. The index is derived from the
+   calendar date alone (Date.UTC), never from the clock time or a random seed,
+   which is what makes it stable across reloads and time zones. */
+(function daylight(){
+  const sky = document.getElementById('sky');
+  const clockEl = document.getElementById('clock');
+  const dateEl = document.getElementById('date');
+  const quoteEl = document.getElementById('quote');
+  const authorEl = document.getElementById('author');
+  const QUOTES = window.DEX_QUOTES || [];
+
+  // Where the sun would be. Four phases, deliberately coarse: a start page does
+  // not need to know the minute the light changed, only the room it is in.
+  const phaseFor = (h) => (h < 5 ? 'night' : h < 8 ? 'dawn' : h < 17 ? 'day' : h < 21 ? 'dusk' : 'night');
+  const dayNumber = (d) => Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+
+  let phase = null;
+  let quoteDay = null;
+
+  function paintPhase(h) {
+    const want = phaseFor(h);
+    if (want === phase) return;
+    if (phase === null) { sky.dataset.phase = want; }
+    else {
+      // Crossfade instead of swapping the gradient: a background image cannot be
+      // interpolated, so the layer fades out, changes, and fades back.
+      sky.classList.add('phasing');
+      setTimeout(() => { sky.dataset.phase = want; sky.classList.remove('phasing'); }, 900);
+    }
+    phase = want;
+  }
+
+  function paintQuote(day) {
+    if (!QUOTES.length || day === quoteDay) return;
+    quoteDay = day;
+    const q = QUOTES[((day % QUOTES.length) + QUOTES.length) % QUOTES.length];
+    quoteEl.textContent = '“' + q.t + '”';
+    authorEl.textContent = q.a;
+  }
+
+  function tick() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    dateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    paintPhase(now.getHours());
+    // Re-checked on every tick, so a machine that sleeps through midnight still
+    // finds the new day's quote when it wakes.
+    paintQuote(dayNumber(now));
+  }
+
+  tick();
+  setInterval(tick, 15000);
+})();
+</script>

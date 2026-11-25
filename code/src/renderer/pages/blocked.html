@@ -1,0 +1,149 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Blocked — Dexerion</title>
+<link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<style>
+/* Blocked page: quiet, deliberate, unmistakably Dexerion. A single lock mark,
+   the host that was refused, and the session that refused it. No red alarm —
+   this is a boundary working as configured, not an error. */
+body { display: grid; place-items: center; min-height: 100vh; padding: 40px 24px; }
+.wrap { width: min(560px, 94vw); text-align: center; animation: dx-rise .4s var(--ease) both; }
+.crest {
+  width: 72px; height: 72px; margin: 0 auto 22px; border-radius: 20px; display: grid; place-items: center;
+  background: linear-gradient(160deg, var(--pcard-2), var(--pcard));
+  border: 1px solid var(--pborder-2); color: var(--accent);
+  box-shadow: 0 18px 44px -20px rgba(0, 0, 0, .6), inset 0 1px 0 var(--phl);
+}
+[data-theme="light"] .crest { box-shadow: 0 14px 30px -18px rgba(20, 20, 30, .3), inset 0 1px 0 #fff; }
+h1 { font-family: var(--font-display); font-size: 24px; letter-spacing: -.01em; margin: 0 0 10px; }
+.host { font-family: var(--font-mono); font-size: 14px; color: var(--accent); word-break: break-all; margin-bottom: 14px; }
+.lede { color: var(--pmuted); font-size: 13.5px; line-height: 1.7; margin: 0 auto 8px; max-width: 46ch; }
+.session { color: var(--pfg-2); font-size: 13px; margin-top: 6px; }
+.session b { font-weight: 600; }
+.countdown {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; padding: 8px 15px;
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--pfg-2);
+  background: var(--pfield); border: 1px solid var(--pborder); border-radius: var(--r-pill);
+}
+.countdown .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.actions { display: flex; gap: 10px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
+.allowed { margin-top: 30px; border-top: 1px solid var(--pborder); padding-top: 18px; }
+.allowed h2 { font-family: var(--font-display); font-size: 10.5px; font-weight: 600; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--pmuted); margin: 0 0 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chip { font-family: var(--font-mono); font-size: 12px; color: var(--pfg-2); cursor: pointer;
+  background: var(--pfield); border: 1px solid var(--pborder); border-radius: var(--r-pill); padding: 7px 14px;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.chip:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); transform: translateY(-1px); }
+.none { color: var(--pfaint); font-size: 12.5px; }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="crest">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/>
+    </svg>
+  </div>
+  <h1 id="title">This site isn’t allowed right now</h1>
+  <div class="host" id="host"></div>
+  <p class="lede" id="lede"><b>Focus</b> is active, so Dexerion is blocking sites outside this mode’s list.</p>
+  <p class="session" id="session"></p>
+  <div class="countdown" id="count"><span class="dot"></span><span id="count-tx">—</span></div>
+  <div class="actions">
+    <button class="btn" id="back">Go back</button>
+    <button class="btn" id="open-site" hidden>Open site</button>
+    <button class="btn primary" id="schedule">Modes</button>
+  </div>
+  <div class="allowed" id="allowed-wrap">
+    <h2 id="list-head">Sites in this mode</h2>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+<script src="dexerion://assets/page-theme.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const q = new URLSearchParams(location.search);
+  const url = q.get('url') || '';
+  const host = q.get('host') || '';
+  const mode = q.get('mode') || '';
+  const policy = q.get('policy') === 'block' ? 'block' : 'allow';
+  const tone = q.get('tone') || '';
+  const until = Number(q.get('until')) || 0;
+  const allow = (q.get('allow') || '').split(',').map(s => s.trim()).filter(Boolean);
+
+  $('#host').textContent = host || url || 'Blocked site';
+  $('#session').innerHTML = mode ? ('Mode: <b>' + mode.replace(/[<>&]/g, '') + '</b> · ' + (policy === 'block' ? 'block list' : 'allow list')) : '';
+  if (tone === 'work') {
+    document.title = 'Get back to work — Dexerion';
+    $('#title').textContent = 'Get back to work';
+    $('#lede').textContent = 'This site is blocked while your work session runs. It opens again on your break.';
+    $('#schedule').hidden = true;
+    $('#allowed-wrap').hidden = true;
+  }
+  if (policy === 'block') {
+    document.title = 'Blocked — Dexerion';
+    $('#title').textContent = 'This site is on your block list';
+    $('#lede').innerHTML = '<b>Focus</b> is active and this site is blocked by the current mode.';
+    $('#list-head').textContent = 'Blocked in this mode';
+  }
+
+  // Allowed sites become one-tap destinations — the goal is to steer, not scold.
+  const chips = $('#chips');
+  if (!allow.length) {
+    const n = document.createElement('span');
+    n.className = 'none';
+    n.textContent = 'No sites are listed for this mode.';
+    chips.appendChild(n);
+  }
+  allow.forEach((d) => {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.textContent = d;
+    c.onclick = () => navigate('https://' + d);
+    chips.appendChild(c);
+  });
+
+  async function navigate(u) {
+    try { await window.dexerion.invoke('dex:navigate', null, u); } catch {}
+  }
+  $('#back').onclick = async () => { try { await window.dexerion.invoke('dex:nav', null, 'back'); } catch {} };
+  $('#schedule').onclick = () => navigate('dexerion://settings');
+  $('#open-site').onclick = () => navigate(url);
+
+  // If the block no longer applies (no work phase running, or this host is
+  // unblocked now), return to the site automatically.
+  async function maybeRestore() {
+    if (!url) return;
+    try {
+      const s = await window.dexerion.invoke('dex:pomo-state');
+      const working = Boolean(s && s.phase === 'work');
+      if (!working) { navigate(url); return; }
+      const host = new URL(url).hostname.toLowerCase();
+      if (!(s.blocklist || []).some(d => host === d || host.endsWith('.' + d))) navigate(url);
+    } catch {}
+  }
+  window.dexerion.on('dex:pomodoro', maybeRestore);
+  setTimeout(maybeRestore, 400);
+
+  function tick() {
+    const left = until - Date.now();
+    if (!until) { $('#count').hidden = true; return; }
+    if (left <= 0) {
+      $('#count-tx').textContent = 'Session ended';
+      const b = $('#open-site'); b.hidden = false; b.classList.add('primary');
+      $('#back').hidden = true;
+      return false;
+    }
+    const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+    const tx = m > 99 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + ':' + String(s).padStart(2, '0');
+    $('#count-tx').textContent = (tone === 'work' ? 'Back in ' : 'Focus ends in ') + tx;
+    return true;
+  }
+  tick();
+  // Clear the countdown once it expires: the old code kept a 1Hz interval
+  // alive for the page lifetime even after the session had ended.
+  if (until) {
+    const iv = setInterval(() => { if (tick() === false) clearInterval(iv); }, 1000);
+  }
+})();
+</script>
+</body></html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dexerion</title>
+<link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="../../assets/ai-artifacts.css">
+</head>
+<body>
+<div id="tabstrip"><div id="tabs"><button id="newtab-btn" title="New tab (Ctrl+T)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
+<div id="rail-timer" aria-label="Focus timer">
+  <div class="rt-phase" id="rt-phase">Ready</div>
+  <div class="rt-time" id="rt-time">25:00</div>
+  <div class="rt-bar"><i id="rt-fill"></i></div>
+  <div class="rt-btns"><button id="rt-toggle" title="Start / pause">▶</button><button id="rt-skip" title="Skip to next phase">⏭</button><button id="rt-reset" title="Reset timer">↺</button></div>
+  <div class="rt-grid">
+    <label>Work<input id="rt-work" type="number" min="1" max="180" value="25"></label>
+    <label>Break<input id="rt-break" type="number" min="1" max="60" value="5"></label>
+  </div>
+  <label class="rt-row">Sound<select id="rt-sound"><option value="drizzlo">Drizzlo</option><option value="cuphaze">Cuphaze</option><option value="nodland">Nodland</option><option value="glidelo">Glidelo</option><option value="white">White noise</option><option value="rain">Rain</option><option value="brown">Deep hum</option><option value="pad">Ambient pad</option><option value="off">Silent</option></select></label>
+  <label class="rt-row">Volume<input id="rt-vol" type="range" min="0" max="100" value="45"></label>
+  <div class="rt-blockhead">Blocked during work</div>
+  <div class="rt-row"><input id="rt-site" placeholder="e.g. youtube.com" autocomplete="off" spellcheck="false"><button id="rt-site-add" title="Block site">＋</button></div>
+  <div id="rt-sites"></div>
+  <div id="rail-mini" aria-label="Focus timer (collapsed)">
+    <button id="rm-start" title="Start the pomodoro timer" aria-label="Start the pomodoro timer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M9.5 2.5h5"/></svg></button>
+    <div id="rm-run" hidden>
+      <div id="rm-time" title="Time remaining">25:00</div>
+      <button id="rm-toggle" title="Start / pause">▶</button>
+      <button id="rm-skip" title="Skip to next phase">⏭</button>
+      <button id="rm-reset" title="Reset timer">↺</button>
+      <button id="rm-sound" title="Sound on / off">♪</button>
+    </div>
+  </div>
+</div>
+<div id="rail-tasks" aria-label="Tasks">
+  <div id="tasks-mini">
+    <button id="tm-open" title="Tasks" aria-label="Open tasks"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 5 1 1 2-2M3.5 11l1 1 2-2M3.5 17l1 1 2-2"/></svg><span id="tm-count" hidden></span></button>
+  </div>
+  <div id="tasks-body">
+    <div class="tk-head"><span class="tk-title">Tasks</span><span id="tk-count"></span><button id="tk-add-toggle" title="Add task" aria-label="Add task">＋</button><button id="tk-expand" title="Show all tasks" aria-label="Show all tasks">⋯</button></div>
+    <div id="tk-peek"></div>
+    <div id="tasks-full" hidden>
+      <form id="tk-form" autocomplete="off">
+        <input id="tk-title" placeholder="New task…" maxlength="200" aria-label="Task title">
+        <input id="tk-date" type="date" aria-label="Due date (required)">
+        <input id="tk-time" type="time" aria-label="Due time (optional)">
+        <select id="tk-pri" aria-label="Priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select>
+        <textarea id="tk-notes" placeholder="Description (optional)" maxlength="2000" rows="1" title="Enter adds the task · Shift+Enter for a new line" aria-label="Task description"></textarea>
+        <div class="tk-err" id="tk-err" hidden></div>
+        <button id="tk-add" type="submit">Add task</button>
+      </form>
+      <div id="tk-list"></div>
+      <button id="tk-clear-done" type="button">Clear completed</button>
+    </div>
+  </div>
+</div>
+</div>
+<div id="mid">
+<div id="toolbar">
+  <button data-nav="back" aria-label="Go back" aria-haspopup="false" class="dx-focus-ring"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button data-nav="forward" aria-label="Go forward" aria-haspopup="false" class="dx-focus-ring"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  <button data-nav="reload" aria-label="Reload page" aria-haspopup="false" class="dx-focus-ring"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-1.6 6"/><path d="M20 4v7h-7"/></svg></button>
+  <div id="lock" aria-label="Connection status" role="status" aria-live="polite"></div>
+  <div id="omni-wrap">
+    <input id="omnibox" spellcheck="false" autocomplete="off" placeholder="Search Dexerion or type a URL" aria-label="Search Dexerion or type a URL" class="dx-focus-ring">
+  </div>
+  <button id="bookmark-btn" title="Bookmark this page" aria-label="Bookmark this page" aria-pressed="false" class="dx-focus-ring"></button>
+  <div id="extbar"></div>
+  <button id="ai-btn" title="Dexerion AI sidebar" aria-label="Open Dexerion AI sidebar" aria-haspopup="dialog" aria-expanded="false" class="dx-focus-ring"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg></button>
+  <button id="account-btn" title="Dexerion account" aria-label="Dexerion account" aria-haspopup="dialog" aria-expanded="false" class="dx-focus-ring"><span id="account-av">D</span></button>
+  <button id="snip-btn" title="Screenshot / record (Ctrl+Shift+S)" aria-label="Screenshot or record screen" aria-haspopup="dialog" aria-expanded="false" class="dx-focus-ring"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6.5" r="2.6"/><circle cx="6" cy="17.5" r="2.6"/><path d="M8.2 8.1 20 18M20 6 8.2 15.9"/></svg></button>
+  <button id="menu-btn" title="Menu" aria-label="Open menu" aria-haspopup="menu" aria-expanded="false" class="dx-focus-ring"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+</div>
+<div id="loginbar" hidden><span id="loginbar-tx"></span><button id="loginbar-save">Save password</button><button id="loginbar-x" title="Dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div id="membar" hidden><span id="membar-tx"></span><button id="membar-allow">Allow</button><button id="membar-close">Close tab</button></div>
+<div id="bookmarkbar"></div>
+<aside id="ai-sidebar" aria-label="Dexerion AI" data-ai-layout="a" hidden>
+  <div class="ai-resize" id="ai-resize" role="separator" aria-orientation="vertical" aria-label="Resize Dexerion AI" tabindex="0" title="Drag to resize · arrow keys"></div>
+  <div class="ai-wash" aria-hidden="true"></div>
+  <div class="ai-shell">
+  <header class="ai-taskbar">
+    <span class="ai-taskbar-title" id="ai-taskbar-title">New chat</span>
+    <button type="button" class="ai-taskbar-new" id="ai-new" title="New chat" aria-label="New chat"><i data-lucide="square-pen"></i></button>
+    <button type="button" class="ai-taskbar-new" id="ai-history" title="History" aria-label="Open chat history"><i data-lucide="history"></i></button>
+    <span class="ai-taskbar-status" id="ai-taskbar-status" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+    <div class="ai-taskbar-actions">
+      <button type="button" class="ai-taskbar-new ai-cap-toggle" id="ai-agent-toggle" title="Agent mode: off" aria-label="Turn on agent mode" aria-pressed="false"><i data-lucide="zap"></i></button>
+      <button type="button" class="ai-taskbar-new ai-cap-toggle" id="ai-vision-toggle" title="Vision: off" aria-label="Turn on vision" aria-pressed="false"><i data-lucide="eye"></i></button>
+      <button type="button" class="ai-taskbar-new ai-more-btn" id="ai-more" title="More assistant tools" aria-label="More assistant tools" aria-haspopup="menu" aria-expanded="false" aria-controls="ai-more-menu"><span aria-hidden="true">⋯</span></button>
+      <div class="ai-overflow-menu" id="ai-more-menu" hidden role="menu" aria-label="Assistant tools">
+        <div class="ai-overflow-status" id="ai-status-badge" hidden></div>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="msg-search">Search conversation</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="recipes">Recipes</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="memory">Memory</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="missions">Missions</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="projects">Projects</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="skill-log">Skill log</button>
+        <button type="button" class="ai-overflow-item" role="menuitem" data-sheet="settings">Settings</button>
+      </div>
+    </div>
+  </header>
+  <div class="ai-keywarn" id="ai-keywarn" hidden>
+    <span id="ai-keywarn-text">No API key set.</span>
+    <button class="ai-link-btn" id="ai-keywarn-action" type="button">Add one</button>
+  </div>
+  <main class="ai-thread" id="ai-messages" role="log" aria-live="polite" aria-label="Conversation">
+    <div class="ai-empty" id="ai-empty">
+      <div class="ai-empty-mark">D<img class="ai-logo-img" src="../../assets/logo.png" alt=""></div>
+      <h1 class="ai-empty-title">How can I help?</h1>
+      <div class="ai-suggestions" id="ai-suggest"></div>
+    </div>
+  </main>
+  <div class="ai-panel" id="ai-chat-sheet" hidden aria-label="Chat history">
+    <header class="ai-panel-head"><h2>History</h2>
+      <input id="ai-search" class="ai-search" type="search" placeholder="Search chats" autocomplete="off">
+      <button class="ai-clear-all" id="ai-chats-clear-all" type="button" title="Delete all chats">Clear all</button>
+      <button class="ai-icon-btn" id="ai-chats-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-chat-list" class="ai-chat-list"></div></div>
+  </div>
+
+  <!-- Conversation search (within current chat) -->
+  <div class="ai-panel" id="ai-msg-search-sheet" hidden aria-label="Search conversation">
+    <header class="ai-panel-head">
+      <button class="ai-icon-btn" id="ai-msg-search-back" title="Back to chat" aria-label="Back to chat"><i data-lucide="arrow-left"></i></button>
+      <h2>Search conversation</h2>
+      <input id="ai-msg-search-input" class="ai-search" type="search" placeholder="Search messages" autocomplete="off">
+      <button class="ai-icon-btn" id="ai-msg-search-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-msg-search-results" class="ai-msg-search-results"></div></div>
+    <div class="ai-panel-foot ai-panel-foot-compact">
+      <button class="ai-icon-btn" id="ai-msg-search-jump-bottom" title="Jump to bottom" aria-label="Jump to bottom"><i data-lucide="chevron-down"></i></button>
+      <button class="ai-icon-btn" id="ai-msg-search-jump-top" title="Jump to top" aria-label="Jump to top"><i data-lucide="chevron-up"></i></button>
+    </div>
+  </div>
+  <div class="ai-panel" id="ai-recipe-sheet" hidden aria-label="Recipes">
+    <header class="ai-panel-head"><h2>Recipes</h2>
+      <button class="ai-icon-btn" id="ai-recipes-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-recipe-list"></div></div>
+  </div>
+  <div class="ai-panel" id="ai-memory-sheet" hidden aria-label="Memory">
+    <header class="ai-panel-head"><h2>Memory</h2>
+      <button class="ai-icon-btn" id="ai-memory-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-memory"><span class="ai-zen-memnote">Remembered across every chat in this account — learned automatically, or type “remember …” to add more.</span><div id="ai-memory-list"></div><div class="ai-setup-row"><button id="ai-memory-clear" type="button">Forget everything</button></div></div></div>
+  </div>
+  <div class="ai-panel" id="ai-mission-sheet" hidden aria-label="Missions">
+    <header class="ai-panel-head"><h2>Missions</h2>
+      <button class="ai-clear-all" id="ai-missions-clear" type="button" title="Delete finished missions">Clear finished</button>
+      <button class="ai-icon-btn" id="ai-missions-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-mission-list"></div></div>
+  </div>
+  <div class="ai-panel" id="ai-skill-log-sheet" hidden aria-label="Skill log">
+    <header class="ai-panel-head"><h2>Skill log</h2>
+      <button class="ai-icon-btn" id="ai-skill-log-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-skill-log-list"></div></div>
+  </div>
+  <div class="ai-panel" id="ai-project-sheet" hidden aria-label="Research projects">
+    <header class="ai-panel-head"><h2>Projects</h2>
+      <button class="ai-icon-btn" id="ai-projects-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body"><div id="ai-project-list"></div></div>
+  </div>
+  <div class="ai-panel" id="ai-settings-sheet" hidden aria-label="Assistant settings">
+    <header class="ai-panel-head"><h2>Settings</h2>
+      <button class="ai-icon-btn" id="ai-settings-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-panel-body">
+      <div class="ai-group">
+        <div class="ai-eyebrow">Page access</div>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-use-page"><span class="ai-switch-track"></span><span>Let Dexerion AI see the current page</span></label>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-use-selection"><span class="ai-switch-track"></span><span>Prefer highlighted text when there is any</span></label>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-full-page"><span class="ai-switch-track"></span><span>Send all the page text as context</span></label>
+        <p class="ai-hint-p">Off, only the main article is sent. On, everything the page renders is sent — more complete, more tokens, more noise.</p>
+        <label class="ai-label" for="ai-set-context-chars">Page text limit</label>
+        <select class="ai-select" id="ai-set-context-chars">
+          <option value="4000">4,000 characters (~1k tokens)</option>
+          <option value="8000">8,000 characters (~2k tokens)</option>
+          <option value="12000">12,000 characters (~3k tokens)</option>
+          <option value="24000">24,000 characters (~6k tokens)</option>
+          <option value="60000">60,000 characters (~15k tokens)</option>
+        </select>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-site"><span class="ai-switch-track"></span><span>Use AI on <b id="ai-set-site-host">this site</b></span></label>
+        <p class="ai-hint-p">Off, Dexerion AI will not read or act on this site until you turn it back on.</p>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-group">
+        <div class="ai-eyebrow">Acting on pages</div>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-agent"><span class="ai-switch-track"></span><span>Let Dexerion AI act on the current page</span></label>
+        <p class="ai-hint-p">Stop any run with Esc, the Stop button, or by closing this panel. Anything consequential always asks first, every time.</p>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-allowlist"><span class="ai-switch-track"></span><span>Only on sites I list below</span></label>
+        <label class="ai-label" for="ai-set-sites">Allowed sites</label>
+        <textarea class="ai-input ai-mono" id="ai-set-sites" rows="3" placeholder="github.com&#10;wikipedia.org" spellcheck="false"></textarea>
+        <label class="ai-label" for="ai-set-steps">Step limit per run</label>
+        <select class="ai-select" id="ai-set-steps">
+          <option value="10">10 steps</option>
+          <option value="25">25 steps</option>
+          <option value="50">50 steps</option>
+          <option value="100">100 steps</option>
+        </select>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-crosstab"><span class="ai-switch-track"></span><span>Let tasks read other open tabs (needed for research)</span></label>
+        <p class="ai-hint-p">Off, a run only sees and reads its own tab. On, list_tabs/search_tabs/read_tab work across every open tab; your allowed-sites list still gates where it reads and acts.</p>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-planfirst"><span class="ai-switch-track"></span><span>Show me the plan before a task starts</span></label>
+        <p class="ai-hint-p">On, a task presents its plan and waits for your approval before it touches a page. Off, it works straight through and the plan is visible in the step trace.</p>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-macros"><span class="ai-switch-track"></span><span>Offer to save finished runs as recipes</span></label>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-group">
+        <div class="ai-eyebrow">More capabilities</div>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-websites"><span class="ai-switch-track"></span><span>Let Dexerion AI open websites in new tabs</span></label>
+        <p class="ai-hint-p">The AI asks before using this the first time. “Turn on” is enough — it stays on until you switch it off here.</p>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-documents"><span class="ai-switch-track"></span><span>Let Dexerion AI edit reports and websites it made</span></label>
+        <p class="ai-hint-p">Edits always land as a new version, never over the original. The lightning and eye buttons on the task bar control agent mode and vision.</p>
+      </div>
+      <hr class="ai-divider">
+      <div class="ai-group">
+        <div class="ai-eyebrow">Display</div>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-usage"><span class="ai-switch-track"></span><span>Show token usage</span></label>
+        <label class="ai-switch"><input type="checkbox" id="ai-set-save-chats"><span class="ai-switch-track"></span><span>Save conversations on this device</span></label>
+        <p class="ai-hint-p">Off, conversations exist only for this window's session and are not written to the profile.</p>
+        <label class="ai-label" for="ai-route-policy">Model routing</label>
+        <select class="ai-select" id="ai-route-policy">
+          <option value="balanced">Balanced — best fit per task</option>
+          <option value="quality">Quality first</option>
+          <option value="cost">Cost first</option>
+          <option value="off">Off — always use the selected model</option>
+        </select>
+        <p class="ai-hint-p">Every task — chat, code, research, websites, quizzes — is routed by transparent rules to a model NIM actually offers. Your picker choice stays the default for ordinary conversation.</p>
+        <div class="ai-setup-row"><button id="ai-setup-open" type="button">NIM key &amp; models…</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="ai-panel ai-report-panel" id="ai-report-sheet" hidden aria-label="Report">
+    <header class="ai-panel-head">
+      <button class="ai-icon-btn" id="ai-report-back" title="Back to chat" aria-label="Back to chat"><i data-lucide="arrow-left"></i></button>
+      <h2 id="ai-report-title">Report</h2>
+      <span class="ai-report-vers">
+        <button class="ai-icon-btn" id="ai-report-prev" title="Previous version" aria-label="Previous version"><i data-lucide="chevron-left"></i></button>
+        <span id="ai-report-version">v1</span>
+        <button class="ai-icon-btn" id="ai-report-next" title="Next version" aria-label="Next version"><i data-lucide="chevron-right"></i></button>
+      </span>
+      <button class="ai-icon-btn" id="ai-report-tab" title="Open in a new tab" aria-label="Open in a new tab"><i data-lucide="external-link"></i></button>
+      <button class="ai-icon-btn" id="ai-report-download" title="Download" aria-label="Download"><i data-lucide="download"></i></button>
+      <button class="ai-icon-btn" id="ai-report-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
+    <div class="ai-report-menu" id="ai-report-menu" hidden role="menu" aria-label="Download format"></div>
+    <div class="ai-report-tools" id="ai-report-tools">
+      <label class="ai-label" for="ai-report-theme">Design</label>
+      <select class="ai-select" id="ai-report-theme">
+        <option value="clean">Clean</option><option value="editorial">Editorial</option><option value="brief">Brief</option>
+        <option value="modern">Modern</option><option value="magazine">Magazine</option><option value="academic">Academic</option><option value="notebook">Notebook</option>
+      </select>
+      <span class="ai-report-swatches" id="ai-report-papers" role="radiogroup" aria-label="Paper colour"></span>
+      <label class="ai-label" for="ai-report-pattern">Pattern</label>
+      <select class="ai-select" id="ai-report-pattern">
+        <option value="solid">Solid</option><option value="hatch">Hatched</option><option value="diagonal">Diagonal</option>
+      </select>
+      <label class="ai-label" for="ai-report-font">Type</label>
+      <select class="ai-select" id="ai-report-font">
+        <option value="neutral">Neutral</option><option value="editorial">Editorial</option><option value="typewriter">Typewriter</option>
+      </select>
+    </div>
+    <div class="ai-panel-body ai-report-scroll">
+      <button class="ai-report-comment" id="ai-report-comment" type="button" hidden>Comment</button>
+      <div id="ai-report-body" class="ai-report-doc"></div>
+      <div id="ai-report-preview" class="ai-report-preview" hidden></div>
+      <form class="ai-report-revise" id="ai-report-revise-form">
+        <input id="ai-report-revise" class="ai-input" placeholder="Ask for a change — answered as a new version" autocomplete="off" spellcheck="true">
+        <button class="ai-btn" type="submit">Revise</button>
+      </form>
+    </div>
+  </div>
+  <div id="ai-setup" class="ai-setup" hidden>
+    <div id="ai-step-key"><b>Step 1 of 2 — get a key</b>
+      <div class="ai-setup-row"><select class="ai-select" id="ai-provider" aria-label="AI provider"><option value="nim">NVIDIA NIM</option></select></div>
+      <span id="ai-key-help">Get one from NVIDIA (free, ~1 minute):<br>1. Open build.nvidia.com and sign in.<br>2. Open your API keys and generate a key.<br>3. Copy the key and paste it below.</span>
+      <div class="ai-setup-row"><button id="ai-key-open" type="button">Open build.nvidia.com</button></div>
+      <div class="ai-setup-row"><input id="ai-key" type="password" placeholder="Paste nvapi-… key here" autocomplete="off"><button id="ai-key-save" type="button">Connect</button></div>
+      <small id="ai-key-message"></small>
+    </div>
+    <div id="ai-step-model" hidden><b>Step 2 of 2 — you're set</b><span id="ai-setup-model-sub">Connected. Start chatting — the lightning and eye buttons turn acting and vision on when you need them.</span><div class="ai-setup-row"><button id="ai-setup-done" type="button">Start chatting</button></div></div>
+  </div>
+  <div class="ai-composer-wrap">
+    <div class="ai-preset-chip" id="ai-preset-chip" hidden><i data-lucide="file-text"></i><span id="ai-preset-name"></span><button type="button" id="ai-preset-clear" title="Remove preset" aria-label="Remove preset">×</button></div>
+    <div class="ai-runbar" id="ai-runbar" hidden>
+      <span class="ai-runbar-pulse" aria-hidden="true"></span>
+      <span class="ai-runbar-text" id="ai-runbar-label">Working…</span>
+      <span class="ai-runbar-steps" id="ai-runbar-steps"></span>
+      <button type="button" class="ai-runbar-pause" id="ai-runbar-pause">Pause</button>
+      <button type="button" class="ai-runbar-stop" id="ai-runbar-stop">Stop <kbd>Esc</kbd></button>
+    </div>
+    <div class="ai-ask" id="ai-ask" hidden role="alertdialog" aria-labelledby="ai-ask-what">
+      <div class="ai-ask-head"><i data-lucide="alert-triangle"></i><span>Dexerion AI is asking permission</span></div>
+      <p class="ai-ask-what" id="ai-ask-what"></p>
+      <p class="ai-ask-why" id="ai-ask-why"></p>
+      <p class="ai-ask-desc" id="ai-ask-desc"></p>
+      <input type="text" class="ai-input ai-ask-text" id="ai-ask-text" hidden autocomplete="off">
+      <div class="ai-ask-actions">
+        <button type="button" class="ai-ask-no" id="ai-ask-no">Don't</button>
+        <button type="button" class="ai-ask-always" id="ai-ask-always" hidden>Always in this chat</button>
+        <button type="button" class="ai-ask-yes" id="ai-ask-yes">Allow once</button>
+      </div>
+    </div>
+    <div class="ai-context-strip" id="ai-agent-strip" hidden>
+      <span class="ai-ctx-icon"><i data-lucide="zap"></i></span>
+      <span class="ai-ctx-text" id="ai-agent-label">Acting on this page — say “stop acting” or press Esc</span>
+    </div>
+    <div class="ai-context-strip" id="ai-page-strip" hidden>
+      <span class="ai-ctx-icon"><i data-lucide="eye"></i></span>
+      <span class="ai-ctx-text" id="ai-page-label">Reading this page — say “stop using this page” to switch it off</span>
+    </div>
+    <div id="ai-pending" class="ai-pending" hidden></div>
+    <div class="ai-pop-menu" id="ai-pop-menu" hidden role="listbox" aria-label="Skills and tabs"></div>
+    <form class="ai-composer" id="ai-composer-form">
+      <textarea class="ai-prompt" id="ai-input" rows="1" placeholder="Ask Dexerion AI…" aria-label="Ask Dexerion AI" autocomplete="off" spellcheck="true"></textarea>
+      <div class="ai-composer-status" aria-live="polite"><small class="ai-composer-hint" id="ai-hint"></small></div>
+      <div class="ai-composer-bar">
+        <input id="ai-files" type="file" accept="image/*,application/pdf,text/*,application/json,application/javascript,application/typescript,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+        <button type="button" class="ai-attach-btn" id="ai-attach-btn" title="Attach files (images ≤20MB, PDFs ≤50MB, text/code ≤10MB, max 10)" aria-label="Attach files"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c-1.5 0-2.5-1-2.5-2.5s1-2.5 2.5-2.5l10-10c1.5-1.5 4-1.5 5.5 0s1.5 4 0 5.5l-10 10c-1.5 0-2.5 0-2.5 0z"/><path d="M14 14l4-4"/></svg></button>
+        <label class="ai-model-pick" id="ai-effort-wrap" hidden title="Effort — which NVIDIA Nemotron tier answers (all see images)">
+          <select id="ai-effort-select" aria-label="Effort">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="max">Max</option>
+          </select>
+        </label>
+        <label class="ai-model-pick" id="ai-model-wrap" hidden title="Model used for replies (overrides the effort tier)">
+          <select id="ai-model-select" aria-label="Model"></select>
+        </label>
+        <div class="ai-composer-send">
+          <button type="button" class="ai-send" id="ai-send" title="Send (Esc stops)">↑</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  <span id="ai-account-label" hidden></span>
+
+  <!-- Emoji reaction picker (floats over the message area) -->
+  <div class="ai-emoji-picker" id="ai-emoji-picker" hidden role="menu" aria-label="Add emoji reaction">
+    <div class="ai-emoji-picker-header">
+      <input id="ai-emoji-search" class="ai-search" type="search" placeholder="Search emoji" autocomplete="off">
+      <button class="ai-icon-btn" id="ai-emoji-picker-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="ai-emoji-picker-body">
+      <div id="ai-emoji-list" class="ai-emoji-list"></div>
+    </div>
+  </div>
+
+  <!-- Reply / forward target banner (shown above the composer when targeting a message) -->
+  <div class="ai-reply-target" id="ai-reply-target" hidden>
+    <button class="ai-icon-btn" id="ai-reply-target-clear" title="Remove" aria-label="Remove target"><i data-lucide="x"></i></button>
+    <div class="ai-reply-target-info">
+      <div class="ai-reply-target-kind" id="ai-reply-target-kind">Replying to</div>
+      <div class="ai-reply-target-text" id="ai-reply-target-text"></div>
+    </div>
+  </div>
+
+  <!-- Scroll-to-top / scroll-to-bottom floats -->
+  <button class="ai-scroll-float" id="ai-scroll-bottom" title="Jump to bottom" aria-label="Jump to bottom"><i data-lucide="chevron-down"></i></button>
+  <button class="ai-scroll-float" id="ai-scroll-top" title="Jump to top" aria-label="Jump to top"><i data-lucide="chevron-up"></i></button>
+</aside><div id="ais" hidden aria-label="Search With Dexerion AI">
+  <div class="ais-aura" aria-hidden="true"></div>
+  <div class="ais-top">
+    <div class="ais-brand">
+      <span class="ais-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg></span>
+      <b>Search With Dexerion AI</b>
+    </div>
+    <div class="ais-top-actions">
+      <div class="ais-modes" role="tablist" aria-label="Mode">
+        <button type="button" class="ais-mode on" data-mode="search" role="tab" aria-selected="true">Search</button>
+        <button type="button" class="ais-mode" data-mode="chat" role="tab" aria-selected="false">Chat</button>
+      </div>
+      <button type="button" class="ais-icon" id="ais-new" title="New chat" aria-label="New chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="ais-icon" id="ais-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div class="ais-body">
+    <div class="ais-scroll" id="ais-scroll">
+      <div class="ais-hero" id="ais-hero">
+        <span class="ais-hero-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg></span>
+        <h1>Search With Dexerion AI</h1>
+        <p>Ask anything. Dexerion runs the searches, reads the sources, and answers with citations.</p>
+      </div>
+      <div class="ais-msgs" id="ais-msgs" aria-live="polite"></div>
+    </div>
+    <div class="ais-dock">
+      <div class="ais-status" id="ais-status" hidden>
+        <span id="ais-status-label">Working…</span>
+      </div>
+      <div class="ais-connect" id="ais-connect" hidden>
+        <b id="ais-connect-title">Connect Dexerion AI to search</b>
+        <p id="ais-connect-help">Paste your provider API key. It is stored encrypted on this device.</p>
+        <div class="ais-connect-row">
+          <input id="ais-key" type="password" placeholder="API key" autocomplete="off">
+          <button type="button" id="ais-key-save">Connect</button>
+        </div>
+        <small id="ais-key-msg"></small>
+      </div>
+      <form class="ais-composer" id="ais-form" autocomplete="off">
+        <div class="ais-input-row">
+          <span class="ais-mark sm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg></span>
+          <textarea id="ais-input" rows="1" placeholder="Search With Dexerion AI…" spellcheck="true" autocomplete="off"></textarea>
+          <button type="submit" class="ais-send" id="ais-send" title="Send (Enter)" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="ais-under">
+          <!-- Effort for the search pipeline: ai-search.js wires this group
+               (paintDifficulty/setDifficulty + dex:ai-difficulty-set); the
+               markup had been lost, leaving the surface with no effort control. -->
+          <!-- A radiogroup: ai-search.js sets aria-checked on each option, which
+               only means anything when the options are radios. -->
+          <div class="ais-difficulty" id="ais-difficulty" role="radiogroup" aria-label="Effort">
+            <button type="button" class="ais-diff" data-tier="low" role="radio" aria-checked="false">Low</button>
+            <button type="button" class="ais-diff on" data-tier="medium" role="radio" aria-checked="true">Medium</button>
+            <button type="button" class="ais-diff" data-tier="high" role="radio" aria-checked="false">High</button>
+            <button type="button" class="ais-diff" data-tier="max" role="radio" aria-checked="false">Max</button>
+          </div>
+          <span class="ais-hint" id="ais-hint">Enter to search · Esc to close</span>
+        </div>
+        <div class="ais-suggest" id="ais-suggest" hidden role="listbox" aria-label="Search suggestions"></div>
+      </form>
+    </div>
+  </div>
+</div>
+<div id="store-banner" hidden><span>Chrome Web Store extension detected.</span><button id="store-install">Install in Dexerion</button><button id="store-dismiss" title="Dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<div id="scrim" hidden></div>
+<div id="inspector" hidden>
+  <span class="ins-mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/><path d="m9.5 14.5 5-5M14 9.5h-3.2M14 9.5v3.2"/></svg></span>
+  <span class="ins-title">Inspector</span>
+  <span class="ins-host" id="ins-host"></span>
+  <button id="ins-dock" title="Dock to the right"></button>
+  <button id="ins-close" title="Close inspector (F12)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+<div id="dmenu" hidden>
+  <div class="mgroup">
+    <div class="mlabel">Account</div>
+    <button class="mitem" data-m="accounts"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span><span class="tx" id="dmenu-acc">Account</span><kbd>switch</kbd></button>
+  </div>
+  <div class="mgroup">
+    <div class="mlabel">Tabs &amp; windows</div>
+    <button class="mitem" data-m="new-tab"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="tx">New tab</span><kbd>Ctrl T</kbd></button>
+    <button class="mitem" data-m="new-window"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="12" height="14" rx="2"/><path d="M9 3h10a2 2 0 0 1 2 2v10"/></svg></span><span class="tx">New window</span><kbd>Ctrl N</kbd></button>
+    <button class="mitem" data-m="reopen-tab"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 1.6 6"/><path d="M4 4v6h6"/></svg></span><span class="tx">Reopen closed tab</span><kbd>Ctrl ⇧ T</kbd></button>
+  </div>
+  <div class="mgroup">
+    <div class="mlabel">Library</div>
+    <button class="mitem" data-m="bookmarks"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 9.7l5.4-.8z"/></svg></span><span class="tx">Bookmarks</span></button>
+    <button class="mitem" data-m="history"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.4l3 1.8"/></svg></span><span class="tx">History</span></button>
+    <button class="mitem" data-m="downloads"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 19h14"/></svg></span><span class="tx">Downloads</span></button>
+    <button class="mitem" data-m="extensions"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M10 4.5a2 2 0 1 1 4 0V6h2.5a2 2 0 1 1 0 4H16v3.5a2 2 0 1 1-4 0V13H9.5a2 2 0 1 1 0-4H10z"/></svg></span><span class="tx">Extensions</span></button>
+    <button class="mitem" data-m="settings"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/></svg></span><span class="tx">Settings</span></button>
+  </div>
+  <div class="mfoot"><span class="mdot"></span><span>Dexerion V1</span><span data-m="about" class="about-link">About</span></div>
+</div>
+</div>
+<script src="lofi-player.js"></script>
+<script src="lofi-songs.js"></script>
+<script src="shell.js"></script>
+<script src="../../assets/ai-markdown.js"></script>
+<script src="../../assets/ai-artifacts.js"></script>
+<script src="../../assets/report-export.js"></script>
+<script src="../../assets/vendor/lucide.min.js"></script>
+<script src="ai-sidebar.js"></script>
+<script src="ai-search.js"></script>
+</body>
+</html>
