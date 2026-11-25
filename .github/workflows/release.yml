@@ -1,0 +1,179 @@
+name: Build installers and publish release
+
+# Deliberately manual-only: pushes, tags, and pull requests do not release.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (X.Y.Z, for example 1.2.3; optional leading v)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version and reject existing tags
+        id: version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${REQUESTED_VERSION#v}"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::Version must be X.Y.Z (for example 1.2.3 or v1.2.3).'
+            exit 1
+          fi
+          tag="v$version"
+          # ls-remote errors must fail validation, not look like an unused tag.
+          tags="$(git ls-remote --tags origin "refs/tags/$tag")"
+          if [[ -n "$tags" ]]; then
+            echo "::error::Tag $tag already exists. Choose a new version."
+            exit 1
+          fi
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')"
+          if grep -Fxq "$tag" <<< "$releases"; then
+            echo "::error::Release $tag already exists. Choose a new version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.platform }} (x64)
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            os: windows-latest
+            target: win
+          - platform: Linux
+            os: ubuntu-24.04
+            target: linux
+    defaults:
+      run:
+        shell: bash
+        working-directory: code/build
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      # The repository has no signing credentials. Do not search runner keychains.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2t64 rpm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate CI-only packaging configuration
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
+          const repository = process.env.GITHUB_REPOSITORY;
+          const owner = repository.split('/')[0];
+          // Override the machine-specific output path without editing tracked files.
+          config.directories = { ...config.directories, output: 'dist' };
+          config.extraMetadata = {
+            ...config.extraMetadata,
+            version: process.env.RELEASE_VERSION,
+            homepage: `https://github.com/${repository}`,
+            author: { name: owner, email: `${owner}@users.noreply.github.com` },
+            license: 'UNLICENSED',
+          };
+          config.linux = {
+            target: ['AppImage', 'deb'],
+            artifactName: 'Dexerion-${version}-${arch}.${ext}',
+            icon: '../code/assets/logo.png',
+            category: 'Network',
+            maintainer: `${owner} <${owner}@users.noreply.github.com>`,
+            executableName: 'dexerion',
+            desktop: { entry: { StartupWMClass: 'Dexerion' } },
+          };
+          // Keep the existing Windows NSIS configuration, branding and filename.
+          fs.writeFileSync('electron-builder.ci.json', JSON.stringify(config, null, 2));
+          NODE
+      - name: Build installers
+        run: npx --no-install electron-builder --${{ matrix.target }} --x64 --config electron-builder.ci.json --publish never
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows-x64
+          path: code/build/dist/Main_Exe_Dexerion.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload Linux packages
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux-x64
+          path: |
+            code/build/dist/*.AppImage
+            code/build/dist/*.deb
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify packages and generate checksums
+        working-directory: release-assets
+        shell: bash
+        run: |
+          shopt -s nullglob
+          windows=(*.exe)
+          appimages=(*.AppImage)
+          debs=(*.deb)
+          if (( ${#windows[@]} != 1 || ${#appimages[@]} != 1 || ${#debs[@]} != 1 )); then
+            echo '::error::Expected one Windows installer, one AppImage, and one Debian package.'
+            exit 1
+          fi
+          sha256sum "${windows[@]}" "${appimages[@]}" "${debs[@]}" > SHA256SUMS.txt
+      - name: Create draft and upload all assets before publishing
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --target "$GITHUB_SHA" \
+            --title "Dexerion $RELEASE_TAG" \
+            --generate-notes \
+            --draft
+          gh release edit "$RELEASE_TAG" --draft=false
