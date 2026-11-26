@@ -77,10 +77,11 @@ app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 app.commandLine.appendSwitch('disable-features',
   'TranslateUI,MediaRouter,DialMediaRouteProvider,OptimizationHints,CalculateNativeWinOcclusion');
-// GPU policy: a single Adaptive mode. Launch switches are chosen once from the
-// power/RAM state at boot; the browser adapts render visibility and housekeeping
-// at runtime (src/main/adaptive-power.js). Hardware acceleration is never
-// disabled for a normal launch — games, video and WebGL still get the GPU.
+// GPU policy: Adaptive (default) | 10% cap | Off. Launch switches are chosen
+// once from the persisted mode plus the power/RAM state at boot; the browser
+// adapts render visibility and housekeeping at runtime
+// (src/main/adaptive-power.js). Adaptive never disables hardware acceleration
+// — games, video and WebGL still get the GPU.
 
 // The self-test creates accounts, writes history/bookmarks and calls
 // profile.save(). Running it against the real userData directory meant every
@@ -110,11 +111,21 @@ function onBatteryAtBoot() {
   catch { return false; }
 }
 
+function gpuModeFromSettings() {
+  try {
+    const fs = require('fs');
+    const file = path.join(app.getPath('userData'), 'settings.json');
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    return adaptivePower.normalizeGpuMode(raw.gpuMode);
+  } catch { return adaptivePower.GPU_MODE; }
+}
+
 const gpuArg = process.argv.find((a) => /^--gpu=/.test(String(a)));
 // "--gpu=" is six characters; slice(7) turned "off" into "ff" and silently
 // fell back to the settings default, so an explicit test override never applied.
 const gpuOverride = gpuArg ? String(gpuArg).slice('--gpu='.length) : null;
 const gpuPlan = adaptivePower.startupGpuPlan({
+  mode: gpuModeFromSettings(),
   onBattery: onBatteryAtBoot(),
   freeMemMB: Math.round(require('os').freemem() / 1048576),
   override: gpuOverride,
@@ -122,6 +133,7 @@ const gpuPlan = adaptivePower.startupGpuPlan({
 if (gpuPlan.disableGpu) {
   app.commandLine.appendSwitch('disable-gpu');
 } else {
+  if (gpuPlan.forceLowPowerGpu) app.commandLine.appendSwitch('force-low-power-gpu');
   if (gpuPlan.gpuRasterization) app.commandLine.appendSwitch('enable-gpu-rasterization');
   if (gpuPlan.zeroCopy) app.commandLine.appendSwitch('enable-zero-copy');
   if (gpuPlan.gpuMemoryMB > 0) {

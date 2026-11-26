@@ -5134,6 +5134,26 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     return powerState();
   });
 
+  // Read-only GPU diagnostics: what Chromium actually decided at boot. The
+  // GPU child's command line is NOT a reliable oracle — the browser process
+  // consumes GPU switches and forwards them encoded (--gpu-preferences) — so
+  // the tests read the truth from here instead.
+  ipcMain.handle('dex:gpu-info', (e) => {
+    needChrome(e);
+    let features = {};
+    try { features = app.getGPUFeatureStatus() || {}; } catch {}
+    return {
+      features,
+      switches: {
+        disableGpu: app.commandLine.hasSwitch('disable-gpu'),
+        forceLowPowerGpu: app.commandLine.hasSwitch('force-low-power-gpu'),
+        gpuRasterization: app.commandLine.hasSwitch('enable-gpu-rasterization'),
+        zeroCopy: app.commandLine.hasSwitch('enable-zero-copy'),
+        gpuMemBudgetMB: app.commandLine.getSwitchValue('force-gpu-mem-available-mb') || null,
+      },
+    };
+  });
+
   // extensions
   ipcMain.handle('dex:ext-list', (e) => {
     needChrome(e);

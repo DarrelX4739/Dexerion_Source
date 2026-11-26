@@ -208,12 +208,14 @@ class ProfileStore {
           const raw = readJson(p);
           if (key === 'settings') {
             this.data.settings = { ...DEFAULT_SETTINGS, ...raw };
-            // One-time migration of the old off/balanced/full GPU picker to the
-            // single Adaptive mode. The write is deferred to the end of load()
-            // (after every file has been read) so it can never flush defaults
-            // over a file that has not been read yet.
-            if (adaptivePower.isLegacyGpuMode(this.data.settings.gpuMode)) {
-              this.data.settings.gpuMode = adaptivePower.GPU_MODE;
+            // One-time migration of the old off/balanced/full GPU picker:
+            // 'off' keeps its meaning (legal choice again), balanced/full map
+            // to Adaptive. The write is deferred to the end of load() (after
+            // every file has been read) so it can never flush defaults over a
+            // file that has not been read yet.
+            const migratedGpu = adaptivePower.migrateGpuMode(this.data.settings.gpuMode);
+            if (migratedGpu.changed) {
+              this.data.settings.gpuMode = migratedGpu.value;
               this._migratedGpuMode = true;
             }
           }

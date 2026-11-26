@@ -7,24 +7,52 @@ const budgets = require('../../code/src/main/debloat-budgets');
 let checks = 0;
 const check = (name, fn) => { fn(); checks += 1; console.log('PASS ' + name); };
 
-check('legacy GPU preferences all migrate to the single Adaptive mode', () => {
-  for (const old of [...ap.LEGACY_GPU_MODES, '', null, undefined, 'nonsense', 'adaptive']) {
-    assert.equal(ap.normalizeGpuMode(old), 'adaptive');
+check('the three GPU modes are the only accepted values; legacy values migrate', () => {
+  // Legal persisted values pass through untouched.
+  for (const v of ap.GPU_MODES) {
+    assert.equal(ap.normalizeGpuMode(v), v);
+    assert.deepEqual(ap.migrateGpuMode(v), { value: v, changed: false });
   }
-  assert.equal(ap.isLegacyGpuMode('full'), true);
-  assert.equal(ap.isLegacyGpuMode('adaptive'), false);
+  // Old balanced/full/unknown map to Adaptive (needs a write); legacy 'off'
+  // keeps its meaning (now a legal choice again, no write needed).
+  for (const old of [...ap.LEGACY_GPU_MODES, '', null, undefined, 'nonsense']) {
+    assert.equal(ap.migrateGpuMode(old).value, 'adaptive');
+    assert.equal(ap.migrateGpuMode(old).changed, true);
+  }
+  assert.deepEqual(ap.migrateGpuMode('off'), { value: 'off', changed: false });
 });
 
-check('startup never disables GPU acceleration for a normal launch', () => {
-  const ac = ap.startupGpuPlan({ onBattery: false, freeMemMB: 8192 });
+check('Adaptive never disables GPU acceleration for a normal launch', () => {
+  const ac = ap.startupGpuPlan({ mode: 'adaptive', onBattery: false, freeMemMB: 8192 });
   assert.equal(ac.disableGpu, false);
   assert.equal(ac.gpuRasterization, true);
   assert.equal(ac.gpuMemoryMB, 512);
-  const battery = ap.startupGpuPlan({ onBattery: true, freeMemMB: 8192 });
+  const battery = ap.startupGpuPlan({ mode: 'adaptive', onBattery: true, freeMemMB: 8192 });
   assert.equal(battery.disableGpu, false);
   assert.equal(battery.gpuRasterization, false);
   assert.equal(battery.gpuMemoryMB, 256);
-  assert.equal(ap.startupGpuPlan({ freeMemMB: 512 }).gpuMemoryMB, 256);
+  assert.equal(ap.startupGpuPlan({ mode: 'adaptive', freeMemMB: 512 }).gpuMemoryMB, 256);
+});
+
+check('GPU Off is real software rendering', () => {
+  const off = ap.startupGpuPlan({ mode: 'off', onBattery: false, freeMemMB: 8192 });
+  assert.equal(off.disableGpu, true);
+  assert.equal(off.gpuRasterization, false);
+  assert.equal(off.gpuMemoryMB, 0);
+  assert.equal(off.tier, 'suspended');
+});
+
+check('the 10% cap keeps the GPU minimal but functional', () => {
+  const cap = ap.startupGpuPlan({ mode: 'cap10', onBattery: false, freeMemMB: 8192 });
+  assert.equal(cap.disableGpu, false);          // GPU stays available for video/WebGL
+  assert.equal(cap.gpuRasterization, false);    // raster moves to the CPU
+  assert.equal(cap.forceLowPowerGpu, true);     // integrated GPU preferred where available
+  assert.equal(cap.gpuMemoryMB, ap.CAP10_GPU_MEMORY_MB);
+  assert.ok(cap.gpuMemoryMB < 256);
+  assert.equal(cap.tier, 'minimal');
+  // Battery does not double-penalize the cap tier.
+  const onBattery = ap.startupGpuPlan({ mode: 'cap10', onBattery: true });
+  assert.equal(onBattery.gpuMemoryMB, ap.CAP10_GPU_MEMORY_MB);
 });
 
 check('the software-compositing switch stays a test-only override', () => {

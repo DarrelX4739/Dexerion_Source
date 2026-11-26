@@ -2095,3 +2095,45 @@ All gates green on every version: `verify-all` 22/22 suites, `playwright test` 6
   "Welcome - Dexerion - Dexerion", `Responding: True`, main process ~123 MB.
   Deployed asar verified to contain both changesets
   (`dex:html-fullscreen` + `adaptive-power`/`runtimePlan`).
+
+## GPU mode picker: Adaptive | 10% cap | Off (2026-11-26, evening)
+
+- Same row, same select control: **Adaptive (recommended)** (default),
+  **10% cap**, **Off**. Only the GPU control and its underlying logic
+  changed — no other settings, layout, or features touched.
+- `adaptive-power.js`: `GPU_MODES = ['adaptive','cap10','off']`;
+  `migrateGpuMode` maps legacy `balanced`/`full`/unknown → Adaptive while
+  legacy `off` keeps its meaning (legal choice again, no write);
+  `startupGpuPlan` gains the two modes. `normalizeGpuMode` (used by the
+  settings-save patch validation in browser.js) accepts the three values.
+- **10% cap** honesty note: a literal 10% GPU-utilization cap is driver-level
+  and not enforceable from an app. The tier ships the strongest real
+  Chromium equivalent: `--force-low-power-gpu` (integrated-GPU preference on
+  hybrid systems), no `--enable-gpu-rasterization` (raster on CPU), and
+  `--force-gpu-mem-available-mb=128`. The GPU still answers video/WebGL —
+  software video decode would burn more power, not less. `Off` is true
+  software rendering (`--disable-gpu`).
+- Restart-to-apply semantics unchanged (launch-time switches); the
+  `--gpu=` e2e override still wins over the persisted mode.
+- New read-only diagnostic IPC `dex:gpu-info` (same pattern as
+  `dex:power-state`): reports `app.getGPUFeatureStatus()` plus the effective
+  command-line switches. Needed because the GPU child's command line encodes
+  switches into `--gpu-preferences` — raw flag checks there are meaningless.
+- Live verification (`build/scripts/test-gpu-modes.js`, throwaway profiles,
+  real IPC, ground truth from `dex:gpu-info`) — **ALL CHECKS PASS**:
+  - adaptive: GPU not disabled, zero-copy on, memory budget applied (256 on
+    this boot — conservative tier), persistence round-trip ok.
+  - cap10: `--force-low-power-gpu` applied, 128 MB budget, GPU raster off
+    (CPU raster), GPU still available (video/WebGL keep working),
+    persistence round-trip ok.
+  - off: `--disable-gpu` applied, `gpu_compositing: "disabled_software"`
+    (true software rendering), persistence round-trip ok.
+  - All three modes boot and serve browser state; a seeded mode survives
+    boot unchanged; a mode change via `dex:settings-save` writes through.
+  - Measurement lesson recorded: under `--disable-gpu` Chromium still runs a
+    software GPU process, so `byType.GPU` counts prove nothing — the
+    `dex:gpu-info` feature/switch state is the real oracle.
+- Gates: `test-adaptive-power` 10/10 (new: three-mode mapping, Off plan,
+  cap10 plan incl. battery non-double-penalty); `verify-all` 75 files OK;
+  `test-gpu-modes` all pass; full Playwright suite **43/43 PASS** (6.7 min)
+  on the final tree with the three-mode picker and `dex:gpu-info`.

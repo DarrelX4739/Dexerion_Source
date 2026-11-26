@@ -11,7 +11,15 @@
 'use strict';
 
 const GPU_MODE = 'adaptive';
-const LEGACY_GPU_MODES = Object.freeze(['off', 'balanced', 'full']);
+const GPU_MODES = Object.freeze(['adaptive', 'cap10', 'off']);
+// Old picker values that map to Adaptive. 'off' stays a legal choice (same
+// meaning it always had: software rendering, no GPU).
+const LEGACY_GPU_MODES = Object.freeze(['balanced', 'full']);
+// The 10% cap tier keeps the GPU only for final compositing: raster on CPU,
+// a small GPU memory budget, and an integrated-GPU preference where the
+// machine has hybrid graphics. Hardware video decode stays on — software
+// decode would burn more power, not less.
+const CAP10_GPU_MEMORY_MB = 128;
 const TIERS = Object.freeze(['suspended', 'minimal', 'balanced', 'accelerated']);
 
 const DOWNGRADE_HYSTERESIS_MS = 15000;
@@ -25,20 +33,27 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
-// Every legacy preference becomes Adaptive. There is deliberately no path back
-// to a fixed off/balanced/full user setting: GPU behaviour is decided from
-// signals, not from a stale picker value.
+// Accepted persisted values: Adaptive (default), the 10% cap tier, and Off.
+// Anything unknown falls back to Adaptive.
 function normalizeGpuMode(value) {
-  return GPU_MODE;
+  const v = String(value === undefined || value === null ? '' : value);
+  return GPU_MODES.includes(v) ? v : GPU_MODE;
 }
-function isLegacyGpuMode(value) {
-  return LEGACY_GPU_MODES.includes(String(value));
+
+// One-time migration of the old off/balanced/full picker. 'off' keeps its
+// meaning (now a legal choice again); balanced/full/unknown map to Adaptive.
+// `changed` says whether the profile needs a write.
+function migrateGpuMode(value) {
+  const v = String(value === undefined || value === null ? '' : value);
+  if (GPU_MODES.includes(v)) return { value: v, changed: false };
+  return { value: GPU_MODE, changed: true };
 }
 
 // Launch-time switches. Chromium reads these before the GPU process starts, so
-// the choice is made once from the power/RAM state available at boot; runtime
-// changes are handled by controlling which views render (runtimePlan) instead
-// of pretending a command-line switch can be flipped later.
+// the choice is made once from the user's mode plus the power/RAM state at
+// boot; runtime changes are handled by controlling which views render
+// (runtimePlan) instead of pretending a command-line switch can be flipped
+// later. Mode precedence: test override > persisted mode > Adaptive.
 function startupGpuPlan(opts) {
   const o = opts || {};
   const override = o.override === undefined ? null : String(o.override);
@@ -46,8 +61,27 @@ function startupGpuPlan(opts) {
   // timing). It is not exposed in Settings and is never written to the profile.
   if (override === 'off') {
     return {
-      disableGpu: true, gpuRasterization: false, zeroCopy: false,
-      gpuMemoryMB: 0, tier: 'suspended', override,
+      disableGpu: true, gpuRasterization: false, zeroCopy: false, forceLowPowerGpu: false,
+      gpuMemoryMB: 0, tier: 'suspended', mode: 'off', override,
+    };
+  }
+  const mode = normalizeGpuMode(o.mode);
+  if (mode === 'off') {
+    // Software rendering: no GPU process work at all. Heaviest pages still
+    // render correctly, just on the CPU.
+    return {
+      disableGpu: true, gpuRasterization: false, zeroCopy: false, forceLowPowerGpu: false,
+      gpuMemoryMB: 0, tier: 'suspended', mode, override: null,
+    };
+  }
+  if (mode === 'cap10') {
+    // Minimal GPU envelope — the closest thing an app can do to a literal
+    // 10% utilization cap (a true utilization cap is driver-level). The GPU
+    // still answers video/WebGL, so nothing breaks; it is just asked to do
+    // far less.
+    return {
+      disableGpu: false, gpuRasterization: false, zeroCopy: true, forceLowPowerGpu: true,
+      gpuMemoryMB: CAP10_GPU_MEMORY_MB, tier: 'minimal', mode, override: null,
     };
   }
   const onBattery = Boolean(o.onBattery);
@@ -57,9 +91,10 @@ function startupGpuPlan(opts) {
     disableGpu: false,
     gpuRasterization: !conservative,
     zeroCopy: true,
+    forceLowPowerGpu: false,
     gpuMemoryMB: conservative ? 256 : 512,
     tier: conservative ? 'minimal' : 'balanced',
-    override: null,
+    mode, override: null,
   };
 }
 
@@ -154,7 +189,8 @@ function runtimePlan(signals, previous, nowMs, state, budgets) {
 }
 
 module.exports = {
-  GPU_MODE, LEGACY_GPU_MODES, TIERS, DOWNGRADE_HYSTERESIS_MS, SUSPEND_IDLE_MS,
-  clamp, normalizeGpuMode, isLegacyGpuMode, startupGpuPlan,
+  GPU_MODE, GPU_MODES, LEGACY_GPU_MODES, CAP10_GPU_MEMORY_MB, TIERS,
+  DOWNGRADE_HYSTERESIS_MS, SUSPEND_IDLE_MS,
+  clamp, normalizeGpuMode, migrateGpuMode, startupGpuPlan,
   demandScore, desiredTier, decideGpuTier, runtimePlan,
 };
