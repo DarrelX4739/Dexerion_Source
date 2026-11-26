@@ -6,6 +6,8 @@
 
 **Update (GPU task complete):** the GPU picker task finished and was committed (`aaa8abf`, then superseded by the single-mode Adaptive change). The freeze on `src/main/adaptive-power.js` and its tests now applies to mission agents only: the Builder and Tester must not edit them; the main session retains control. The fullscreen freezes (`src/renderer/shell.css`, `src/renderer/shell.js`) remain absolute for everyone.
 
+**Update (build window 1 closed, commit `53b7cc7`):** Builder shipped A1 (bounded disk cache), A2 (background networking off), B1 (detach+hide consistency — mechanism corrected by the new `probe-wcv-semantics` measurement: setVisible-only does not stop rAF on attached views), B2 (adaptive task heartbeat + Controller-applied deep-idle sweep ceiling in runtimePlan), B3 (lazy AI stack, ~390 KB deferred), B5 (per-account targeted state). Popup hide-with-owner honestly reverted (measured to save nothing). Controller re-verified every gate verbatim: verify-all 75 files OK, test-adaptive-power 8/8, test-gpu-modes ALL PASS, playwright 43/43 (3.9 min), overlay+popup probes PASS. Tester now running against `TESTER-BRIEF.md`; its report (TEST-REPORT-1.md) drives the next build window or the escalation.
+
 **Baseline reality (verified before this ledger was written):**
 - App source: `code/code/` — entry `main.js` (the `package.json` "main" in `code/build` points at `../code/main.js`, so edits to `main.js` land in the packaged app).
 - Main-process modules: `code/code/src/main/*.js` — including `adaptive-power.js`, a **pure decision-logic module** (no Electron, no timers, no I/O) implementing GPU modes `adaptive | cap10 | off`, tiers `suspended|minimal|balanced|accelerated`, 15 s hysteresis, 10-minute suspend idle.
