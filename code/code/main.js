@@ -77,11 +77,10 @@ app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 app.commandLine.appendSwitch('disable-features',
   'TranslateUI,MediaRouter,DialMediaRouteProvider,OptimizationHints,CalculateNativeWinOcclusion');
-// GPU policy: Adaptive (default) | 10% cap | Off. Launch switches are chosen
-// once from the persisted mode plus the power/RAM state at boot; the browser
-// adapts render visibility and housekeeping at runtime
-// (src/main/adaptive-power.js). Adaptive never disables hardware acceleration
-// — games, video and WebGL still get the GPU.
+// GPU policy: a single Adaptive mode running the software-rendering
+// configuration (the measured lowest-power setup). Launch switches are chosen
+// once at boot; the browser keeps adapting render visibility and housekeeping
+// at runtime (src/main/adaptive-power.js).
 
 // The self-test creates accounts, writes history/bookmarks and calls
 // profile.save(). Running it against the real userData directory meant every

@@ -2137,3 +2137,26 @@ All gates green on every version: `verify-all` 22/22 suites, `playwright test` 6
   cap10 plan incl. battery non-double-penalty); `verify-all` 75 files OK;
   `test-gpu-modes` all pass; full Playwright suite **43/43 PASS** (6.7 min)
   on the final tree with the three-mode picker and `dex:gpu-info`.
+
+## GPU picker back to a single non-dropdown Adaptive (2026-11-26, late)
+
+- User decision: remove the 10% cap and Off options; one fixed **Adaptive**
+  value (no dropdown). Adaptive's GPU configuration becomes the **former Off
+  configuration** — software rendering, the measured lowest-power setup —
+  while the adaptive controller (view visibility, sweep cadence, power
+  tiers) keeps running at runtime.
+- `adaptive-power.js`: `GPU_MODES = ['adaptive']`; `migrateGpuMode` maps
+  every earlier picker value (balanced/full/cap10/off) to Adaptive;
+  `startupGpuPlan` returns the Off-equivalent plan unconditionally
+  (`disable-gpu`, no raster, no zero-copy, no low-power flag, 0 MB budget,
+  tier `suspended`). Battery/RAM no longer vary the plan.
+- `settings.html`: the row shows a fixed **Adaptive** value (no select);
+  description states software rendering + adaptive control. No other
+  settings touched; nothing else changed.
+- `dex:gpu-info` stays (read-only diagnostics, used by the tests).
+- Live verification (`test-gpu-modes.js`, single mode) — ALL PASS:
+  `--disable-gpu` applied, `gpu_compositing: "disabled_software"`, no
+  extras, persistence round-trip; a legacy `off` save normalises to
+  `adaptive` on disk. Browsing state machinery works.
+- Gates: `test-adaptive-power` 8/8; `verify-all` 75 files OK; full Playwright
+  suite **43/43 PASS** (5.7 min) on the final tree.

@@ -50,7 +50,8 @@ function check(name, cond, detail) {
 }
 
 (async () => {
-  for (const mode of ['adaptive', 'cap10', 'off']) {
+  // One mode exists: Adaptive, running the software-rendering configuration.
+  for (const mode of ['adaptive']) {
     console.log('=== mode: ' + mode + ' ===');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-gpu-' + mode + '-'));
     const settingsPath = path.join(dir, 'settings.json');
@@ -73,21 +74,9 @@ function check(name, cond, detail) {
       check(mode + ': gpu-info reachable', Boolean(gpu && gpu.switches));
       if (gpu && gpu.switches) {
         const s = gpu.switches;
-        if (mode === 'off') {
-          check('off: --disable-gpu applied', s.disableGpu === true, 'switches=' + JSON.stringify(s));
-          check('off: gpu_compositing not hardware', !/^enabled/.test(String(gpu.features.gpu_compositing)), 'features=' + JSON.stringify(gpu.features));
-        } else {
-          check(mode + ': GPU not disabled', s.disableGpu === false, 'switches=' + JSON.stringify(s));
-          check(mode + ': zero-copy enabled', s.zeroCopy === true);
-        }
-        if (mode === 'cap10') {
-          check('cap10: --force-low-power-gpu applied', s.forceLowPowerGpu === true);
-          check('cap10: 128MB GPU memory budget applied', s.gpuMemBudgetMB === '128', 'budget=' + s.gpuMemBudgetMB);
-          check('cap10: GPU raster off (CPU raster)', s.gpuRasterization === false);
-        }
-        if (mode === 'adaptive') {
-          check('adaptive: GPU memory budget present (256/512)', ['256', '512'].includes(s.gpuMemBudgetMB), 'budget=' + s.gpuMemBudgetMB);
-        }
+        check(mode + ': --disable-gpu applied (software rendering)', s.disableGpu === true, 'switches=' + JSON.stringify(s));
+        check(mode + ': gpu_compositing not hardware', !/^enabled/.test(String(gpu.features.gpu_compositing)), 'features=' + JSON.stringify(gpu.features));
+        check(mode + ': no raster/zero-copy/low-power extras', !s.gpuRasterization && !s.zeroCopy && !s.forceLowPowerGpu);
       }
 
       // Process metrics (informational): Chromium keeps a software GPU process
@@ -100,11 +89,10 @@ function check(name, cond, detail) {
       const afterBoot = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).gpuMode;
       check(mode + ': persisted value survives boot', afterBoot === mode, 'on disk: ' + afterBoot);
 
-      // Save round-trip through the real IPC writes through to disk.
-      const next = mode === 'adaptive' ? 'cap10' : 'adaptive';
-      await win.evaluate((m) => window.dexerion.invoke('dex:settings-save', { gpuMode: m }), next);
+      // Save round-trip: any legacy patch normalises to the single mode.
+      await win.evaluate((m) => window.dexerion.invoke('dex:settings-save', { gpuMode: m }), 'off');
       const afterSave = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).gpuMode;
-      check(mode + ': settings-save persists a mode change', afterSave === next, 'on disk: ' + afterSave);
+      check(mode + ': legacy save normalises to adaptive', afterSave === 'adaptive', 'on disk: ' + afterSave);
     } catch (err) {
       failures += 1;
       console.error('FAIL ' + mode + ' — ' + String(err && err.message || err).split('\n')[0]);

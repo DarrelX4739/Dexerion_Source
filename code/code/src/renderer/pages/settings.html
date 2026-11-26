@@ -126,8 +126,8 @@
       <div class="ctl"><label class="dx-sw"><input type="checkbox" id="memsaver"><i></i></label></div></div>
     <div class="dx-row"><div class="tx"><b>Memory cap</b><small>Keep total memory under this budget when possible</small></div>
       <div class="ctl"><select id="memcap" aria-label="Memory cap"><option value="1024">1 GB</option><option value="1536">1.5 GB</option><option value="2048">2 GB</option><option value="3072">3 GB</option><option value="4096">4 GB</option></select></div></div>
-    <div class="dx-row"><div class="tx"><b>Adaptive GPU</b><small>Adaptive balances GPU use automatically. 10% cap keeps the GPU minimal (CPU raster, small memory budget). Off uses software rendering. Restart to apply.</small></div>
-      <div class="ctl"><select id="gpumode" aria-label="Adaptive GPU"><option value="adaptive">Adaptive (recommended)</option><option value="cap10">10% cap</option><option value="off">Off</option></select></div></div>
+    <div class="dx-row"><div class="tx"><b>Adaptive GPU</b><small>Rendering runs in software to keep power draw low, while the adaptive controller manages background work automatically. Restart to apply.</small></div>
+      <div class="ctl"><b>Adaptive</b></div></div>
     <div class="dx-row"><div class="tx"><b>Current usage</b><small id="memline">Measuring…</small></div></div>
   </div>
 </div>
@@ -261,7 +261,9 @@ function buildSkins(){
   document.getElementById('aiadapt').value=String(s.aiSearchAdaptations||4);
   document.getElementById('memsaver').checked=s.memorySaver!==false;
   document.getElementById('memcap').value=String(Math.min(4096,Math.max(1024,Math.floor(Number(s.memoryCapMB)||1536))));
-  document.getElementById('gpumode').value=['adaptive','cap10','off'].includes(s.gpuMode)?s.gpuMode:'adaptive';
+  // Single GPU mode: Adaptive (software rendering + adaptive control). The
+  // stored value is normalised to 'adaptive' in the main process; nothing to
+  // read or save here.
   document.getElementById('welcome').checked=s.welcomeDaily!==false;
   theme=s.theme||'light';accent=s.accent||PRESETS[0];
   skin=s.skin||'dexerion';
@@ -286,7 +288,6 @@ function buildSkins(){
   };
   document.getElementById('memsaver').onchange=async()=>{await savePatch({memorySaver:document.getElementById('memsaver').checked});paintMem();};
   document.getElementById('memcap').onchange=async()=>{await savePatch({memoryCapMB:Number(document.getElementById('memcap').value)});paintMem();};
-  document.getElementById('gpumode').onchange=async()=>{await savePatch({gpuMode:document.getElementById('gpumode').value});};
   document.getElementById('welcome').onchange=async()=>{await savePatch({welcomeDaily:document.getElementById('welcome').checked});};
   paintTheme();paintAccent();
   buildSkins();paintSkin();

@@ -11,15 +11,12 @@
 'use strict';
 
 const GPU_MODE = 'adaptive';
-const GPU_MODES = Object.freeze(['adaptive', 'cap10', 'off']);
-// Old picker values that map to Adaptive. 'off' stays a legal choice (same
-// meaning it always had: software rendering, no GPU).
-const LEGACY_GPU_MODES = Object.freeze(['balanced', 'full']);
-// The 10% cap tier keeps the GPU only for final compositing: raster on CPU,
-// a small GPU memory budget, and an integrated-GPU preference where the
-// machine has hybrid graphics. Hardware video decode stays on — software
-// decode would burn more power, not less.
-const CAP10_GPU_MEMORY_MB = 128;
+// One user-facing mode. Adaptive's GPU configuration is the former Off
+// configuration — software rendering (the measured lowest-power setup) —
+// while the adaptive controller (view visibility, sweep cadence, power
+// tiers) keeps managing background work at runtime.
+const GPU_MODES = Object.freeze(['adaptive']);
+const LEGACY_GPU_MODES = Object.freeze(['balanced', 'full', 'cap10', 'off']);
 const TIERS = Object.freeze(['suspended', 'minimal', 'balanced', 'accelerated']);
 
 const DOWNGRADE_HYSTERESIS_MS = 15000;
@@ -40,9 +37,9 @@ function normalizeGpuMode(value) {
   return GPU_MODES.includes(v) ? v : GPU_MODE;
 }
 
-// One-time migration of the old off/balanced/full picker. 'off' keeps its
-// meaning (now a legal choice again); balanced/full/unknown map to Adaptive.
-// `changed` says whether the profile needs a write.
+// One-time migration of every earlier picker (off/balanced/full/cap10):
+// everything maps to the single Adaptive mode. `changed` says whether the
+// profile needs a write.
 function migrateGpuMode(value) {
   const v = String(value === undefined || value === null ? '' : value);
   if (GPU_MODES.includes(v)) return { value: v, changed: false };
@@ -50,50 +47,33 @@ function migrateGpuMode(value) {
 }
 
 // Launch-time switches. Chromium reads these before the GPU process starts, so
-// the choice is made once from the user's mode plus the power/RAM state at
-// boot; runtime changes are handled by controlling which views render
-// (runtimePlan) instead of pretending a command-line switch can be flipped
-// later. Mode precedence: test override > persisted mode > Adaptive.
+// the choice is made once at boot; runtime changes are handled by controlling
+// which views render (runtimePlan) instead of pretending a command-line switch
+// can be flipped later. Precedence: test override > persisted mode > Adaptive.
 function startupGpuPlan(opts) {
   const o = opts || {};
   const override = o.override === undefined ? null : String(o.override);
-  // Internal test seam only (e2e uses --gpu=off for deterministic compositor
+  // Internal test seam only (e2e passes --gpu=off for deterministic compositor
   // timing). It is not exposed in Settings and is never written to the profile.
   if (override === 'off') {
     return {
       disableGpu: true, gpuRasterization: false, zeroCopy: false, forceLowPowerGpu: false,
-      gpuMemoryMB: 0, tier: 'suspended', mode: 'off', override,
+      gpuMemoryMB: 0, tier: 'suspended', mode: GPU_MODE, override,
     };
   }
   const mode = normalizeGpuMode(o.mode);
-  if (mode === 'off') {
-    // Software rendering: no GPU process work at all. Heaviest pages still
-    // render correctly, just on the CPU.
-    return {
-      disableGpu: true, gpuRasterization: false, zeroCopy: false, forceLowPowerGpu: false,
-      gpuMemoryMB: 0, tier: 'suspended', mode, override: null,
-    };
-  }
-  if (mode === 'cap10') {
-    // Minimal GPU envelope — the closest thing an app can do to a literal
-    // 10% utilization cap (a true utilization cap is driver-level). The GPU
-    // still answers video/WebGL, so nothing breaks; it is just asked to do
-    // far less.
-    return {
-      disableGpu: false, gpuRasterization: false, zeroCopy: true, forceLowPowerGpu: true,
-      gpuMemoryMB: CAP10_GPU_MEMORY_MB, tier: 'minimal', mode, override: null,
-    };
-  }
-  const onBattery = Boolean(o.onBattery);
-  const freeMemMB = Number(o.freeMemMB) || 0;
-  const conservative = onBattery || (freeMemMB > 0 && freeMemMB < 2048);
+  // Adaptive runs the software-rendering configuration (the former Off mode —
+  // the measured lowest-power setup) while the adaptive controller keeps
+  // managing view visibility, sweep cadence and power tiers at runtime.
+  // Pages still render everything, just on the CPU; WebGL/video fall back to
+  // software so nothing breaks.
   return {
-    disableGpu: false,
-    gpuRasterization: !conservative,
-    zeroCopy: true,
+    disableGpu: true,
+    gpuRasterization: false,
+    zeroCopy: false,
     forceLowPowerGpu: false,
-    gpuMemoryMB: conservative ? 256 : 512,
-    tier: conservative ? 'minimal' : 'balanced',
+    gpuMemoryMB: 0,
+    tier: 'suspended',
     mode, override: null,
   };
 }
@@ -189,7 +169,7 @@ function runtimePlan(signals, previous, nowMs, state, budgets) {
 }
 
 module.exports = {
-  GPU_MODE, GPU_MODES, LEGACY_GPU_MODES, CAP10_GPU_MEMORY_MB, TIERS,
+  GPU_MODE, GPU_MODES, LEGACY_GPU_MODES, TIERS,
   DOWNGRADE_HYSTERESIS_MS, SUSPEND_IDLE_MS,
   clamp, normalizeGpuMode, migrateGpuMode, startupGpuPlan,
   demandScore, desiredTier, decideGpuTier, runtimePlan,
