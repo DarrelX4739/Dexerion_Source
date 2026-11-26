@@ -104,12 +104,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2t64 rpm
+      - name: Test Linux packaging launcher
+        if: runner.os == 'Linux'
+        run: node --test ../../.github/packaging/linux-launcher.test.cjs
       - name: Install locked dependencies
         run: npm ci
       - name: Generate CI-only packaging configuration
         run: |
           node <<'NODE'
           const fs = require('node:fs');
+          const path = require('node:path');
           const config = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
           const repository = process.env.GITHUB_REPOSITORY;
           const owner = repository.split('/')[0];
@@ -131,6 +135,9 @@ jobs:
             executableName: 'dexerion',
             desktop: { entry: { StartupWMClass: 'Dexerion' } },
           };
+          if (process.platform === 'linux') {
+            config.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');
+          }
           // Keep the existing Windows NSIS configuration, branding and filename.
           fs.writeFileSync('electron-builder.ci.json', JSON.stringify(config, null, 2));
           NODE

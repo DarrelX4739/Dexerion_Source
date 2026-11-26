@@ -63,6 +63,45 @@ compatibility; test the packages on your target distributions before distributio
 For an AppImage, make it executable with `chmod +x Dexerion-*.AppImage` before
 launching; the host may also require FUSE support.
 
+## Linux / Kubuntu launch compatibility
+
+The release workflow adds a Linux-only launcher **outside the application
+archive**. It does not edit application source, patch JavaScript during the
+build, or change the contents of `app.asar`. The original native executable is
+preserved as `dexerion-bin`; the `dexerion` entry point launches it with the
+original arguments.
+
+On a Wayland session with XWayland available (`DISPLAY` is set), the launcher
+adds `--ozone-platform=x11`. This is a packaging-level workaround for KDE/KWin
+focus and positioning differences affecting Electron's separate suggestion
+windows. Native X11 sessions and Wayland sessions without XWayland retain the
+original backend selection. Windows packaging is unchanged. Sandboxing and GPU
+acceleration are not disabled.
+
+An explicit `--ozone-platform=wayland`, `--ozone-platform=x11`, or
+`--ozone-platform=auto` argument overrides this default. Close all running
+Dexerion instances before comparing backends; an existing instance retains its
+original backend.
+
+A new AppImage or Debian package must be built from a branch containing this
+workflow change to include the launcher. Existing downloads do not change. To
+test the same workaround with an existing AppImage on Kubuntu with XWayland:
+
+```sh
+./Dexerion-VERSION-x64.AppImage --ozone-platform=x11
+```
+
+Launcher tests run in the Linux release job and can also be run from the root:
+
+```sh
+node --test .github/packaging/linux-launcher.test.cjs
+```
+
+These tests check backend selection, argument forwarding, symlink launches,
+exit status, and preservation of the native executable and application archive.
+They do not replace testing the resulting AppImage on a Kubuntu desktop; the
+reported popup behavior has not been reproduced in this build environment.
+
 Assets are uploaded to a draft before the release is published. If publishing
 fails after draft creation, check the draft and its assets before publishing it
 manually, or delete the draft and any tag it created before retrying that version.
