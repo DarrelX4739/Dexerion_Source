@@ -126,8 +126,8 @@
       <div class="ctl"><label class="dx-sw"><input type="checkbox" id="memsaver"><i></i></label></div></div>
     <div class="dx-row"><div class="tx"><b>Memory cap</b><small>Keep total memory under this budget when possible</small></div>
       <div class="ctl"><select id="memcap" aria-label="Memory cap"><option value="1024">1 GB</option><option value="1536">1.5 GB</option><option value="2048">2 GB</option><option value="3072">3 GB</option><option value="4096">4 GB</option></select></div></div>
-    <div class="dx-row"><div class="tx"><b>GPU acceleration</b><small>Hardware helps games and video. Balanced keeps it lean. Restart to apply.</small></div>
-      <div class="ctl"><select id="gpumode" aria-label="GPU acceleration"><option value="balanced">Balanced (recommended)</option><option value="full">Full</option><option value="off">Off</option></select></div></div>
+    <div class="dx-row"><div class="tx"><b>Adaptive GPU</b><small>GPU stays off when nothing needs it and switches on for video, WebGL and animation. Restart to apply.</small></div>
+      <div class="ctl"><select id="gpumode" aria-label="Adaptive GPU"><option value="adaptive">Adaptive (recommended)</option></select></div></div>
     <div class="dx-row"><div class="tx"><b>Current usage</b><small id="memline">Measuring…</small></div></div>
   </div>
 </div>
@@ -261,7 +261,7 @@ function buildSkins(){
   document.getElementById('aiadapt').value=String(s.aiSearchAdaptations||4);
   document.getElementById('memsaver').checked=s.memorySaver!==false;
   document.getElementById('memcap').value=String(Math.min(4096,Math.max(1024,Math.floor(Number(s.memoryCapMB)||1536))));
-  document.getElementById('gpumode').value=['off','balanced','full'].includes(s.gpuMode)?s.gpuMode:'balanced';
+  document.getElementById('gpumode').value='adaptive';
   document.getElementById('welcome').checked=s.welcomeDaily!==false;
   theme=s.theme||'light';accent=s.accent||PRESETS[0];
   skin=s.skin||'dexerion';
@@ -286,7 +286,7 @@ function buildSkins(){
   };
   document.getElementById('memsaver').onchange=async()=>{await savePatch({memorySaver:document.getElementById('memsaver').checked});paintMem();};
   document.getElementById('memcap').onchange=async()=>{await savePatch({memoryCapMB:Number(document.getElementById('memcap').value)});paintMem();};
-  document.getElementById('gpumode').onchange=async()=>{await savePatch({gpuMode:document.getElementById('gpumode').value});};
+  document.getElementById('gpumode').onchange=async()=>{await savePatch({gpuMode:'adaptive'});};
   document.getElementById('welcome').onchange=async()=>{await savePatch({welcomeDaily:document.getElementById('welcome').checked});};
   paintTheme();paintAccent();
   buildSkins();paintSkin();

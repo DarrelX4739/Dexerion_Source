@@ -1389,6 +1389,21 @@ body.vertical #tabstrip.rail-open.show-tasks #rail-tasks { flex:0 0 50%; max-hei
 body.vertical #tabstrip.rail-open.show-tasks #tasks-mini { display:none; }
 
 /* ============================================================================
+   Video fullscreen (body.html-fs)
+   ----------------------------------------------------------------------------
+   A page's video/element fullscreen hands the window to the tab view: the
+   shell drops every piece of chrome — rail, toolbar (searchbar), bookmark
+   bar, banners, AI sidebar, scrim, inspector header — so the page owns every
+   pixel. Main process keeps the flag in sync (dex:html-fullscreen) and
+   restores the window state on exit; these rules only ever toggle with it.
+   ========================================================================= */
+body.html-fs #tabstrip,
+body.html-fs #mid,
+body.html-fs #store-banner,
+body.html-fs #scrim,
+body.html-fs #inspector { display:none !important; }
+
+/* ============================================================================
    Search With Dexerion AI — fullscreen search surface
    ----------------------------------------------------------------------------
    A deliberate deep surface in both themes (the search mode owns the whole

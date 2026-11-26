@@ -74,6 +74,13 @@ window.dexerion.on('dex:store-detected', ({ url }) => {
 });
 window.dexerion.on('dex:menu', (action) => menuAction(action));
 window.dexerion.on('dex:history-updated', () => {});
+// Video fullscreen: the main process owns the window state; the shell only
+// drops/restores its chrome (rail, toolbar/searchbar, bookmark bar, banners,
+// AI sidebar) so the tab view covers every pixel while the flag is set.
+window.dexerion.on('dex:html-fullscreen', (on) => {
+  document.body.classList.toggle('html-fs', Boolean(on));
+  if (!on) reportChrome();
+});
 
 function render(s) {
   // theme / accent / layout

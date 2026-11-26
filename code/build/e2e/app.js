@@ -37,9 +37,11 @@ async function launchOnce(options) {
       executablePath: require('electron'),
       cwd: buildDir,
       // Throwaway-profile E2E only. Compositor timing inside a sandboxed
-      // iframe was flaky with a real GPU; the shipped app still defaults to
-      // Balanced acceleration (see main.js gpuMode), this harness does not.
-      args: ['.', '--user-data-dir=' + profile, '--gpu=off'],
+      // iframe was flaky with a real GPU, so the default harness forces
+      // software compositing. Power benchmarks pass gpu:'adaptive' to launch
+      // the shipped Adaptive GPU policy instead; it is not a user setting.
+      args: ['.', '--user-data-dir=' + profile,
+        ...(options.gpu === 'adaptive' ? [] : ['--gpu=off'])],
       env,
       timeout: Number(process.env.E2E_LAUNCH_TIMEOUT_MS) || 120000,
     });

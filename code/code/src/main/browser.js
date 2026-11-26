@@ -38,6 +38,7 @@ const { planSweep, clampCapMB, shouldNoticeHog } = require('./memsaver');
 const { BUDGETS, activeProfile } = require('./debloat-budgets');
 const tasks = require('./tasks');
 const { attachSyncBridge } = require('./ext-sync-bridge');
+const adaptivePower = require('./adaptive-power');
 
 const CHROME_TOP = 104; // tabstrip(38) + toolbar(46) + bookmarkbar(20 when shown)
 const CHROME_TOP_NO_BOOKMARKS = 84;
@@ -236,6 +237,124 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   }
   const windows = new Map(); // winId -> { win, tabs: Map, order: [], active }
   let winSeq = 0, tabSeq = 0;
+
+  // ---------- adaptive power management ----------
+  // Event-driven: window focus/blur/minimize, powerMonitor transitions and tab
+  // activity all re-evaluate the plan immediately; the housekeeping sweep is
+  // scheduled by timeout (never a busy poll) with a cadence derived from the
+  // current power tier. Page work is never throttled — only Dexerion's own
+  // sweeps and whether views may composite are governed from here.
+  const power = {
+    tier: 'balanced',
+    tierSince: Date.now(),
+    lastInteraction: Date.now(),
+    locked: false,
+    onBattery: false,
+    plan: null,
+    timer: null,
+    _cpuPrev: undefined,
+  };
+  function setWindowViewsVisible(winId, visible) {
+    const st = windows.get(winId); if (!st) return;
+    for (const [tid, t] of st.tabs) {
+      if (!t || !t.view) continue;
+      try { t.view.setVisible(visible && tid === st.active); } catch {}
+    }
+  }
+  function powerSignals() {
+    const now = Date.now();
+    let focused = false, minimized = false, activeTabs = 0, visibleTabs = 0, audible = false, loading = false;
+    for (const st of windows.values()) {
+      try { if (st.win.isMinimized()) minimized = true; } catch {}
+      try { if (BrowserWindow.getFocusedWindow() === st.win) focused = true; } catch {}
+      for (const t of st.tabs.values()) {
+        if (!t) continue;
+        if (t.view) { visibleTabs += 1; if (t.id === st.active) activeTabs += 1; }
+        if (t.loading) loading = true;
+        try { if (t.view && t.view.webContents.isCurrentlyAudible()) audible = true; } catch {}
+      }
+    }
+    return {
+      focused, minimized, locked: power.locked, onBattery: power.onBattery,
+      idleMs: now - power.lastInteraction,
+      freeMemMB: Math.round(os.freemem() / 1048576),
+      cpuPct: mainCpuPct(),
+      activeTabCount: activeTabs,
+      video: audible, audible,
+      webgl: power.cpuPct >= 50,
+      animation: visibleTabs > activeTabs,
+      loading,
+      interacting: focused && (now - power.lastInteraction) < 15000,
+    };
+  }
+  // Cheap main-process CPU percent; renderer demand is covered by the tab
+  // signals above, and memSnapshot() (per-process metrics) stays inside the
+  // sweep where it is already being paid for.
+  function mainCpuPct() {
+    try {
+      const u = process.getCPUUsage(power._cpuPrev);
+      power._cpuPrev = u;
+      // percentCPUUsage is already a percentage (0-100+), matching
+      // app.getAppMetrics()' cpu.percentCPUUsage used elsewhere here.
+      return Math.max(0, Number(u && u.percentCPUUsage) || 0);
+    } catch { return power.cpuPct || 0; }
+  }
+  function applyPowerPlan(reason) {
+    const signals = powerSignals();
+    const plan = adaptivePower.runtimePlan(signals, power.tier, Date.now(), { tierSince: power.tierSince }, BUDGETS);
+    if (plan.gpuTier !== power.tier) {
+      power.tier = plan.gpuTier;
+      power.tierSince = Date.now();
+    }
+    power.plan = plan;
+    power.cpuPct = signals.cpuPct;
+    if (plan.hideMinimizedViews) {
+      for (const st of windows.values()) {
+        try { if (st.win.isMinimized()) setWindowViewsVisible(st.id, false); } catch {}
+      }
+    }
+    scheduleSweep(plan.sweepIntervalMs);
+    return plan;
+  }
+  function scheduleSweep(delay) {
+    if (power.timer) clearTimeout(power.timer);
+    power.timer = setTimeout(() => {
+      power.timer = null;
+      try { runPowerSweep(); } catch {}
+    }, delay);
+    if (power.timer.unref) power.timer.unref();
+  }
+  function runPowerSweep() {
+    const plan = power.plan || applyPowerPlan('sweep');
+    sleepSweep(plan.idleSleepMs);
+    memorySweep();
+    // Refresh CPU signal for the next decision, then re-evaluate (the plan
+    // itself reschedules the next sweep, so there is exactly one timer alive).
+    applyPowerPlan('sweep');
+  }
+  function markInteraction() {
+    power.lastInteraction = Date.now();
+    applyPowerPlan('interaction');
+  }
+  function markWindowEvent() {
+    applyPowerPlan('window');
+  }
+  function powerState() {
+    return {
+      tier: power.tier, tierSince: power.tierSince, plan: power.plan,
+      signals: powerSignals(),
+    };
+  }
+  // Power-source and OS-session transitions re-evaluate immediately.
+  // createBrowser() runs after app ready, so powerMonitor is available here.
+  try {
+    const pm = require('electron').powerMonitor;
+    pm.on('on-battery', () => { power.onBattery = true; applyPowerPlan('on-battery'); });
+    pm.on('on-ac', () => { power.onBattery = false; applyPowerPlan('on-ac'); });
+    pm.on('lock-screen', () => { power.locked = true; applyPowerPlan('lock'); });
+    pm.on('unlock-screen', () => { power.locked = false; markInteraction(); });
+    pm.on('resume', () => markInteraction());
+  } catch {}
   // ---------- Focus Timer (Pomodoro) ----------
   // Single engine for all windows: one clock, one blocklist, one audible
   // target. Shells render it in the rail; ambient audio plays only for the
@@ -279,6 +398,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   const reportOverlayState = new Map(); // winId -> { view, chatId, index } — report viewer overlay
   const siteOverlayState = new Map();   // winId -> { view, url, chatId, index } — the Focus preview
   const inspectorWindows = new Map(); // inspector BrowserWindow -> winId (for the fallback's retry)
+  const popupFsRestore = new WeakMap(); // popup BrowserWindow -> { maximized, bounds } while its content is element-fullscreen
   const downloadItems = new Map();
   const pendingDownloadDeletes = new Set();
 
@@ -605,6 +725,11 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       webPreferences: {
         preload: path.join(__dirname, '../../preload.js'),
         contextIsolation: true, nodeIntegration: false, sandbox: true,
+        // Video fullscreen in a tab must never resize the window behind our
+        // back (the built-in behaviour fullscreened the window and failed to
+        // restore it, leaving it borderless with no taskbar until force-closed).
+        // enterHtmlFullscreen/exitHtmlFullscreen own the window transitions.
+        disableHtmlFullscreenWindowResize: true,
       },
     });
     win.loadFile(
@@ -619,14 +744,27 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         return Object.keys(query).length ? { query } : undefined;
       })(),
     );
-    const state = { id, win, accountId: aid, tabs: new Map(), order: [], active: null, groups: new Map(), aiOpen: false, searchOpen: false, aiRequestId: null, aiRequestChatId: null, memNotice: null, memNoticeMutedUntil: 0, preview: Boolean(opts.preview), skin: opts.skin || '', inspector: { open: false, dock: 'bottom', tabId: null, win: null } };
+    const state = { id, win, accountId: aid, tabs: new Map(), order: [], active: null, groups: new Map(), aiOpen: false, searchOpen: false, aiRequestId: null, aiRequestChatId: null, memNotice: null, memNoticeMutedUntil: 0, preview: Boolean(opts.preview), skin: opts.skin || '', inspector: { open: false, dock: 'bottom', tabId: null, win: null }, htmlFullscreen: false, htmlFullscreenTab: null, fsRestore: null, fsHealTimer: null };
     windows.set(id, state);
     win.on('resize', () => layoutSoon(id));
-    win.on('focus', () => { lastAudioWin = id; });
+    // A fullscreen transition resizes the window: re-layout so the tab view
+    // tracks the new content area. Also heals the reverse case — the OS window
+    // left fullscreen on its own while the html-fullscreen flag was still set.
+    win.on('enter-full-screen', () => layoutSoon(id));
+    win.on('leave-full-screen', () => layoutSoon(id));
+    win.on('focus', () => {
+      lastAudioWin = id;
+      markInteraction();
+    });
+    win.on('blur', () => markWindowEvent());
+    win.on('minimize', () => { markWindowEvent(); try { setWindowViewsVisible(id, false); } catch {} });
+    win.on('restore', () => { markInteraction(); try { setWindowViewsVisible(id, true); } catch {} });
+    win.on('show', () => { markInteraction(); try { setWindowViewsVisible(id, true); } catch {} });
     win.on('close', () => { try { persistAll(); } catch {} });
     win.on('closed', () => {
       // Child views die with the window; drop the overlay record so a stale
       // entry can never resolve a sender to a dead window.
+      clearTimeout(state.fsHealTimer);
       try {
         const sn = snipState.get(id);
         if (sn) { try { sn.view.webContents.close(); } catch {} snipState.delete(id); }
@@ -664,7 +802,13 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       } catch {}
       windows.delete(id);
     });
-    win.webContents.on('did-finish-load', () => pushState(id));
+    win.webContents.on('did-finish-load', () => {
+      pushState(id);
+      // A shell that (re)loaded while a tab was video-fullscreen has no chrome
+      // state yet: replay the flag so the chrome stays out of the video's way.
+      const st = windows.get(id);
+      if (st && st.htmlFullscreen) sendHtmlFullscreen(st, true);
+    });
     // Multi-page previews: an in-frame navigation inside a served site (a
     // link click, or the frame's own back/forward) tells the shell which page
     // is showing, so the preview bar's page switcher and label stay true to
@@ -878,6 +1022,11 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         partition: st.accountId === 'default' ? undefined : 'persist:dexacc-' + st.accountId,
         preload: path.join(__dirname, '../../preload.js'),
         contextIsolation: true, nodeIntegration: false, sandbox: false,
+        // Video fullscreen in this tab must never resize the window behind our
+        // back — the built-in behaviour fullscreened the window and failed to
+        // restore it (borderless, no taskbar) until force-closed. The
+        // enter/leave-html-full-screen handlers own the window transitions.
+        disableHtmlFullscreenWindowResize: true,
       },
     });
     view.webContents.setWindowOpenHandler((details) => handleWindowOpen(winId, details, view.webContents));
@@ -953,6 +1102,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         partition: accountId === 'default' ? undefined : 'persist:dexacc-' + accountId,
         preload: path.join(__dirname, '../../preload.js'),
         contextIsolation: true, nodeIntegration: false, sandbox: false,
+        // Same rule as tabs: a video fullscreen in a popup must never resize
+        // the window behind our back (see enterHtmlFullscreen).
+        disableHtmlFullscreenWindowResize: true,
       },
     };
     if (parent) opts.parent = parent;
@@ -966,6 +1118,36 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (!st || !pop) return pop;
     popupWindows.add(pop);
     pop.on('closed', () => popupWindows.delete(pop));
+    // A video (or any element) going fullscreen in a popup gets the same
+    // ownership pattern as tabs, minus the shell chrome (a popup has none to
+    // hide): the window transitions below, never Electron's built-in resize.
+    try {
+      pop.webContents.on('enter-html-full-screen', () => {
+        try {
+          if (pop.isDestroyed()) return;
+          if (!popupFsRestore.has(pop)) {
+            let maximized = false, bounds = null;
+            try { maximized = pop.isMaximized(); } catch {}
+            try { if (!maximized) bounds = pop.getNormalBounds ? pop.getNormalBounds() : pop.getBounds(); } catch {}
+            popupFsRestore.set(pop, { maximized, bounds });
+          }
+          if (!pop.isFullScreen()) pop.setFullScreen(true);
+        } catch {}
+      });
+      pop.webContents.on('leave-html-full-screen', () => {
+        try {
+          if (pop.isDestroyed()) return;
+          const r = popupFsRestore.get(pop) || { maximized: false, bounds: null };
+          popupFsRestore.delete(pop);
+          if (pop.isFullScreen()) pop.setFullScreen(false);
+          if (r.maximized) {
+            if (!pop.isMaximized()) pop.maximize();
+          } else if (r.bounds) {
+            pop.setBounds(r.bounds);
+          }
+        } catch {}
+      });
+    } catch {}
     // Extension pages can open here too (and content scripts match by URL in
     // any frame), so bridge storage the same way tabs and popups are bridged.
     try { attachSyncBridge(pop.webContents); } catch {}
@@ -1061,13 +1243,20 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     const tabId = 't' + (++tabSeq);
     const view = createTabView(winId, tabId);
     const wc = view.webContents;
-    st.win.contentView.addChildView(view);
     const target = resolveInput(url || 'dexerion://newtab');
     // Lazy restore: the view exists (layout/tabs work) but nothing loads
     // until the tab is activated — cold start costs one page, not N.
     const lazy = Boolean(opts.lazy);
     st.tabs.set(tabId, { id: tabId, view, url: target, title: lazy ? target : 'New Tab', loading: !lazy, groupId: null, lazy, pendingUrl: lazy ? target : null, sleeping: false, lastActive: Date.now() });
     st.order.push(tabId);
+    if (background) {
+      // A background tab must never composite: keep the view out of the window
+      // and mark it hidden so Chromium throttles rAF/timers exactly like a
+      // hidden tab. activateTab() re-attaches and shows it on selection.
+      try { view.setVisible(false); } catch {}
+    } else {
+      st.win.contentView.addChildView(view);
+    }
     if (!lazy) wc.loadURL(target).catch(() => {});
     if (!background) activateTab(winId, tabId);
     layout(winId);
@@ -1077,6 +1266,16 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
 
   function activateTab(winId, tabId) {
     const st = windows.get(winId); if (!st || !st.tabs.has(tabId)) return;
+    // Switching away from the video-fullscreen tab drops fullscreen first (like
+    // Chrome): the outgoing tab's element exits and the window/chrome restore
+    // before the next tab takes the view slot.
+    if (st.htmlFullscreen && st.htmlFullscreenTab && st.htmlFullscreenTab !== tabId) {
+      const prev = st.tabs.get(st.htmlFullscreenTab);
+      if (prev && prev.view && !prev.view.webContents.isDestroyed()) {
+        try { prev.view.webContents.executeJavaScript('document.exitFullscreen()', true).catch(() => {}); } catch {}
+      }
+      exitHtmlFullscreen(winId);
+    }
     const cur = st.tabs.get(tabId);
     let needLoad = false;
     if (cur) {
@@ -1132,6 +1331,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // One-way teardown for a tab's renderer — shared by the idle sweep and the
   // memory budget. The entry keeps url/title/favicon, so waking is one click.
   function sleepTabNow(st, t) {
+    // Never tear down the video-fullscreen tab: its page state (element
+    // fullscreen) dies with the view and the window would lose its exit path.
+    if (st.htmlFullscreen && st.htmlFullscreenTab === t.id) return;
     try { st.win.contentView.removeChildView(t.view); } catch {}
     try { t.view.webContents.close(); } catch {}
     t.view = null;
@@ -1297,10 +1499,18 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     pushState(st.id);
   }
 
-  setInterval(() => { sleepSweep(); memorySweep(); }, BUDGETS.sweepIntervalMs);
+  // Adaptive power scheduler (see adaptive-power.js + the power controller):
+  // one timeout, re-armed by the current plan, replaces the fixed 30/60s
+  // interval. Idle/battery/minimized windows stretch the cadence; interaction
+  // and power transitions pull the next sweep forward immediately.
+  applyPowerPlan('boot');
 
   function closeTab(winId, tabId) {
     const st = windows.get(winId); if (!st || !st.tabs.has(tabId)) return;
+    // Closing the video-fullscreen tab must restore the window first: the
+    // leave event dies with the webContents below, and without this the
+    // window would stay borderless with no taskbar.
+    if (st.htmlFullscreen && st.htmlFullscreenTab === tabId) exitHtmlFullscreen(winId);
     agent.tabClosed(tabId); // a run acting on this tab halts: its refs are gone
     // The inspected target is going away, so the panel goes with it.
     if (st.inspector && st.inspector.open && st.inspector.tabId === tabId) closeInspector(winId);
@@ -1345,16 +1555,20 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     const st = windows.get(winId); if (!st) return;
     try {
       const b = st.win.getContentBounds();
-      const top = chromeH(st);
-      const rail = railW(st);
+      // Video fullscreen owns every pixel of the window: no chrome height, no
+      // rail, no AI sidebar, and the inspector keeps its geometry until the
+      // page leaves fullscreen (opening one exits fullscreen first).
+      const fs = Boolean(st.htmlFullscreen);
+      const top = fs ? 0 : chromeH(st);
+      const rail = fs ? 0 : railW(st);
       // An open inspector takes a docked slice of the window; the page keeps the
       // rest, so the panel never covers content.
-      const ins = inspectorRect(st);
+      const ins = fs ? null : inspectorRect(st);
       // The fullscreen Search With Dexerion AI surface takes the whole window:
       // hide the page view so the shell (and its overlay) owns every pixel.
       const page = st.searchOpen ? { x: 0, y: 0, width: 0, height: 0 } : (ins ? ins.page : {
         x: rail, y: top,
-        width: Math.max(0, b.width - rail - (st.aiOpen ? aiSidebarWidth(st, b.width) : 0)),
+        width: Math.max(0, b.width - rail - (fs ? 0 : (st.aiOpen ? aiSidebarWidth(st, b.width) : 0))),
         height: Math.max(0, b.height - top),
       });
       // A slept tab has no view (and a destroyed one throws): skip it per-tab so
@@ -1459,6 +1673,77 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       + '</body></html>';
   }
 
+  // ---------- video fullscreen in a tab (HTML fullscreen) ----------
+  // A page's fullscreen request used to fall through to Electron's built-in
+  // behaviour, which force-resized the host window into OS fullscreen on
+  // enter and failed to restore it on exit — the window stayed borderless with
+  // no taskbar until it was force-closed, and the shell chrome (toolbar,
+  // rail, AI sidebar) kept covering the video. Every tab/popup now runs with
+  // disableHtmlFullscreenWindowResize, so Chromium only fills the tab's view
+  // and the transitions below own the window state entirely.
+  const FS_HEAL_MS = 400;
+
+  function sendHtmlFullscreen(st, on) {
+    try { st.win.webContents.send('dex:html-fullscreen', on); } catch {}
+  }
+
+  function enterHtmlFullscreen(winId, tabId) {
+    const st = windows.get(winId); if (!st || st.win.isDestroyed()) return;
+    if (st.htmlFullscreen && st.htmlFullscreenTab === tabId) return;
+    if (!st.htmlFullscreen) {
+      // One snapshot per fullscreen run: a window that was maximised comes
+      // back maximised, a window with normal bounds comes back to them.
+      let maximized = false, bounds = null;
+      try { maximized = st.win.isMaximized(); } catch {}
+      try { if (!maximized) bounds = st.win.getNormalBounds ? st.win.getNormalBounds() : st.win.getBounds(); } catch {}
+      st.fsRestore = { maximized, bounds };
+    }
+    st.htmlFullscreen = true;
+    st.htmlFullscreenTab = tabId;
+    try { if (!st.win.isFullScreen()) st.win.setFullScreen(true); } catch {}
+    sendHtmlFullscreen(st, true);
+    layout(winId);
+  }
+
+  function exitHtmlFullscreen(winId) {
+    const st = windows.get(winId); if (!st) return;
+    if (!st.htmlFullscreen) return;
+    st.htmlFullscreen = false;
+    st.htmlFullscreenTab = null;
+    sendHtmlFullscreen(st, false);
+    const restore = st.fsRestore || { maximized: false, bounds: null };
+    st.fsRestore = null;
+    try { if (st.win.isFullScreen()) st.win.setFullScreen(false); } catch {}
+    try {
+      if (restore.maximized) {
+        if (!st.win.isMaximized()) st.win.maximize();
+      } else if (restore.bounds) {
+        st.win.setBounds(restore.bounds);
+      }
+    } catch {}
+    layout(winId);
+    // Self-heal: Windows can process the fullscreen transition out of order —
+    // exactly how this feature used to wedge a window until it was force-
+    // closed. Verify shortly after; if the window is somehow still fullscreen,
+    // re-assert the exit and the saved geometry, then re-layout.
+    clearTimeout(st.fsHealTimer);
+    st.fsHealTimer = setTimeout(() => {
+      st.fsHealTimer = null;
+      if (!windows.has(winId) || st.win.isDestroyed()) return;
+      try {
+        if (st.win.isFullScreen()) {
+          st.win.setFullScreen(false);
+          if (restore.maximized) {
+            if (!st.win.isMaximized()) st.win.maximize();
+          } else if (restore.bounds) {
+            st.win.setBounds(restore.bounds);
+          }
+        }
+      } catch {}
+      layout(winId);
+    }, FS_HEAL_MS);
+  }
+
   // Leave fullscreen and put the window back where the person had it, so the
   // chat/rail are exactly as they were before the preview took over.
   function exitOverlayFullscreen(st, rec) {
@@ -1477,6 +1762,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   }
 
   function openReportOverlay(st, chatId, index, panel) {
+    // The overlay needs the chrome back: video fullscreen hands the window
+    // over first, so the preview can never open inside a fullscreen window.
+    if (st.htmlFullscreen) exitHtmlFullscreen(st.id);
     const query = [];
     if (chatId) query.push('chat=' + encodeURIComponent(chatId));
     if (Number.isInteger(index) && index >= 0) query.push('i=' + String(index));
@@ -1550,6 +1838,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // bounds function is shared), and the same one-per-window rule: opening a
   // second site replaces the first.
   function openSiteOverlay(st, chatId, index) {
+    // Same rule as the report viewer: video fullscreen hands the window over
+    // first, so the Focus preview always opens with the chrome in place.
+    if (st.htmlFullscreen) exitHtmlFullscreen(st.id);
     const query = [];
     if (chatId) query.push('chat=' + encodeURIComponent(chatId));
     if (Number.isInteger(index) && index >= 0) query.push('i=' + String(index));
@@ -1944,6 +2235,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (!st) return false;
     const t = st.tabs.get(tabId || st.active);
     if (!t) return false;
+    // The inspector is docked geometry around the page: video fullscreen hands
+    // the window over first so the panel never docks against a fullscreen view.
+    if (st.htmlFullscreen) exitHtmlFullscreen(winId);
     if (!st.inspector) st.inspector = { open: false, dock: 'bottom', tabId: null, win: null };
     const ins = st.inspector;
     // A different tab means a different DevTools target, so start over.
@@ -2200,6 +2494,33 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     wc.on('before-input-event', (ev) => {
       if (!ev.input) return;
       closeSuggest(winId);
+      // Esc must always leave video fullscreen. Chromium normally exits and
+      // fires leave-html-full-screen, but if that event ever fails to arrive
+      // (the Electron bug class that used to wedge a window until force-close),
+      // verify shortly after and force the exit from here.
+      if (ev.input.type === 'keyDown' && ev.input.key === 'Escape') {
+        const st = windows.get(winId);
+        if (st && st.htmlFullscreen && st.htmlFullscreenTab === tabId) {
+          setTimeout(() => {
+            const cur = windows.get(winId);
+            if (!cur || !cur.htmlFullscreen || cur.htmlFullscreenTab !== tabId) return;
+            try { wc.executeJavaScript('document.exitFullscreen()', true).catch(() => {}); } catch {}
+            try { exitHtmlFullscreen(winId); } catch {}
+          }, 350);
+        }
+      }
+    });
+    // Video fullscreen in this tab: the transitions below own the window
+    // (tabs run with disableHtmlFullscreenWindowResize, so Electron's built-in
+    // window-resize path never runs and nothing is left to auto-restore).
+    wc.on('enter-html-full-screen', () => {
+      try { enterHtmlFullscreen(winId, tabId); } catch {}
+    });
+    wc.on('leave-html-full-screen', () => {
+      const st = windows.get(winId);
+      if (st && st.htmlFullscreen && st.htmlFullscreenTab === tabId) {
+        try { exitHtmlFullscreen(winId); } catch {}
+      }
     });
     // Safety net: no load may spin the UI indicator forever (failed /
     // stalled loads that never emit did-stop-loading).
@@ -4757,10 +5078,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     // Memory Saver (Performance): cap clamped to the 1-4 GB the UI offers.
     if (patch.memorySaver !== undefined) S.settings.memorySaver = Boolean(patch.memorySaver);
     if (patch.memoryCapMB !== undefined) S.settings.memoryCapMB = clampCapMB(patch.memoryCapMB);
-    // GPU policy: validated against the same set the startup switch reads.
-    if (patch.gpuMode !== undefined && ['off', 'balanced', 'full'].includes(String(patch.gpuMode))) {
-      S.settings.gpuMode = String(patch.gpuMode);
-    }
+    // GPU policy: a single Adaptive mode. Legacy values are accepted from older
+    // profiles and normalized, never resurrected as a user-facing choice.
+    if (patch.gpuMode !== undefined) S.settings.gpuMode = adaptivePower.normalizeGpuMode(patch.gpuMode);
     // Daily welcome toggle (Settings > Appearance).
     if (patch.welcomeDaily !== undefined) S.settings.welcomeDaily = Boolean(patch.welcomeDaily);
     // Theme: whitelisted, because the value becomes a stylesheet path.
@@ -4805,6 +5125,13 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   ipcMain.handle('dex:memory', (e) => {
     needChrome(e);
     return buildMemoryReport();
+  });
+
+  // Adaptive GPU / power diagnostics (internal; used by the power benchmark
+  // harness and tests, not surfaced in the UI).
+  ipcMain.handle('dex:power-state', (e) => {
+    needChrome(e);
+    return powerState();
   });
 
   // extensions
@@ -5406,9 +5733,22 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     try { ai.keepWarm().catch(() => {}); } catch {}
   }
   try { app.on('browser-window-focus', keepWarmNow); } catch {}
-  setInterval(() => {
-    try { if (BrowserWindow.getFocusedWindow()) keepWarmNow(); } catch {}
-  }, 60000);
+  // Adaptive keep-warm: one self-rearming timeout instead of a fixed 60 s
+  // poll. keepWarm() itself still enforces its 3 min TTL + backoff, so the
+  // AI stays warm exactly as before; on battery or a suspended window the
+  // poll simply slows down and stops burning wakeups.
+  let keepWarmTimer = null;
+  function scheduleKeepWarm() {
+    if (keepWarmTimer) clearTimeout(keepWarmTimer);
+    const stretch = (power.plan && power.plan.gpuTier === 'suspended') || power.onBattery ? 3 : 1;
+    keepWarmTimer = setTimeout(() => {
+      keepWarmTimer = null;
+      try { if (BrowserWindow.getFocusedWindow()) keepWarmNow(); } catch {}
+      scheduleKeepWarm();
+    }, 60000 * stretch);
+    if (keepWarmTimer.unref) keepWarmTimer.unref();
+  }
+  scheduleKeepWarm();
   // ---------- Page reading (Phase 1: scAI exact extract process) ----------
   // The snapshot runs in the active tab via executeJavaScript — the
   // WebContentsView equivalent of scAI's scripting.executeScript injection.
@@ -7931,6 +8271,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // its overlay) owns every pixel, and restore it when the surface closes.
   function openAiSearch(st, A) {
     if (!st || st.win.isDestroyed()) return false;
+    // The search surface is shell chrome (toolbar etc.): video fullscreen
+    // hands the window over first so the surface has its chrome to draw in.
+    if (st.htmlFullscreen) exitHtmlFullscreen(st.id);
     if (!st.searchOpen) { st.searchOpen = true; layout(st.id); }
     try { st.win.webContents.send('dex:aisearch-show', aiSearchConfig(A)); } catch {}
     try { st.win.webContents.focus(); } catch {}
@@ -9464,6 +9807,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     },
     _accounts: { listAccounts, accData, saveAcc, sesFor, getAccountMeta, createAccount, googleStatus },
     _logins: { encryptSecret, decryptSecret, loginsFor },
+    _power: { state: powerState, apply: applyPowerPlan, markInteraction, markWindowEvent, setWindowViewsVisible },
   };
 }
 

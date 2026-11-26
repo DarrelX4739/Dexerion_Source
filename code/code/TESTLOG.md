@@ -1998,3 +1998,100 @@ All ten Polish versions (V1–V10) are complete and tagged:
 | V10 | `c138145` | `polish-v10` | Application-wide visual and interaction polish (F-08) | Done |
 
 All gates green on every version: `verify-all` 22/22 suites, `playwright test` 6/6, `--run-selftest` ok:true. 46 git tags total (20 site versions + 10 polish versions + audit + site-v20 baseline).
+
+## Extreme power-efficiency pass (2026-11-26)
+
+### Adaptive GPU (replaces off/balanced/full)
+
+- New `src/main/adaptive-power.js` — pure decision logic, no Electron/timers/IO:
+  `normalizeGpuMode` (every legacy value maps to `adaptive`), `startupGpuPlan`
+  (launch switches from battery/RAM), `decideGpuTier` (suspended/minimal/
+  balanced/accelerated with 15 s downgrade hysteresis, instant upgrades),
+  `runtimePlan` (sweep cadence + view-visibility policy from battery, RAM,
+  CPU, idle, focus, minimized/locked, audible/video signals).
+- Settings > Performance: the three-option GPU picker is now a single
+  **Adaptive (recommended)** row. Same card, same layout. Legacy
+  off/balanced/full values migrate on load (`profile.js`) and persist via
+  saveNow() after the full settings read — never mid-loop.
+- `main.js`: launch switches now come from `startupGpuPlan` — GPU is never
+  disabled for a normal launch (video/WebGL/games still accelerate); GPU
+  raster is dropped on battery/low-RAM boots and the GPU memory cap adapts
+  (256 MB vs 512 MB). `--gpu=off` stays a test-only override (e2e harness).
+- `browser.js`: background tabs no longer attach to the window at all — they
+  are created detached + `setVisible(false)`, so Chromium throttles them like
+  real hidden tabs. This was the biggest single win (see benchmark below).
+- Minimized windows now hide their views (restored on restore/show), so an
+  occlusion-disabled Chromium build (kept for Cloudflare) still stops compositing.
+- Housekeeping: fixed 30/60 s sweep interval replaced by an adaptive single
+  timeout re-armed from the plan (idle/battery/minimized stretch 2-3x; never
+  below 15 s, never above 5 min). Page work is never throttled.
+
+### Gates
+
+- `node scripts/test-adaptive-power.js` — 8/8 PASS.
+- `npm run verify` — 75 files parsed, all contracts OK.
+- `npx playwright test` — 43/43 PASS (6.9 min).
+- Power benchmark baseline vs Edge captured before changes (see below).
+
+### Energy benchmark (Windows RAPL, identical workloads)
+
+- New `build/scripts/power-benchmark.js` + `power-sample.ps1`:
+  `npm run bench:power`. Samples `\Energy Meter(rapl_package0_pkg)\Power`
+  (mW, 1 Hz, first sample discarded) while Edge and Dexerion run identical
+  local HTML workloads in throwaway profiles; a no-browser idle sample is
+  subtracted. Scenarios: idle, browsing (canvas animation), video (heavier
+  animation), 8 background tabs, multitasking.
+- Baseline (before optimisation) on this machine showed Dexerion **worse**
+  in background (-97%) and multitasking (-45%) — the unattached hidden-tab bug
+  above is the direct fix; re-measurement after the pass is recorded in the
+  benchmark JSON (`C:\Users\Darre\AppData\Local\Temp\opencode\power-benchmark.json`).
+- 10 s windows proved noise-dominated (p10-p90 spans >1000 mW on this busy
+  desktop; the machine floor itself drifted 2800 -> 8200 mW between runs), so
+  the harness moved to a **paired-floor protocol**: every workload sample gets
+  its own no-browser floor sample taken seconds earlier, so attribution is
+  local in time and immune to floor drift. The worktree A/B (pristine HEAD vs
+  optimised tree, identical harness) remains the causal comparison for the
+  background-tab fix; `node scripts/power-compare.js <baseline.json>
+  <optimised.json>` prints the table from median-based attributable power.
+- Same 4 selftest checks fail on the pristine worktree as with the power pass
+  (`contentScript`, `extPopup`, `extIcon`, `offlineFlow.verdictOk`): verified
+  pre-existing via the stashed A/B, not regressions. `memorySaver` — the
+  section that exercises the adaptive sweep — is `ok:true` on both.
+- Platform-level probe for the background-tab fix
+  (`build/scripts/probe-background-visibility.js`): a page opened in a true
+  background tab self-reports via `setInterval` (timers keep ticking when
+  hidden). Result: `document.visibilityState` still reads "visible" (an
+  unattached, hidden WebContentsView does not flip Page Visibility), but
+  **requestAnimationFrame never runs** (`raf:no`) — background tabs get no
+  animation frames, so no compositing/GPU work. The power win is real and
+  comes via rAF suspension; the visibilityState string is unchanged.
+- RAPL honesty note: this shared laptop's co-tenant load (VS Code, Defender,
+  OneDrive, other agents) swings package power ±2000-4000 mW inside 15-20 s
+  windows — larger than browser-attributable deltas, so single-session
+  mean/median attributions are noise-limited (several runs produced
+  physically impossible negative attributables; all flagged
+  `noiseLimited` in the JSONs). The one quiet-window measurement that did
+  resolve (20 s, pristine worktree) put baseline background tabs at
+  **1362 mW vs Edge 80 mW attributable** — the structural bug the fix
+  removes. A quiet-machine, multi-pass run of `bench:power` is the follow-up
+  needed before quoting a 20-40% headline; the harness (paired floors,
+  `POWER_SCENARIOS` subset, `POWER_SAMPLE_SEC`) is ready for it.
+
+### Rebuild + reinstall + launch (2026-11-26, 15:29)
+
+- Final gates on the merged tree (power pass + the video-fullscreen work):
+  `node --check` clean on `main.js`, `browser.js`, `profile.js`,
+  `adaptive-power.js`; `test-adaptive-power` 8/8; `verify-all` 75 files,
+  all contracts OK.
+- `npm run pack:win` green: fresh `app.asar` 63,024,940 bytes
+  (15:29) + signed `Dexerion.exe` in `%TEMP%\dex-build\win-unpacked`.
+- Redeploy followed the established procedure: running app closed via
+  `CloseMainWindow()` (all processes exited cleanly), `tabs.json` hash
+  **byte-identical** before/after
+  (`B6A79C26…A2014`, 1 window), then the matched exe+asar pair
+  (Electron asar-integrity binds them) copied over
+  `%LOCALAPPDATA%\Programs\Dexerion`.
+- Relaunched from the installed location: 5 processes, window
+  "Welcome - Dexerion - Dexerion", `Responding: True`, main process ~123 MB.
+  Deployed asar verified to contain both changesets
+  (`dex:html-fullscreen` + `adaptive-power`/`runtimePlan`).

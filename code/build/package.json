@@ -36,6 +36,8 @@
     "test:tasks": "node scripts/test-tasks.js",
     "verify": "node scripts/verify-all.js",
     "test:self": "electron . --run-selftest",
+    "test:power": "node scripts/test-adaptive-power.js",
+    "bench:power": "node scripts/power-benchmark.js",
     "test:e2e": "playwright test",
     "test:e2e:artifacts": "playwright test e2e/artifacts.spec.js",
     "test:intensive": "node scripts/intensive-e2e.js",

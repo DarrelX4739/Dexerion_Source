@@ -3,6 +3,7 @@
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const adaptivePower = require('./adaptive-power');
 
 // Read one profile JSON file. A file written by another tool (PowerShell's
 // -Encoding UTF8, some editors) can carry a byte-order mark, and JSON.parse
@@ -63,9 +64,9 @@ const DEFAULT_SETTINGS = {
   memoryCapMB: 2048,
   // Show the welcome page when Dexerion launches (Settings > Appearance).
   welcomeDaily: true,
-  // GPU policy: off | balanced | full. Balanced keeps hardware acceleration
-  // available but caps the GPU memory budget so normal browsing stays lean.
-  gpuMode: 'balanced',
+  // GPU policy: a single Adaptive mode (src/main/adaptive-power.js). Legacy
+  // off/balanced/full preferences are migrated to 'adaptive' on load.
+  gpuMode: 'adaptive',
 };
 
 const SEARCH_ENGINES = {
@@ -205,7 +206,17 @@ class ProfileStore {
         const p = this._path(key);
         if (fs.existsSync(p)) {
           const raw = readJson(p);
-          if (key === 'settings') this.data.settings = { ...DEFAULT_SETTINGS, ...raw };
+          if (key === 'settings') {
+            this.data.settings = { ...DEFAULT_SETTINGS, ...raw };
+            // One-time migration of the old off/balanced/full GPU picker to the
+            // single Adaptive mode. The write is deferred to the end of load()
+            // (after every file has been read) so it can never flush defaults
+            // over a file that has not been read yet.
+            if (adaptivePower.isLegacyGpuMode(this.data.settings.gpuMode)) {
+              this.data.settings.gpuMode = adaptivePower.GPU_MODE;
+              this._migratedGpuMode = true;
+            }
+          }
           else if (key === 'accounts') {
             if (Array.isArray(raw.accounts)) this.data.accounts = raw.accounts;
             if (raw.defaultAccountId) this.data.defaultAccountId = raw.defaultAccountId;
@@ -229,6 +240,12 @@ class ProfileStore {
     }
     if (!this.data.settings.downloadDir) {
       this.data.settings.downloadDir = app.getPath('downloads');
+    }
+    // Persist the one-time Adaptive GPU migration (all files are read by now,
+    // so the write reflects the complete on-disk state, not defaults).
+    if (this._migratedGpuMode) {
+      this._migratedGpuMode = false;
+      try { this.saveNow(); } catch {}
     }
     this.ensureAccounts();
   }

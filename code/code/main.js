@@ -59,6 +59,7 @@ const { createExtensionManager } = require('./src/main/extensions');
 const { buildAppMenu } = require('./src/main/menu');
 const { DexPermissions } = require('./src/main/permissions');
 const { BRAND } = require('./src/main/branding');
+const adaptivePower = require('./src/main/adaptive-power');
 
 app.setName(BRAND.name);
 if (process.platform === 'win32') app.setAppUserModelId('com.dexerion.browser');
@@ -76,9 +77,10 @@ app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 app.commandLine.appendSwitch('disable-features',
   'TranslateUI,MediaRouter,DialMediaRouteProvider,OptimizationHints,CalculateNativeWinOcclusion');
-// GPU policy: off | balanced | full. Balanced keeps hardware acceleration
-// available but caps the GPU memory budget so normal browsing stays lean;
-// games and video can still use the GPU because they actively request it.
+// GPU policy: a single Adaptive mode. Launch switches are chosen once from the
+// power/RAM state at boot; the browser adapts render visibility and housekeeping
+// at runtime (src/main/adaptive-power.js). Hardware acceleration is never
+// disabled for a normal launch — games, video and WebGL still get the GPU.
 
 // The self-test creates accounts, writes history/bookmarks and calls
 // profile.save(). Running it against the real userData directory meant every
@@ -101,25 +103,30 @@ if (process.argv.includes('--run-selftest')) {
   if (udd) app.setPath('userData', udd.slice('--user-data-dir='.length));
 }
 
-function gpuModeFromSettings() {
-  try {
-    const fs = require('fs');
-    const file = path.join(app.getPath('userData'), 'settings.json');
-    const raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-    return ['off', 'balanced', 'full'].includes(raw.gpuMode) ? raw.gpuMode : 'balanced';
-  } catch { return 'balanced'; }
+function onBatteryAtBoot() {
+  // powerMonitor usually needs app ready; before that a failure is fine — the
+  // conservative default (no GPU raster) is still applied when the probe fails.
+  try { return Boolean(require('electron').powerMonitor.isOnBatteryPower()); }
+  catch { return false; }
 }
 
 const gpuArg = process.argv.find((a) => /^--gpu=/.test(String(a)));
 // "--gpu=" is six characters; slice(7) turned "off" into "ff" and silently
 // fell back to the settings default, so an explicit test override never applied.
-const gpuMode = gpuArg ? String(gpuArg).slice('--gpu='.length) : gpuModeFromSettings();
-if (gpuMode === 'off') {
+const gpuOverride = gpuArg ? String(gpuArg).slice('--gpu='.length) : null;
+const gpuPlan = adaptivePower.startupGpuPlan({
+  onBattery: onBatteryAtBoot(),
+  freeMemMB: Math.round(require('os').freemem() / 1048576),
+  override: gpuOverride,
+});
+if (gpuPlan.disableGpu) {
   app.commandLine.appendSwitch('disable-gpu');
 } else {
-  app.commandLine.appendSwitch('enable-gpu-rasterization');
-  app.commandLine.appendSwitch('enable-zero-copy');
-  if (gpuMode !== 'full') app.commandLine.appendSwitch('force-gpu-mem-available-mb', '512');
+  if (gpuPlan.gpuRasterization) app.commandLine.appendSwitch('enable-gpu-rasterization');
+  if (gpuPlan.zeroCopy) app.commandLine.appendSwitch('enable-zero-copy');
+  if (gpuPlan.gpuMemoryMB > 0) {
+    app.commandLine.appendSwitch('force-gpu-mem-available-mb', String(gpuPlan.gpuMemoryMB));
+  }
 }
 
 const profile = new ProfileStore();
