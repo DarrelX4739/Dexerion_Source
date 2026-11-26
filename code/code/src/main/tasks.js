@@ -135,6 +135,51 @@ function reminderKind(task, nowMs) {
   return null;
 }
 
+// ---------- B2 wakeup hygiene: adaptive reminder heartbeat ----------
+// The reminders sweep used to run on a fixed 30s interval — a main-process
+// wake every 30 seconds for the whole session, even with no task anywhere
+// near due. The heartbeat only needs to be fast while a reminder is actually
+// imminent: 30s from 10 minutes before the first pending reminder (the due
+// mark, or the 30-minute pre-notice if that comes first) until it fires; 5
+// minutes otherwise. An already-owed reminder counts as "now", so a task that
+// became due while the heartbeat was slow is picked up on the next tick and
+// then keeps the fast cadence until both of its reminders have fired.
+
+// Earliest moment a reminder for this open task will fire (or has already
+// come due). Infinity when nothing is pending for the task.
+function nextReminderAt(task, nowMs) {
+  if (!task || task.done) return Infinity;
+  const now = Number(nowMs);
+  if (!Number.isFinite(now)) return Infinity;
+  const due = Number(task.dueMs);
+  if (!Number.isFinite(due) || due <= 0) return Infinity;
+  const candidates = [];
+  if (!task.remindedDue) candidates.push(due);
+  if (!task.remindedPre) candidates.push(due - PRE_NOTIFY_MS);
+  if (!candidates.length) return Infinity;
+  return Math.max(now, Math.min(...candidates));
+}
+
+// Heartbeat for the reminders sweep. `list` is the tasks of every account
+// (one account with a near reminder is enough to go fast). `opts` carries the
+// named budgets from debloat-budgets.js:
+//   taskHeartbeatNearMs       — fast cadence while a reminder is imminent
+//   taskHeartbeatIdleMs       — cadence when nothing is near
+//   taskHeartbeatNearWindowMs — how far ahead "imminent" reaches; the legacy
+//                               0 means "always near" (the fixed 30s tick).
+function reminderHeartbeatMs(list, nowMs, opts) {
+  const o = opts || {};
+  const fast = Math.max(1000, Math.round(Number(o.taskHeartbeatNearMs) || 30000));
+  const slow = Math.max(fast, Math.round(Number(o.taskHeartbeatIdleMs) || 5 * 60 * 1000));
+  const near = Math.max(0, Math.round(Number(o.taskHeartbeatNearWindowMs)));
+  if (near <= 0) return fast; // legacy profile: the fixed fast tick
+  const now = Number(nowMs) || Date.now();
+  for (const t of sanitizeList(list || [])) {
+    if (nextReminderAt(t, now) - now <= near) return fast;
+  }
+  return slow;
+}
+
 module.exports = {
   PRIORITIES,
   PRE_NOTIFY_MS,
@@ -146,4 +191,6 @@ module.exports = {
   nextThree,
   makeTask,
   reminderKind,
+  nextReminderAt,
+  reminderHeartbeatMs,
 };

@@ -7,32 +7,64 @@ const path = require('path');
 const crypto = require('crypto');
 const { SEARCH_ENGINES } = require('./profile');
 const { BRAND } = require('./branding');
-const aiRouter = require('./ai-router');
-const aiPage = require('./ai-page');
-const aiArtifacts = require('./ai-artifacts');
-const aiSiteHost = require('./ai-site-host');
-const artifactHtml = require('./ai-artifact-html');
-const artifactZip = require('./ai-artifact-zip');
-const artifactEdit = require('./ai-artifact-edit');
-const { settleAfterAction } = require('./ai-settle');
-const reportPresets = require('./report-presets');
-const reportExport = require('./ai-report-export');
-const { createAgentRunner, agentReplyFrom } = require('./ai-agent');
-const skills = require('./ai-skills');
-const { createSkillLoop } = require('./ai-skill-loop');
+// ---------- B3: lazy main-process AI/module stack ----------
+// Boot only needs the browsing core. The AI/report/agent stack below is
+// required on first use instead of at load: every accessor hands back the
+// REAL module object (or function) on first touch, so all exports, method
+// behaviour and call sites are unchanged — only the boot-time require is
+// deferred, and a session that never opens the AI panel never loads it.
+// Modules already pulled in by the eager boot set (ai.js loads ai-router,
+// ai-artifacts, ai-skills via ai-prompts, site-research-assets and
+// ai-search-read; pomodoro.js loads site-policy) stay eager: deferring those
+// would save nothing. ai.js itself stays eager in main.js (createAi is needed
+// for IPC registration at boot).
+// A/B: DEX_EAGER_AI=1 restores the old boot-time loading exactly.
+const EAGER_AI = process.env.DEX_EAGER_AI === '1';
+const lazyModule = (name) => {
+  if (EAGER_AI) return require(name);
+  let mod = null;
+  return new Proxy({}, {
+    get: (_t, prop) => { if (!mod) mod = require(name); return mod[prop]; },
+    has: (_t, prop) => { if (!mod) mod = require(name); return prop in mod; },
+  });
+};
+// Same seam for a single function export (the call sites keep the bare name).
+const lazyFn = (name, prop) => {
+  if (EAGER_AI) return require(name)[prop];
+  let fn = null;
+  return (...args) => {
+    if (!fn) fn = require(name)[prop];
+    return fn(...args);
+  };
+};
+const aiRouter = require('./ai-router');            // eager: ai.js loads it anyway
+const aiPage = lazyModule('./ai-page');
+const aiArtifacts = require('./ai-artifacts');      // eager: ai.js loads it anyway
+const aiSiteHost = lazyModule('./ai-site-host');
+const artifactHtml = lazyModule('./ai-artifact-html');
+const artifactZip = lazyModule('./ai-artifact-zip');
+const artifactEdit = lazyModule('./ai-artifact-edit');
+const settleAfterAction = lazyFn('./ai-settle', 'settleAfterAction');
+const reportPresets = lazyModule('./report-presets');
+const reportExport = lazyModule('./ai-report-export');
+const aiAgent = lazyModule('./ai-agent');
+const skills = require('./ai-skills');              // eager: ai-prompts loads it anyway
+const aiSkillLoop = lazyModule('./ai-skill-loop');
+// ai-approvals is tiny with no transitive deps and its timeout constant is
+// read at handler setup — keep it eager.
 const { createApprovals, DEFAULT_TIMEOUT_MS: SKILL_ASK_TIMEOUT_MS } = require('./ai-approvals');
-const { createAiSearchRunner, clampSources, clampAdaptations } = require('./ai-search');
-const aiSearchRead = require('./ai-search-read');
-const aiSearchSynth = require('./ai-search-synth');
-const research = require('./ai-research');
-const sitePolicy = require('./site-policy');
-const siteVersions = require('./site-generator-versions');
-const siteIntent = require('./site-intent');
-const siteResearchAssets = require('./site-research-assets');
-const reportIntent = require('./report-intent');
-const { siteSystemPrompt } = require('./site-system-prompt');
-const reportVersions = require('./report-version-spec');
-const { reportSystemPrompt } = require('./report-system-prompt');
+const aiSearch = lazyModule('./ai-search');
+const aiSearchRead = require('./ai-search-read');   // eager: site-research-assets loads it anyway
+const aiSearchSynth = lazyModule('./ai-search-synth');
+const research = lazyModule('./ai-research');
+const sitePolicy = require('./site-policy');        // eager: pomodoro.js loads it anyway
+const siteVersions = lazyModule('./site-generator-versions');
+const siteIntent = lazyModule('./site-intent');
+const siteResearchAssets = require('./site-research-assets'); // eager: ai.js loads it anyway
+const reportIntent = lazyModule('./report-intent');
+const siteSystemPrompt = lazyFn('./site-system-prompt', 'siteSystemPrompt');
+const reportVersions = lazyModule('./report-version-spec');
+const reportSystemPrompt = lazyFn('./report-system-prompt', 'reportSystemPrompt');
 const { createPomodoro, SOUNDS, DEFAULTS, SLEEP_IDLE_MS, shouldSleepTab } = require('./pomodoro');
 const { planSweep, clampCapMB, shouldNoticeHog } = require('./memsaver');
 const { BUDGETS, activeProfile } = require('./debloat-budgets');
@@ -254,11 +286,88 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     timer: null,
     _cpuPrev: undefined,
   };
+  // B1 — open overlay views (snip / report viewer / site preview) attached to
+  // a window, so they can follow the window's visibility. With
+  // CalculateNativeWinOcclusion disabled, Chromium never marks a minimized
+  // window occluded, so an attached overlay keeps compositing while the
+  // window sits in the taskbar. A closed overlay is removed from its state
+  // map, so only still-attached views are listed here.
+  function overlayViewsFor(winId) {
+    const out = [];
+    const sn = snipState.get(winId);
+    if (sn && sn.view && !sn.view.webContents.isDestroyed()) out.push(sn.view);
+    const rv = reportOverlayState.get(winId);
+    if (rv && rv.view && !rv.view.webContents.isDestroyed()) out.push(rv.view);
+    const sv = siteOverlayState.get(winId);
+    if (sv && sv.view && !sv.view.webContents.isDestroyed()) out.push(sv.view);
+    return out;
+  }
+  // B1 - the measured off-switch for frame production is the SAME state the
+  // background-tab fix uses: out of the view tree (detached) AND
+  // setVisible(false). setVisible(false) alone on an attached view does not
+  // stop rAF (probe-wcv-semantics states 2 vs 4), and this app disables
+  // CalculateNativeWinOcclusion, so nothing else marks minimized windows
+  // occluded (measured: 60fps rAF keeps running in a minimized window).
+  // Detaching is visibility-only: the renderer keeps its page state, timers
+  // and audio; activateTab() re-attaches on the next switch, so the system
+  // self-heals. Kill switch: DEX_TAB_DETACH=off (or the legacy budget
+  // profile, tabDetachOnMinimize=0) restores the legacy setVisible-only
+  // behaviour exactly.
+  function detachView(winId, view) {
+    const st = windows.get(winId);
+    try { if (st) st.win.contentView.removeChildView(view); } catch {}
+    try { view.setVisible(false); } catch {}
+  }
+  function attachView(winId, view) {
+    const st = windows.get(winId);
+    try { if (st) st.win.contentView.addChildView(view); } catch {}
+    try { view.setVisible(true); } catch {}
+  }
   function setWindowViewsVisible(winId, visible) {
     const st = windows.get(winId); if (!st) return;
+    const detachLev = Number(BUDGETS.tabDetachOnMinimize) !== 0 && process.env.DEX_TAB_DETACH !== 'off';
+    // Defensive: the HIDE direction must only ever detach in a genuinely
+    // minimized/hidden window (the callers guarantee this; double-check so a
+    // stray call in a shown window can never blank a visible tab). The SHOW
+    // direction runs in the restore handler, where the window is visible
+    // again by definition.
+    let windowHidden = true;
+    try { windowHidden = !st.win.isVisible() || st.win.isMinimized(); } catch {}
+    const canDetach = detachLev && (visible || windowHidden);
     for (const [tid, t] of st.tabs) {
       if (!t || !t.view) continue;
-      try { t.view.setVisible(visible && tid === st.active); } catch {}
+      const show = visible && tid === st.active && !st.searchOpen;
+      if (canDetach) {
+        if (show) {
+          try { st.win.contentView.addChildView(t.view); } catch {}
+          try { t.view.setVisible(true); } catch {}
+        } else {
+          detachView(winId, t.view);
+        }
+      } else {
+        // Legacy behaviour (tabDetachOnMinimize=0 / DEX_TAB_DETACH=off):
+        // visibility flags only, exactly as before B1.
+        try { t.view.setVisible(visible && tid === st.active); } catch {}
+      }
+    }
+    // B1 consistency: overlays ride the same visibility as their window
+    // (minimized -> detached+hidden, restored -> still-open overlays
+    // re-attached above the tab views; layout() then re-syncs their bounds).
+    // Kill switches: DEX_OVERLAY_HIDE=off, or the legacy budget profile
+    // (DEX_DEBLOAT_BASELINE=1 pins overlayHideOnMinimize=0).
+    if (Number(BUDGETS.overlayHideOnMinimize) !== 0 && process.env.DEX_OVERLAY_HIDE !== 'off') {
+      for (const ov of overlayViewsFor(winId)) {
+        if (canDetach) {
+          if (visible) attachView(winId, ov);
+          else detachView(winId, ov);
+        } else {
+          try { ov.setVisible(Boolean(visible)); } catch {}
+        }
+      }
+    }
+    if (canDetach && visible) {
+      // Re-sync geometry after the re-attach (bounds, overlay stacking).
+      try { layout(winId); } catch {}
     }
   }
   function powerSignals() {
@@ -318,6 +427,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   }
   function scheduleSweep(delay) {
     if (power.timer) clearTimeout(power.timer);
+    if (process.env.DEX_TIMER_DEBUG) {
+      console.log('[dex-timer] power sweep in ' + delay + 'ms');
+    }
     power.timer = setTimeout(() => {
       power.timer = null;
       try { runPowerSweep(); } catch {}
@@ -353,7 +465,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     pm.on('on-ac', () => { power.onBattery = false; applyPowerPlan('on-ac'); });
     pm.on('lock-screen', () => { power.locked = true; applyPowerPlan('lock'); });
     pm.on('unlock-screen', () => { power.locked = false; markInteraction(); });
-    pm.on('resume', () => markInteraction());
+    pm.on('resume', () => { markInteraction(); try { armTaskHeartbeat(); } catch {} });
   } catch {}
   // ---------- Focus Timer (Pomodoro) ----------
   // Single engine for all windows: one clock, one blocklist, one audible
@@ -744,7 +856,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         return Object.keys(query).length ? { query } : undefined;
       })(),
     );
-    const state = { id, win, accountId: aid, tabs: new Map(), order: [], active: null, groups: new Map(), aiOpen: false, searchOpen: false, aiRequestId: null, aiRequestChatId: null, memNotice: null, memNoticeMutedUntil: 0, preview: Boolean(opts.preview), skin: opts.skin || '', inspector: { open: false, dock: 'bottom', tabId: null, win: null }, htmlFullscreen: false, htmlFullscreenTab: null, fsRestore: null, fsHealTimer: null };
+    const state = { id, win, accountId: aid, tabs: new Map(), order: [], active: null, groups: new Map(), aiOpen: false, searchOpen: false, aiRequestId: null, aiRequestChatId: null, memNotice: null, memNoticeMutedUntil: 0, preview: Boolean(opts.preview), skin: opts.skin || '', inspector: { open: false, dock: 'bottom', tabId: null, win: null }, htmlFullscreen: false, htmlFullscreenTab: null, fsRestore: null, fsHealTimer: null, searchPageHidden: false };
     windows.set(id, state);
     win.on('resize', () => layoutSoon(id));
     // A fullscreen transition resizes the window: re-layout so the tab view
@@ -781,8 +893,8 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         try { aiSiteHost.setSiteRegistryPin(siteRegistry, pinnedId, false); } catch {}
         siteActiveHostByWin.delete(id);
       }
-      try { agent.windowClosed(id); } catch {} // agent runs bound here halt
-      try { search.releaseWindow(id); } catch {} // AI search runs + work tabs halt
+      if (agentInstance) { try { agentRef().windowClosed(id); } catch {} } // agent runs bound here halt
+      if (searchInstance) { try { searchRef().releaseWindow(id); } catch {} } // AI search runs + work tabs halt
       // Offline waits run on per-tab 250ms/2s timers: stop them with the
       // window so a closed window can never leave probes firing forever.
       try {
@@ -1511,7 +1623,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     // leave event dies with the webContents below, and without this the
     // window would stay borderless with no taskbar.
     if (st.htmlFullscreen && st.htmlFullscreenTab === tabId) exitHtmlFullscreen(winId);
-    agent.tabClosed(tabId); // a run acting on this tab halts: its refs are gone
+    if (agentInstance) { try { agentRef().tabClosed(tabId); } catch {} } // a run acting on this tab halts: its refs are gone
     // The inspected target is going away, so the panel goes with it.
     if (st.inspector && st.inspector.open && st.inspector.tabId === tabId) closeInspector(winId);
     const t = st.tabs.get(tabId);
@@ -1581,6 +1693,32 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
           } else t.view.setBounds({ x: 0, y: top, width: 0, height: 0 });
         } catch {}
       }
+      // B1 consistency: while the fullscreen search surface owns the window,
+      // the covered page view is parked at 0x0 but still produces frames
+      // (setVisible-only does not stop rAF on an attached view). The proven
+      // off-switch is detach+hidden - the exact state the background-tab fix
+      // uses. Closing the surface re-attaches. The tracked flag is per
+      // WINDOW; the attached check re-detaches whatever activateTab re-ran
+      // while the surface was open. A minimized window never re-attaches
+      // here (setWindowViewsVisible(true) owns the restore attach once the
+      // surface is closed, since st.searchOpen is then false).
+      try {
+        const act = st.tabs.get(st.active);
+        if (act && act.view && !act.view.webContents.isDestroyed()) {
+          const searchLev = Number(BUDGETS.searchPageDetach) !== 0 && process.env.DEX_SEARCH_DETACH !== 'off';
+          if (searchLev && st.searchOpen) {
+            let attached = true;
+            try { attached = st.win.contentView.getChildViews().includes(act.view); } catch {}
+            if (attached) detachView(winId, act.view);
+            st.searchPageHidden = true;
+          } else if (searchLev && st.searchPageHidden) {
+            let minimized = true;
+            try { minimized = st.win.isMinimized(); } catch {}
+            if (!minimized) attachView(winId, act.view);
+            st.searchPageHidden = false;
+          }
+        }
+      } catch {}
       if (ins && st.inspector.win && !st.inspector.win.isDestroyed()) {
         // The DevTools surface is a frameless child window pinned to the panel's
         // body; the header above it is drawn by the shell in the user's theme.
@@ -4284,7 +4422,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         winState.aiRequestChatId = null;
       }
     }
-    if (st.agentRunId) agent.stopRun(st.agentRunId, 'stopped');
+    if (st.agentRunId) agentRef().stopRun(st.agentRunId, 'stopped');
     const store = chatStore(st, A);
     store.list.length = 0;
     store.persist();
@@ -4862,7 +5000,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       }
       if (!dataUrl) { faviconNoIcon.add(key); return; }
       if (patchBookmarkFavicon(accData(accountId), pageUrl, dataUrl)) {
-        saveAcc(accountId); broadcastState();
+        saveAcc(accountId); pushStateForAccount(accountId);
       }
     } catch {
       faviconNoIcon.add(key);
@@ -4880,7 +5018,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       { id: 'b' + Date.now(), title: bm.title, url: bm.url, at: Date.now() },
       /^data:image\//i.test(hint) ? { favicon: hint } : {}
     ));
-    saveAcc(st.accountId); broadcastState();
+    saveAcc(st.accountId); pushStateForAccount(st.accountId);
     if (!/^data:image\//i.test(hint)) resolveBookmarkFavicon(st.accountId, bm.url, hint, true);
     return true;
   });
@@ -4901,7 +5039,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   ipcMain.handle('dex:bookmark-remove', (e, url) => {
     const { st, A } = Aof(e);
     for (const k of Object.keys(A.bookmarks.roots)) A.bookmarks.roots[k] = A.bookmarks.roots[k].filter(b => b.url !== url);
-    saveAcc(st.accountId); broadcastState(); return true;
+    saveAcc(st.accountId); pushStateForAccount(st.accountId); return true;
   });
   ipcMain.handle('dex:bookmark-move', (e, id, folder) => {
     const { st, A } = Aof(e);
@@ -4909,7 +5047,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       const i = A.bookmarks.roots[k].findIndex(b => b.id === id);
       if (i >= 0) { const [b] = A.bookmarks.roots[k].splice(i, 1); A.bookmarks.roots[folder === 'bar' ? 'bar' : 'other'].push(b); }
     }
-    saveAcc(st.accountId); broadcastState(); return true;
+    saveAcc(st.accountId); pushStateForAccount(st.accountId); return true;
   });
   ipcMain.handle('dex:is-bookmarked', (e, url) => {
     const { A } = Aof(e);
@@ -5073,8 +5211,8 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     // Search With Dexerion AI: bounds live in ai-search.js so every read path
     // (settings page, search run) agrees on 4-12 sources and 2-6 adaptations.
     if (patch.aiSearchSuggest !== undefined) S.settings.aiSearchSuggest = Boolean(patch.aiSearchSuggest);
-    if (patch.aiSearchSources !== undefined) S.settings.aiSearchSources = clampSources(patch.aiSearchSources);
-    if (patch.aiSearchAdaptations !== undefined) S.settings.aiSearchAdaptations = clampAdaptations(patch.aiSearchAdaptations);
+    if (patch.aiSearchSources !== undefined) S.settings.aiSearchSources = aiSearch.clampSources(patch.aiSearchSources);
+    if (patch.aiSearchAdaptations !== undefined) S.settings.aiSearchAdaptations = aiSearch.clampAdaptations(patch.aiSearchAdaptations);
     // Memory Saver (Performance): cap clamped to the 1-4 GB the UI offers.
     if (patch.memorySaver !== undefined) S.settings.memorySaver = Boolean(patch.memorySaver);
     if (patch.memoryCapMB !== undefined) S.settings.memoryCapMB = clampCapMB(patch.memoryCapMB);
@@ -5132,6 +5270,52 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   ipcMain.handle('dex:power-state', (e) => {
     needChrome(e);
     return powerState();
+  });
+
+  // B1 probe seam (read-only, trusted chrome only, no renderer calls it): the
+  // background-visibility probes read what each open overlay page — and the
+  // covered page tab while the fullscreen search surface is open — actually
+  // does: whether requestAnimationFrame still fires (frame production is the
+  // power lever B1 targets; document.visibilityState is reported too, but a
+  // runtime detach+hide suspends rAF while the visibility state can stay
+  // stale-visible — see probe-wcv-semantics).
+  ipcMain.handle('dex:overlay-state', async (e) => {
+    needChrome(e);
+    const readView = async (view) => {
+      if (!view || view.webContents.isDestroyed()) return null;
+      let doc = '';
+      try { doc = String(await view.webContents.executeJavaScript('String(document.visibilityState)', true)); } catch {}
+      let raf = null;
+      try {
+        raf = Boolean(await view.webContents.executeJavaScript(
+          'new Promise((res) => { requestAnimationFrame(() => res(true)); setTimeout(() => res(false), 900); })', true));
+      } catch {}
+      return { doc, rafProducing: raf };
+    };
+    const out = {};
+    // A frozen renderer delays its own timers, so every read is raced against
+    // a main-side deadline; a late page simply reports nulls.
+    const bounded = async (p) => Promise.race([
+      p,
+      new Promise((res) => { const t = setTimeout(() => res(null), 5000); if (t.unref) t.unref(); }),
+    ]);
+    for (const st of windows.values()) {
+      if (!st || st.win.isDestroyed()) continue;
+      let minimized = null;
+      try { minimized = st.win.isMinimized(); } catch {}
+      const [snip, report, site, page] = await Promise.all([
+        bounded(readView((snipState.get(st.id) || {}).view)),
+        bounded(readView((reportOverlayState.get(st.id) || {}).view)),
+        bounded(readView((siteOverlayState.get(st.id) || {}).view)),
+        bounded(readView((st.tabs.get(st.active) || {}).view)),
+      ]);
+      out[st.id] = {
+        minimized,
+        searchOpen: Boolean(st.searchOpen),
+        snip, report, site, page,
+      };
+    }
+    return out;
   });
 
   // Read-only GPU diagnostics: what Chromium actually decided at boot. The
@@ -6242,7 +6426,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         // The one search pipeline: plan -> structured retrieval -> denylist ->
         // reads. The skill gets the numbered material; the model writes the
         // answer with citations to pages that were actually read.
-        const gathered = await search.gather({
+        const gathered = await searchRef().gather({
           reqId: 'skill:' + String(st.aiRequestId || Date.now()),
           winId: st.id,
           query,
@@ -6941,7 +7125,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
         // per-request copy only — nothing is written to the stored chat.
         if (siteIntent.wantsSiteResearch(own)) {
           try {
-            const gathered = await search.gather({
+            const gathered = await searchRef().gather({
               reqId: 'site-research:' + id,
               winId: st.id,
               query: own.slice(0, 400),
@@ -6996,7 +7180,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       // The skill loop wraps the stream: proposals become consent cards,
       // executors run, results ride back, and the final reply streams on.
       const shownCreationRuns = new Set();
-      const loop = createSkillLoop({
+      const loop = aiSkillLoop.createSkillLoop({
         turn: (chatMsgs, paint, hints) => ai.stream(id, chatMsgs, paint || (() => {}), {
           memory: A.memory,
           systemSuffix: focusSuffix,
@@ -7084,7 +7268,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     // A stop also ends any consent card this window is waiting on — and any
     // skill-run search riding under this request id.
     clearSkillAsks(st.id);
-    search.stop('skill:' + id);
+    searchRef().stop('skill:' + id);
     return true;
   });
   // Memory notice actions: Allow keeps the tab and mutes the notice for this
@@ -8023,7 +8207,12 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // as chat sends (payload shape unchanged) and is flushed for good on the
   // run's end event.
   const agentChunkBatchers = new Map();
-  const agent = createAgentRunner({
+  // B3: the agent runner (and the ai-agent -> ai-tools -> ai-page/ai-research
+  // stack under it) is created on first use, not at boot. Teardown hooks guard
+  // on agentInstance so closing a window or tab never instantiates the stack;
+  // a fresh runner owns no runs, so skipping those calls is equivalent.
+  let agentInstance = null;
+  const agentRef = () => (agentInstance || (agentInstance = aiAgent.createAgentRunner({
     streamTurn: (reqId, wireMessages, opts, onText) => ai.stream(reqId, wireMessages, onText, opts),
     dispatch: dispatchAgentAction,
     askUser: askAgentUser,
@@ -8068,12 +8257,15 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       if (wc) wc.executeJavaScript('window.__dexHalt = true;0').catch(() => {});
       emitAgentEvent(run, { type: 'end', halted: run.halted });
     },
-  });
+  })));
 
   // ---------- Search With Dexerion AI (fullscreen search) ----------
   // ai-search.js owns the pipeline; these adapters give it background tabs, the
   // shared page reader and the NIM stream, and surface progress to the shell.
-  const search = createAiSearchRunner({
+  // B3: same deferred construction as the agent runner above; the window-close
+  // hook guards on searchInstance so closing a window never loads the stack.
+  let searchInstance = null;
+  const searchRef = () => (searchInstance || (searchInstance = aiSearch.createAiSearchRunner({
     stream: (reqId, messages, onText, opts) => ai.stream(reqId, messages, onText, opts),
     cancel: (reqId) => ai.cancel(reqId),
     fetchText: (url, opts) => fetchSearchText(url, opts),
@@ -8085,7 +8277,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       if (!st || st.win.isDestroyed()) return;
       try { st.win.webContents.send('dex:ai-search-progress', event); } catch {}
     },
-  });
+  })));
 
   // Text fetch for the search pipeline's provider endpoints: Chromium's
   // network stack, a hard timeout, a text-only content-type gate and a 2MB
@@ -8279,8 +8471,8 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   function aiSearchConfig(A) {
     return {
       suggestions: Boolean(S.settings.aiSearchSuggest),
-      sources: clampSources(S.settings.aiSearchSources),
-      adaptations: clampAdaptations(S.settings.aiSearchAdaptations),
+      sources: aiSearch.clampSources(S.settings.aiSearchSources),
+      adaptations: aiSearch.clampAdaptations(S.settings.aiSearchAdaptations),
       difficulty: difficultyOf(A),
       theme: S.settings.theme || 'dark',
       accent: S.settings.accent || '#35c4ff',
@@ -8330,7 +8522,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       role: message && message.role === 'model' ? 'model' : 'user',
       text: String((message && message.text) || '').slice(0, 2000),
     }));
-    return await search.run({
+    return await searchRef().run({
       reqId: String(reqId || ('ais' + Date.now())).slice(0, 80),
       winId: st.id,
       query: q,
@@ -8340,7 +8532,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       difficulty: difficultyOf(A),
     });
   });
-  ipcMain.handle('dex:ai-search-stop', (e, reqId) => { needChrome(e); return search.stop(String(reqId || '')); });
+  ipcMain.handle('dex:ai-search-stop', (e, reqId) => { needChrome(e); return searchRef().stop(String(reqId || '')); });
   // The difficulty chip (search surface now; the sidebar task bar in Phase 2).
   // The tier is a preference, never a model name — the scout owns the model.
   ipcMain.handle('dex:ai-difficulty-get', (e) => {
@@ -8416,7 +8608,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (!aiCaps(A).agent) {
       return { ok: false, reqId: clientReqId, error: 'Agent mode is off. Turn on the lightning button first.' };
     }
-    if (st.agentRunId) agent.stopRun(st.agentRunId, 'a newer run replaced this one');
+    if (st.agentRunId) agentRef().stopRun(st.agentRunId, 'a newer run replaced this one');
     const t = st.tabs.get(st.active);
     const wc = t && t.view && t.view.webContents;
     let url = '';
@@ -8444,7 +8636,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     // model only — the stored chat and the memory learner see the original.
     const history = injectContexts(safeMessages, pageContext);
     const lastUser = [...safeMessages].reverse().find(x => x && x.role === 'user' && String(x.text || '').trim());
-    const run = agent.startRun({ tabId: t.id, winId: st.id, url, settings: agentPrefs(A), memory: A.memory, history });
+    const run = agentRef().startRun({ tabId: t.id, winId: st.id, url, settings: agentPrefs(A), memory: A.memory, history });
     run.clientReqId = clientReqId;
     run.chatId = String(chatId || '');
     run.actWinId = st.id;
@@ -8479,7 +8671,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     liveMissions.set(run.id, { accountId: st.accountId });
     try {
       emitAgentEvent(run, { type: 'start', tabId: t.id, url });
-      const out = await agent.runLoop(run);
+      const out = await agentRef().runLoop(run);
       mission.status = out.halted ? 'cancelled' : 'done';
       mission.result = String(out.text || '').slice(0, 8000);
       mission.endedAt = Date.now();
@@ -8495,7 +8687,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       // warnings, continuation). Mapping it inline here dropped those fields,
       // so agent cards and the Continue chip never appeared even though the
       // loop returned them — hence the shared, tested mapper.
-      return agentReplyFrom(clientReqId, out);
+      return aiAgent.agentReplyFrom(clientReqId, out);
     } catch (err) {
       mission.status = 'failed';
       mission.result = String(err && err.message || err).slice(0, 4000);
@@ -8505,38 +8697,38 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       return { ok: false, reqId: clientReqId, error: String(err && err.message || err) };
     } finally {
       liveMissions.delete(run.id);
-      agent.endRun(run.id);
+      agentRef().endRun(run.id);
       if (st.agentRunId === run.id) st.agentRunId = null;
     }
   });
   ipcMain.handle('dex:ai-agent-stop', (e, runId) => {
     needChrome(e);
-    const run = runId ? agent.getRun(runId) : null;
-    if (run) { agent.stopRun(run.id, 'stopped'); return true; }
+    const run = runId ? agentRef().getRun(runId) : null;
+    if (run) { agentRef().stopRun(run.id, 'stopped'); return true; }
     return false;
   });
   ipcMain.handle('dex:ai-agent-pause', (e, runId) => {
     const { st } = needChrome(e);
-    const ok = agent.setPaused(runId, true);
+    const ok = agentRef().setPaused(runId, true);
     if (ok) markMissionStatus(st.accountId, runId, 'paused');
     return ok;
   });
   ipcMain.handle('dex:ai-agent-resume', (e, runId) => {
     const { st } = needChrome(e);
-    const ok = agent.setPaused(runId, false);
+    const ok = agentRef().setPaused(runId, false);
     if (ok) markMissionStatus(st.accountId, runId, 'running');
     return ok;
   });
   ipcMain.handle('dex:ai-agent-ping', (e, runId) => {
     needChrome(e);
-    return agent.ping(runId);
+    return agentRef().ping(runId);
   });
   ipcMain.handle('dex:ai-agent-answer', (e, { runId, askId, ok, text } = {}) => {
     needChrome(e);
     // A free-text answer (the ask_user tool) rides the same channel as a
     // yes/no decision; an empty string counts as "no answer".
-    if (typeof text === 'string') return agent.answerAsk(runId, askId, text.trim().slice(0, 2000));
-    return agent.answerAsk(runId, askId, ok);
+    if (typeof text === 'string') return agentRef().answerAsk(runId, askId, text.trim().slice(0, 2000));
+    return agentRef().answerAsk(runId, askId, ok);
   });
   // ---------- Assistant missions (inspect + delete past agent runs) ---------
   // The status flip on pause/resume lives here (not in emitAgentEvent), so a
@@ -8642,7 +8834,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (sender.isDestroyed()) return { ok: false, reqId: clientReqId };
     const recipe = A.recipes.find(r => r && r.id === String(recipeId || ''));
     if (!recipe) return { ok: false, reqId: clientReqId, error: 'Recipe not found.' };
-    if (st.agentRunId) agent.stopRun(st.agentRunId, 'a newer run replaced this one');
+    if (st.agentRunId) agentRef().stopRun(st.agentRunId, 'a newer run replaced this one');
     const t = st.tabs.get(st.active);
     const wc = t && t.view && t.view.webContents;
     let url = '';
@@ -8658,19 +8850,19 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (recipe.origin && recipeHost(url) !== recipe.origin) {
       return { ok: false, reqId: clientReqId, error: 'This recipe was recorded on ' + recipe.origin + ' — open that site first.' };
     }
-    const run = agent.startRun({ tabId: t.id, winId: st.id, url, settings: agentPrefs(A), memory: [], history: [] });
+    const run = agentRef().startRun({ tabId: t.id, winId: st.id, url, settings: agentPrefs(A), memory: [], history: [] });
     run.actWinId = st.id;
     run.clientReqId = clientReqId;
     st.agentRunId = run.id;
     void messages;
     try {
       emitAgentEvent(run, { type: 'start', tabId: t.id, url });
-      const out = await agent.replayRun(run, recipe.steps);
+      const out = await agentRef().replayRun(run, recipe.steps);
       return { ok: true, reqId: clientReqId, text: 'Replayed "' + recipe.name + '" — ' + out.text, steps: out.steps, halted: out.halted };
     } catch (err) {
       return { ok: false, reqId: clientReqId, error: String(err && err.message || err) };
     } finally {
-      agent.endRun(run.id);
+      agentRef().endRun(run.id);
       if (st.agentRunId === run.id) st.agentRunId = null;
     }
   });
@@ -8806,6 +8998,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     list.push(tasks.makeTask(input || {}));
     saveAcc(st.accountId);
     broadcastTasks(st.accountId);
+    armTaskHeartbeat(); // task changed: the near-due answer may have changed
     return tasks.sortTasks(list);
   });
   ipcMain.handle('dex:tasks-toggle', (e, id, done) => {
@@ -8817,6 +9010,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     t.doneAt = t.done ? Date.now() : 0;
     saveAcc(st.accountId);
     broadcastTasks(st.accountId);
+    armTaskHeartbeat(); // task changed: the near-due answer may have changed
     return tasks.sortTasks(list);
   });
   ipcMain.handle('dex:tasks-delete', (e, id) => {
@@ -8827,6 +9021,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     if (A.tasks.length === n) throw new Error('Task not found.');
     saveAcc(st.accountId);
     broadcastTasks(st.accountId);
+    armTaskHeartbeat(); // task changed: the near-due answer may have changed
     return tasks.sortTasks(A.tasks);
   });
   ipcMain.handle('dex:tasks-clear-done', (e) => {
@@ -8834,6 +9029,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     A.tasks = ensureTasks(A).filter((x) => !x.done);
     saveAcc(st.accountId);
     broadcastTasks(st.accountId);
+    armTaskHeartbeat(); // task changed: the near-due answer may have changed
     return tasks.sortTasks(A.tasks);
   });
   // Reminder sweep: 30 minutes before due + at due, once each per task.
@@ -8865,8 +9061,51 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
       if (changed && m && m.id) saveAcc(m.id);
     }
   }
-  setInterval(checkTaskReminders, 30000);
-  setTimeout(() => { try { checkTaskReminders(); } catch {} }, 5000);
+  // B2 — adaptive task-reminder heartbeat. The sweep used to wake the main
+  // process every 30s all session. tasks.reminderHeartbeatMs picks 30s only
+  // while some open task's next reminder (due mark or the 30-minute
+  // pre-notice) is owed or lands within the near window, else 5 minutes, so
+  // punctuality is kept for near-due tasks while an idle session wakes 10x
+  // less. The cadence is re-armed whenever a task changes, after every sweep
+  // (fired flags change the answer), and after a system resume (the clock may
+  // have jumped). Kill switches: DEX_TASK_HEARTBEAT=legacy restores the fixed
+  // 30s setInterval exactly; the legacy budget profile (DEX_DEBLOAT_BASELINE=1)
+  // pins the same cadence through the taskHeartbeat* budgets.
+  let taskHeartbeatTimer = null;
+  let taskHeartbeatLegacy = process.env.DEX_TASK_HEARTBEAT === 'legacy';
+  function armTaskHeartbeat() {
+    if (taskHeartbeatLegacy) return;
+    if (taskHeartbeatTimer) clearTimeout(taskHeartbeatTimer);
+    const tick = () => {
+      taskHeartbeatTimer = null;
+      try { checkTaskReminders(); } catch {}
+      armTaskHeartbeat();
+    };
+    let delay = 30000;
+    try {
+      const lists = [];
+      for (const m of listAccounts()) {
+        try { lists.push(ensureTasks(accData(m && m.id))); } catch {}
+      }
+      delay = tasks.reminderHeartbeatMs(lists, Date.now(), BUDGETS);
+    } catch {}
+    if (process.env.DEX_TIMER_DEBUG) {
+      console.log('[dex-timer] task-reminder heartbeat ' + delay + 'ms');
+    }
+    taskHeartbeatTimer = setTimeout(tick, delay);
+    if (taskHeartbeatTimer.unref) taskHeartbeatTimer.unref();
+  }
+  if (taskHeartbeatLegacy) {
+    setInterval(checkTaskReminders, 30000);
+    setTimeout(() => { try { checkTaskReminders(); } catch {} }, 5000);
+  } else {
+    // Same first-sweep timing as the legacy interval (5s in); the adaptive
+    // cadence starts from there, so boot does no extra synchronous work.
+    setTimeout(() => {
+      try { checkTaskReminders(); } catch {}
+      try { armTaskHeartbeat(); } catch {}
+    }, 5000);
+  }
 
   // ---------- snip tool (screenshot: area / full page + window video) ----------
   // The overlay is an in-window WebContentsView parked exactly over the active
@@ -9457,6 +9696,19 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     return null;
   }
   function broadcastState() { for (const id of windows.keys()) pushState(id); }
+  // B5 — targeted state push for per-account changes. serial(winId) reads
+  // accData(st.accountId), so a bookmark/folder change in one account leaves
+  // every other account's window state bit-for-bit identical; only that
+  // account's windows need the new dex:state. Every window still gets the
+  // full state (same channel, same shape) — other accounts just stop
+  // receiving an unchanged copy. Kill switch: DEX_BROADCAST_LEGACY=1 restores
+  // the full broadcast for every call site.
+  function pushStateForAccount(accountId) {
+    if (process.env.DEX_BROADCAST_LEGACY === '1') { broadcastState(); return; }
+    for (const st of windows.values()) {
+      if (st.accountId === accountId) pushState(st.id);
+    }
+  }
 
   // Debloat V131-V180 measurement surface. Read-only: the A/B harness samples
   // the same Electron process metrics the Memory Saver already uses, plus the

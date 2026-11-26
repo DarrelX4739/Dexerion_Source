@@ -153,13 +153,28 @@ function runtimePlan(signals, previous, nowMs, state, budgets) {
   if (gpuTier === 'suspended') multiplier = 3;
   else if (s.onBattery) multiplier = 2;
   else if (idle) multiplier = 2;
-  const sweepIntervalMs = clamp(baseSweep * multiplier, SWEEP_MIN_MS, SWEEP_MAX_MS);
+  // B2 sweep-max floor: deep idle raises the CEILING, not the multiplier.
+  // deepIdle requires the suspended tier AND a fully quiet machine (no
+  // focused window, playback, GPU demand or in-flight loads), so every
+  // focused/active/loading signal keeps the exact current cadence. The
+  // stretch engages only when the budget exceeds the regular sweep max —
+  // the legacy budget profile (sweepDeepIdleMs = 30s) never engages it, so
+  // DEX_DEBLOAT_BASELINE=1 restores the current cadence exactly. Reversible:
+  // delete this block, or keep the budget at <= SWEEP_MAX_MS.
+  const deepIdle = gpuTier === 'suspended'
+    && !s.focused && !s.video && !s.audible && !s.webgl && !s.loading && !s.interacting;
+  const deepIdleCeiling = Math.round(Number(b.sweepDeepIdleMs) || 0);
+  let sweepIntervalMs = clamp(baseSweep * multiplier, SWEEP_MIN_MS, SWEEP_MAX_MS);
+  if (deepIdle && deepIdleCeiling > SWEEP_MAX_MS) {
+    sweepIntervalMs = Math.max(sweepIntervalMs, deepIdleCeiling);
+  }
   let idleSleepMs = baseIdle;
   if (gpuTier === 'suspended' || s.onBattery) idleSleepMs = Math.min(idleSleepMs, 90000);
   if (s.freeMemMB > 0 && s.freeMemMB < 1024) idleSleepMs = Math.min(idleSleepMs, 60000);
   return {
     gpuTier,
-    sweepIntervalMs,
+    sweepIntervalMs: Math.round(sweepIntervalMs),
+    deepIdleSweep: deepIdle,
     idleSleepMs: Math.round(idleSleepMs),
     hideInactiveViews: true,
     hideMinimizedViews: true,

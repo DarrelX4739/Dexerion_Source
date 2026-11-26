@@ -77,6 +77,40 @@ app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 app.commandLine.appendSwitch('disable-features',
   'TranslateUI,MediaRouter,DialMediaRouteProvider,OptimizationHints,CalculateNativeWinOcclusion');
+
+// A2 — Chromium background networking Dexerion doesn't use. Dexerion is
+// Electron: there is no variations service, no update checker and no Google
+// Safe Browsing integration of its own (grep of the whole app source: no
+// reference to component updates, variations, spellcheck dictionaries or
+// EME/DRM setup), so the schedulers behind these switches only produce
+// periodic network-service wakes. Kill switch: DEX_LEGACY_NET=1 suppresses
+// both switches and restores the unbounded legacy behaviour.
+if (process.env.DEX_LEGACY_NET !== '1') {
+  app.commandLine.appendSwitch('disable-background-networking');
+  app.commandLine.appendSwitch('disable-component-update');
+}
+
+// A1 — bounded HTTP + media disk caches. Chromium's simple-cache backend
+// spreads its maintenance and eviction cost over the cache size, so a long
+// session pays growing background disk I/O for caches that never shrink. The
+// caps are generous (256 MB HTTP / 192 MB media, named budgets in
+// src/main/debloat-budgets.js): working sets under budget see identical cache
+// hits; only oversized media sites may re-fetch evicted ranges. Kill switches:
+// DEX_CACHE_BUDGET=off appends no switch at all; DEX_DEBLOAT_BASELINE=1
+// restores the uncapped legacy profile (budget 0 = no switch).
+if (process.env.DEX_CACHE_BUDGET !== 'off') {
+  try {
+    const cacheBudgets = require('./src/main/debloat-budgets');
+    const diskBytes = Number(cacheBudgets.BUDGETS.diskCacheBytes) || 0;
+    const mediaBytes = Number(cacheBudgets.BUDGETS.mediaCacheBytes) || 0;
+    if (diskBytes > 0) {
+      app.commandLine.appendSwitch('disk-cache-size', String(cacheBudgets.clampBudget('diskCacheBytes', diskBytes)));
+    }
+    if (mediaBytes > 0) {
+      app.commandLine.appendSwitch('media-cache-size', String(cacheBudgets.clampBudget('mediaCacheBytes', mediaBytes)));
+    }
+  } catch (e) { console.warn('[dexerion] cache budgets unavailable:', e && e.message); }
+}
 // GPU policy: a single Adaptive mode running the software-rendering
 // configuration (the measured lowest-power setup). Launch switches are chosen
 // once at boot; the browser keeps adapting render visibility and housekeeping
