@@ -19,12 +19,21 @@ background (fails every scenario).
 | V1 | active-browsing CPU 137.5% of Edge — caused by the software-rendering policy (compositing on CPU) | Restore hardware-accelerated Adaptive GPU (raster on AC boots, zero-copy, 256/512 MB GPU budget); adaptive controller unchanged | Gates: 8/8 unit, GPU MODES ALL PASS (hardware compositing enabled verified live), verify-all 75 files, boot smoke 3/3. Edge comparison pending V1 re-measure | YES (pending confirm) |
 | V2 | RAM baseline ~163–165% of Edge (idle/active) | renderer V8 heap caps: old space 512→256 MB + semi-space 8 MB (verified propagated: renderer cmdlines + performance.memory.jsHeapSizeLimit 608→280 MB); renderer-process-limit 6→4 evaluated and REJECTED (inert under process-per-site — 10 renderers at both limits, A/B measured) | Gates: verify-all 75 OK, 8/8, GPU MODES ALL PASS, Playwright 43/43 (6.8m incl. 20 intensive rounds, no OOM); probe: tree WS 642–646 MB, caps bind growth headroom (~55% lower per-renderer reservation) | YES |
 | V3 | Browser process 121 MB — ai.js eager dep chain | ai.js lazy-load implemented via the proven accessor pattern, all gates green (43/43), then **REVERTED on measurement**: whole chain costs ~0.5 MB RSS (10× under the bar); browser.js's B3 pins already hold 5/7 deps eagerly; GPU process (111 MB), renderers (3×~114-134 MB) and Chromium core are the real weight | REVERTED (no-win; patch preserved %TEMP%\opencode\V3-ai-lazy-REVERTED.patch; probe-ai-boot-modules.js kept) | NO (reverted) |
-| V4 | foreground RAM 140.7% of Edge (GPU process 114 MB WS / 69 MB private — largest private consumer; third renderer persists at idle) + active-browsing CPU 115.3% | gpuMemBudget 256→128 MB A/B; renderer consolidation (find+fold the idle third renderer); active-browsing CPU profiling | pending | — |
+| V4 | foreground RAM 140.7% of Edge (GPU process 114 MB WS / 69 MB private — largest private consumer; third renderer persists at idle) + active-browsing CPU 115.3% | gpuMemBudget 256→128 MB A/B; renderer consolidation; active-browsing CPU audit | **All three measured and rejected, zero product changes**: GPU budget 512→64 = 0 MB GPU-process effect (allocation headroom, not resident footprint; argv-override assumption falsified); third renderer = the boot newtab (workload asymmetry, not an app defect); CPU rank-1 mechanism = run 2 ran on battery → CPU raster, so the fix is an on-AC re-run, not code | NO (no-win) |
+| **R3** (checkpoint) | Run 2 confounded by battery raster + one extra page | On-AC + fairness-fixed harness (boot newtab navigated in place), 30/30 trials | **TEST-REPORT-3**: background CPU 3.6% / RAM 57.6% / GPU 0% **all PASS both bars**; idle CPU 26.7% PASS, power 75.5% PASS ≤80; active-browsing CPU 107.0% / RAM 110.6% / GPU 97.2% / power 120.5% (all FAIL, all within 3–21% of Edge) | checkpoint |
+| V5 | active-browsing power +20.5% and foreground/idle RAM +10.6%/+11.7% (~46–48 MB); no per-process attribution exists yet | per-process CPU/power split during active browsing; spare-renderer A/B; idle RAM 48 MB gap | in flight | — |
 
 ## Status summary (updated per version)
 
-- Current best: V1 (hardware-accelerated Adaptive GPU + build-1 items
-  53b7cc7).
-- Measured blockers: RAM (all states), active-browsing CPU.
+- Current best: V2 tree (hardware Adaptive GPU + renderer V8 caps) as measured
+  by run 3 on AC with the fair harness.
+- Mission bar (≤80% of Edge) met: background CPU 3.6%, background RAM 57.6%,
+  background GPU 0%, idle CPU 26.7%, idle power 75.5%.
+- Remaining blockers: active-browsing CPU 107.0% / RAM 110.6% / GPU 97.2% /
+  power 120.5%; idle RAM 111.7%.
 - Reverted: software-rendering GPU policy (8070fed) — measured active-browsing
-  CPU regression; popup hide-with-owner (build-1) — measured no-op.
+  CPU regression; popup hide-with-owner (build-1) — measured no-op; ai.js
+  lazy-load (V3) — 0.5 MB.
+- **Ladder length is not fixed at 50** (user direction): versions continue only
+  until every axis meets the bar in every state, then the ladder stops and the
+  final report is written.

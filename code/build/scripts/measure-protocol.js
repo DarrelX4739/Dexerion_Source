@@ -268,7 +268,18 @@ async function prepareDexerion(base, scenario) {
   const open = async (url, background) => {
     await win.evaluate(({ u, b }) => window.dexerion.invoke('dex:new-tab', u, b), { u: url, b: background });
   };
-  await open(base + '/' + def.foreground, false);
+  // Run-3 fairness fix (V4 renderer-map finding): Edge navigates its first
+  // page IN PLACE (prepareEdge -> first.goto), so Edge's tree carries exactly
+  // 1 + backgroundTabs live pages. Dexerion boots with a planted
+  // dexerion://newtab tab, and opening the foreground workload NEXT TO it gave
+  // Dexerion one extra live page per trial (the idle third renderer). Navigate
+  // the boot newtab in place instead — the same dex:navigate IPC the shell's
+  // omnibox uses — with the boot tab id resolved from dex:get-state, so the
+  // page count matches Edge's arm exactly. Everything else is unchanged.
+  const bootId = await win.evaluate(() => window.dexerion.invoke('dex:get-state')
+    .then((st) => st.active || (st.tabs[0] && st.tabs[0].id) || null));
+  await win.evaluate(({ id, u }) => window.dexerion.invoke('dex:navigate', id, u),
+    { id: bootId, u: base + '/' + def.foreground });
   for (let i = 0; i < def.backgroundTabs; i += 1) await open(base + '/animated', true);
   const want = def.backgroundTabs + 1;
   for (let attempt = 0; attempt < 60; attempt += 1) {
