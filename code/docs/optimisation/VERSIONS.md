@@ -8,9 +8,11 @@ floors — in three states (active browsing / background-minimised / idle),
 Task-Manager-equivalent metrics. Milestone checkpoints (V10/V20/... ) re-run
 the full paired protocol; between milestones the quick per-version gate runs.
 
-Baseline: TEST-REPORT-1.md (Edge comparison, 3 complete scenarios, 15/50
+Baseline: TEST-REPORT-1.md (independent Tester's recomputed report — 3
+complete scenarios, multitasking PARTIAL, baseline SKIPPED-WEDGED; 13/40
 trials invalidated by the noise rule). Blocking failures at baseline:
-active-browsing CPU 137.5% of Edge, RAM 163.1% (fails every scenario).
+active-browsing CPU 137.5% of Edge, RAM 163.1% active / 164.9% idle / 78.7%
+background (fails every scenario).
 
 | V | Bottleneck (measured) | Change | Result | Kept? |
 |---|---|---|---|---|
