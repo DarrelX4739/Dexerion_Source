@@ -20,17 +20,20 @@ check('one GPU mode exists and every legacy value migrates to it', () => {
   assert.equal(ap.normalizeGpuMode('balanced'), 'adaptive');
 });
 
-check('Adaptive runs the software-rendering (former Off) configuration', () => {
+check('Adaptive uses hardware acceleration; conservative tier on battery/low RAM', () => {
   const plan = ap.startupGpuPlan({ mode: 'adaptive', onBattery: false, freeMemMB: 8192 });
-  assert.equal(plan.disableGpu, true);
-  assert.equal(plan.gpuRasterization, false);
-  assert.equal(plan.zeroCopy, false);
-  assert.equal(plan.forceLowPowerGpu, false);
-  assert.equal(plan.gpuMemoryMB, 0);
-  assert.equal(plan.tier, 'suspended');
-  // Identical to the former Off plan shape: battery/RAM no longer change it.
-  const onBattery = ap.startupGpuPlan({ mode: 'adaptive', onBattery: true, freeMemMB: 512 });
-  assert.deepEqual(onBattery, plan);
+  assert.equal(plan.disableGpu, false);
+  assert.equal(plan.gpuRasterization, true);
+  assert.equal(plan.zeroCopy, true);
+  assert.equal(plan.gpuMemoryMB, 512);
+  assert.equal(plan.tier, 'balanced');
+  // Conservative tier: raster stays CPU-side, smaller GPU memory budget.
+  const battery = ap.startupGpuPlan({ mode: 'adaptive', onBattery: true, freeMemMB: 8192 });
+  assert.equal(battery.disableGpu, false);
+  assert.equal(battery.gpuRasterization, false);
+  assert.equal(battery.gpuMemoryMB, 256);
+  assert.equal(battery.tier, 'minimal');
+  assert.equal(ap.startupGpuPlan({ mode: 'adaptive', freeMemMB: 512 }).gpuMemoryMB, 256);
 });
 
 check('the software-compositing override stays a test-only seam', () => {

@@ -62,18 +62,24 @@ function startupGpuPlan(opts) {
     };
   }
   const mode = normalizeGpuMode(o.mode);
-  // Adaptive runs the software-rendering configuration (the former Off mode —
-  // the measured lowest-power setup) while the adaptive controller keeps
-  // managing view visibility, sweep cadence and power tiers at runtime.
-  // Pages still render everything, just on the CPU; WebGL/video fall back to
-  // software so nothing breaks.
+  // Adaptive (V1 decision, measured): hardware acceleration ON — the
+  // software-rendering experiment (commit 8070fed) cost 37% extra CPU in
+  // active browsing (TEST-REPORT data: 137.5% of Edge) because compositing
+  // moved onto the CPU, while the background/idle wins came from the
+  // detach+hide view lifecycle, not from software rendering. Hardware
+  // compositing returns that work to the power-efficient GPU; the adaptive
+  // controller keeps managing view visibility, sweep cadence and power tiers.
+  // Raster stays CPU-side on battery/low-RAM boots (conservative tier).
+  const onBattery = Boolean(o.onBattery);
+  const freeMemMB = Number(o.freeMemMB) || 0;
+  const conservative = onBattery || (freeMemMB > 0 && freeMemMB < 2048);
   return {
-    disableGpu: true,
-    gpuRasterization: false,
-    zeroCopy: false,
+    disableGpu: false,
+    gpuRasterization: !conservative,
+    zeroCopy: true,
     forceLowPowerGpu: false,
-    gpuMemoryMB: 0,
-    tier: 'suspended',
+    gpuMemoryMB: conservative ? 256 : 512,
+    tier: conservative ? 'minimal' : 'balanced',
     mode, override: null,
   };
 }

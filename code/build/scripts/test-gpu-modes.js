@@ -74,9 +74,12 @@ function check(name, cond, detail) {
       check(mode + ': gpu-info reachable', Boolean(gpu && gpu.switches));
       if (gpu && gpu.switches) {
         const s = gpu.switches;
-        check(mode + ': --disable-gpu applied (software rendering)', s.disableGpu === true, 'switches=' + JSON.stringify(s));
-        check(mode + ': gpu_compositing not hardware', !/^enabled/.test(String(gpu.features.gpu_compositing)), 'features=' + JSON.stringify(gpu.features));
-        check(mode + ': no raster/zero-copy/low-power extras', !s.gpuRasterization && !s.zeroCopy && !s.forceLowPowerGpu);
+        // V1 hardware-accelerated Adaptive: GPU compositing on, zero-copy on,
+        // raster per boot tier (AC = on), memory budget 256/512 MB.
+        check(mode + ': GPU not disabled (hardware compositing)', s.disableGpu === false, 'switches=' + JSON.stringify(s));
+        check(mode + ': gpu_compositing hardware-enabled', /^enabled/.test(String(gpu.features.gpu_compositing)), 'features=' + JSON.stringify(gpu.features));
+        check(mode + ': zero-copy enabled', s.zeroCopy === true);
+        check(mode + ': raster/budget pair consistent with boot tier', (s.gpuRasterization === true && s.gpuMemBudgetMB === '512') || (s.gpuRasterization === false && s.gpuMemBudgetMB === '256'), 'raster=' + s.gpuRasterization + ' budget=' + s.gpuMemBudgetMB);
       }
 
       // Process metrics (informational): Chromium keeps a software GPU process
