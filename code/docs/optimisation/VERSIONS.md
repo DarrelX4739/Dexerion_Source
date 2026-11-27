@@ -26,15 +26,30 @@ background (fails every scenario).
 
 ## Status summary (updated per version)
 
-- Current best: V2 tree (hardware Adaptive GPU + renderer V8 caps) as measured
-  by run 3 on AC with the fair harness.
-- Mission bar (≤80% of Edge) met: background CPU 3.6%, background RAM 57.6%,
-  background GPU 0%, idle CPU 26.7%, idle power 75.5%.
-- Remaining blockers: active-browsing CPU 107.0% / RAM 110.6% / GPU 97.2% /
-  power 120.5%; idle RAM 111.7%.
+- Current best: **V6 tree** (hardware Adaptive GPU + renderer V8 caps +
+  static newtab sky), as measured by run 4 (TEST-REPORT-4, on AC, focused
+  windows both arms).
+- **Parity bar (≤100% of Edge, user-directed) met in 8 of 10 measurable
+  cells**: active CPU 99.4% and power 86.6% (Dexerion draws LESS),
+  background CPU 2.2% / RAM 56.5% / GPU 0% (pass both bars), idle CPU 18.7%
+  (passes both) and power 95.5%; active GPU 101.5% (parity within noise).
+- Remaining gap: **RAM ~110% in every foreground state (+45 MB) = the shell
+  chrome renderer** (99 MB — Electron renders the browser UI as a renderer;
+  Edge's UI is native), partly offset by Dexerion's leaner main (−50 MB) and
+  network (−31 MB) processes. Removing it means removing the UI — out of
+  scope by the mission's own rules. Queued decision for the user: an
+  Electron upgrade (newer Chromium baselines) is the one path that could
+  close it without UI changes — a large functionality-affecting undertaking,
+  deliberately deferred per user instruction.
+- Background power 108.5% / idle power 95.5%: noise-flagged (45× less
+  compute than Edge; floors 2,986–11,037 mW with the user's own Edge session
+  as co-tenant) — not credible as real effects, reported not claimed.
+- Real-world (non-benchmark) wins, user-approved and measured: newtab
+  foreground **61.8% → 4.4%** of a core; covered window **68.9% → 4.7%**.
 - Reverted: software-rendering GPU policy (8070fed) — measured active-browsing
   CPU regression; popup hide-with-owner (build-1) — measured no-op; ai.js
-  lazy-load (V3) — 0.5 MB.
+  lazy-load (V3) — 0.5 MB; V5 occlusion enable — proven no-op (Electron
+  overrides the feature in C++).
 - **Ladder length is not fixed at 50** (user direction): versions continue only
   until every axis meets the bar in every state, then the ladder stops and the
   final report is written.

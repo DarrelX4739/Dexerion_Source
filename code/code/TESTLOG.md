@@ -2160,3 +2160,30 @@ All gates green on every version: `verify-all` 22/22 suites, `playwright test` 6
   `adaptive` on disk. Browsing state machinery works.
 - Gates: `test-adaptive-power` 8/8; `verify-all` 75 files OK; full Playwright
   suite **43/43 PASS** (5.7 min) on the final tree.
+
+## Session close — V6 installed (28 Nov 2026, ~09:30)
+
+- Ladder: V1 (hardware Adaptive GPU) / V2 (renderer V8 caps, −100 MB measured)
+  / V3 (ai.js lazy-load, reverted no-win) / V4 (three measured rejections)
+  / V5 (attribution + Electron occlusion limitation proven) / V6 (static newtab
+  sky, user-approved). Two protocol fairness fixes shipped (page count, window
+  focus). Four protocol runs (TEST-REPORT-1..4), 425-source research corpus,
+  functional gates green throughout.
+- Final matrix (run 4, on AC, focused windows): active CPU 99.4% and power
+  86.6% of Edge (both below parity); background CPU 2.2% / RAM 56.5% / GPU 0%
+  (pass both bars); idle CPU 18.7% and power 95.5%; active GPU 101.5%
+  (noise parity). RAM ~110% everywhere = the shell chrome renderer
+  (structural; documented with full per-role attribution).
+- Gates at close: verify-all 75 OK; GPU MODES ALL PASS; Playwright 42/43 with
+  the one failure an intensive-round 300 s timeout under co-tenant load that
+  passes in 8.7 s isolated (effective 43/43); probe-occlusion PASS; visibility
+  probes: popup PASS, overlay PASS, background-visibility FAIL (pre-existing
+  since report 1, mechanism documented, not a regression).
+- Install: fresh signed asar 63,066,650 B deployed to
+  %LOCALAPPDATA%\Programs\Dexerion; graceful CloseMainWindow; session intact
+  (1 window, 1 tab); relaunched, responding.
+- Real-world wins (user-approved): newtab 61.8% → 4.4% of a core; covered
+  window 68.9% → 4.7%.
+- Queued decision (skipped per user instruction): Electron upgrade as the one
+  path to RAM parity without UI changes — large functionality-affecting
+  undertaking.
