@@ -1,15 +1,30 @@
 # TEST-REPORT-2.md — Dexerion vs Edge, re-measurement run 2 (Tester phase, V1+V2 tree)
 
-**Status: COMPLETE.** Bounded re-measurement per the Controller's instruction: 3 scenarios
-(active-browsing, background-tabs, idle) × 5 interleaved trials × 2 browsers, whole run
-finished in ~24 min with **30/30 trials completed, zero harness errors, zero wedges**.
-Purpose: TEST-REPORT-1's active-browsing CPU FAIL (137.5% of Edge) was measured under the
-since-reverted **software-rendering** policy; V1 restored hardware-accelerated Adaptive GPU
-and V2 added renderer V8 heap caps. This run answers: **did V1+V2 move the verdicts?**
-Report author: Tester (3rd instance). Tree state: `33b99ab` (committed; V3's ai.js lazy-load
-implemented and already reverted on measurement). Multitasking and the pre-build-1 baseline
-were **SKIP**ped per instruction (V2's delta is covered by the quick probe comparisons in
-VERSIONS.md — independently reconfirmed here, §7). Nothing committed; no repo files modified.
+**Status: COMPLETE — independently re-verified.** Bounded re-measurement per the Controller's
+instruction: 3 scenarios (active-browsing, background-tabs, idle) × 5 interleaved trials ×
+2 browsers, whole run finished in ~24 min with **30/30 trials completed, zero harness errors,
+zero wedges**. Purpose: TEST-REPORT-1's active-browsing CPU FAIL (137.5% of Edge) was measured
+under the since-reverted **software-rendering** policy; V1 restored hardware-accelerated
+Adaptive GPU and V2 added renderer V8 heap caps. This run answers: **did V1+V2 move the
+verdicts?** Report author: Tester (3rd instance); re-verified and corrected by Tester
+(4th instance, recovery session) — see the verification note below. Tree state: `33b99ab`
+(committed; V3's ai.js lazy-load implemented and already reverted on measurement).
+Multitasking and the pre-build-1 baseline were **SKIP**ped per instruction (V2's delta is
+covered by the quick probe comparisons in VERSIONS.md — independently reconfirmed here, §7).
+This report was committed by the 3rd instance as `18c8448` (its header's original "nothing
+committed" line described the pre-commit moment); the 4th instance's corrections below are
+deliberately uncommitted per instruction.
+
+**Verification note (4th instance, recovery session, 28 Nov 2026).** Every number in this
+report was re-derived from the captured evidence with the harness's own algorithm before
+sign-off: all 24 comparison-verdict keys recompute exactly (24/24 OK); all 30 `gpu-*.json`
+samples match their trials' tree utilisation (30/30, tolerance 0.02 pts); the printed log
+matches the JSON verbatim (30/30 trial lines); all 5 `probe-memory-*.json` runs match §7's
+table exactly (including the per-process 133/117/116, 121/53, 114/69, 49/12 figures); and the
+four functional probes were re-run fresh in the recovery session with byte-identical
+PASS/FAIL tails (§8), the background-visibility FAIL reproducing again 2/2. Three items were
+corrected: the noise-limited count (§4.3), the cross-run floor ranges and run-1 AC wording
+(§4.2), and this header's commit status. No measurement was re-performed.
 
 ## 1. Evidence sources
 
@@ -20,8 +35,10 @@ VERSIONS.md — independently reconfirmed here, §7). Nothing committed; no repo
 | 3 | `%TEMP%\opencode\dexerion-test2\probe-memory-1..5.json` | 5 standalone `probe-memory-footprint.js` runs (the ladder's RAM probe): tree WS, per-process breakdown, renderer js-flags ground truth. |
 | 4 | Functional-probe output (§8) | `test-gpu-modes.js` + 3 visibility probes, run fresh this session. |
 
-Helper written for this report (kept out of the repo):
-`%TEMP%\opencode\extract-test2.js` (read-only summary extractor over source #1).
+Helpers (kept out of the repo): `%TEMP%\opencode\extract-test2.js` (3rd instance,
+read-only summary extractor over source #1); `parse-test2.js`, `crosscheck-gpu.js`,
+`verify-verdicts.js` (4th instance — per-trial tables, the 30/30 GPU-sample cross-check,
+and the 24/24 verdict-key recomputation over sources #1–#2).
 
 ## 2. Method (unchanged from run 1 — same committed harness)
 
@@ -56,19 +73,22 @@ policy); Edge via playwright `channel:'msedge'`, throwaway profile, stock otherw
 
 1. **No deadline pressure this time**: last trial started at t+23.1 min (deadline 28). The
    end-of-run JSON exists — no log-forensics needed (contrast run 1).
-2. **Cross-run comparability caveat (important).** Run 1 ran on AC, run 2 on battery. On
-   battery, lower CPU clocks make identical work consume **more CPU-seconds** — this inflates
-   %-core for *both* browsers and is visible in the raw numbers: Edge's own active-browsing
-   CPU went 26.9 → 36.6 %core, Dexerion's 37.0 → 42.2. **Within-run ratios (the verdicts)
-   are fair (both arms interleaved on the same battery state); cross-run CPU deltas are
-   confounded** and graded indicative only (§5.1). RAM (MB) and GPU (pts) are not
-   clock-dependent and cross-run cleanly. RAPL package power is **not** cross-run comparable
-   at all (AC floors 4.4–19 kW in run 1 vs battery floors 2.1–2.6 kW here); power verdicts
-   are within-run only.
-3. **Power axis is noise-limited everywhere.** The harness's own `noiseLimited` flag
-   (within-sample p90−p10 spread > max(net, 150 mW)) fired on **22 of 27 valid trials**
-   (active: edge 3/5, dex 1/5; background: 9/9; idle: 5/5). Battery operation has much lower,
-   noisier package power. All power figures below are graded accordingly.
+2. **Cross-run comparability caveat (important).** Run 1's AC state is only known at smoke
+   time (on AC; its per-trial records were lost with run 1's unwritten JSON — report 1 §7),
+   while run 2 is on battery for every trial. On battery, lower CPU clocks make identical
+   work consume **more CPU-seconds** — this inflates %-core for *both* browsers and is
+   visible in the raw numbers: Edge's own active-browsing CPU went 26.9 → 36.6 %core,
+   Dexerion's 37.0 → 42.2. **Within-run ratios (the verdicts) are fair (both arms
+   interleaved on the same battery state); cross-run CPU deltas are confounded** and graded
+   indicative only (§5.1). RAM (MB) and GPU (pts) are not clock-dependent and cross-run
+   cleanly. RAPL package power is **not** cross-run comparable at all (run 1 floors
+   4.0–18.8 kW including invalidated trials — valid-only 4.1–9.8 kW — vs run 2 valid-trial
+   floors 2.1–3.8 kW, the idle arm drifting to 5.0 kW, §4.4); power verdicts are within-run
+   only.
+3. **Power axis is noise-limited nearly everywhere.** The harness's own `noiseLimited` flag
+   (within-sample p90−p10 spread > max(net, 150 mW)) fired on **18 of the 24 valid trials**
+   (active: 4/10 — edge 3/5, dex 1/5; background: 9/9; idle: 5/5). Battery operation has
+   much lower, noisier package power. All power figures below are graded accordingly.
 4. **Floor-swing invalidations: 6 of 30** (vs 13 of 40 in run 1) — floors were far tighter
    this run except in the idle scenario, where a rising drift (2.3 → 5.0 kW, coinciding with
    a Defender sweep) invalidated 5 of 10 idle trials, leaving **idle at dex n=2 / edge n=3**
@@ -84,7 +104,12 @@ policy); Edge via playwright `channel:'msedge'`, throwaway profile, stock otherw
 ## 5. Per-scenario results
 
 `% of Edge` = median(Dexerion) ÷ median(Edge) × 100. Bars per the Controller's instruction:
-**≤80% mission** and **≤60% stretch** (both reported). Valid n shown per arm.
+**≤80% mission** and **≤60% stretch** (both reported). Valid n shown per arm. The harness's
+own `*Pass` fields in the verdict JSONs use the **≤60%** bar only (`measure-protocol.js`:
+"Verdict per axis vs the <=60%-of-Edge bar"; `pct <= 60 ? 'PASS' : 'FAIL'`) — e.g. it marks
+background-tabs RAM 68.7% FAIL where the ≤80% mission grading below passes it. The ≤80%
+column is computed by this report from the same percentages. (TESTER-BRIEF itself words the
+mission bar as ≤60%; the Controller's ≤80%/≤60% framing governs this report.)
 
 ### 5.1 active-browsing — COMPLETE (n=5 / n=5, 0 invalid)
 
@@ -225,7 +250,9 @@ while the protocol uses `Win32_Process` working sets; both land in the same rang
 (probe JSON): 3 renderers 133/117/116 MB (private 60/64/41), Browser 121 MB (53),
 **GPU 114 MB (69 — largest private consumer)**, Network Service 49 MB (12).
 
-## 8. Functional proofs (run fresh this session; all exited; no wedge retries needed)
+## 8. Functional proofs (run fresh by the 3rd instance; re-run by the 4th/recovery instance
+on 28 Nov 2026 with byte-identical PASS/FAIL tails on all four probes; all exited; no wedge
+retries needed)
 
 **`node scripts/test-gpu-modes.js` — ALL CHECKS PASS** (verbatim tail; note the hardware
 switches — this is V1 confirmed live, vs run 1's `--disable-gpu applied (software)`):
@@ -253,7 +280,9 @@ VISIBILITY PROBE FAIL
 ```
 Reading unchanged from run 1: background renderers stop producing frames (RAF paused — the
 mechanism behind §5.2's CPU/GPU wins) but the document still reports `visibilitystate:
-visible`. Functional finding for the Builder; does not invalidate measurement.
+visible`. Functional finding for the Builder; does not invalidate measurement. The recovery
+session re-ran this probe twice more — identical FAIL output both times (reproduced 2/2
+fresh, on top of run 1's 2/2).
 
 **`node scripts/probe-popup-visibility.js` — PASS** (verbatim tail):
 ```
@@ -282,7 +311,8 @@ OVERLAY VISIBILITY PROBE PASS
 
 ## 9. Overall verdict matrix
 
-Bars: **mission ≤80%**, **stretch ≤60%** of Edge per axis.
+Bars: **mission ≤80%**, **stretch ≤60%** of Edge per axis (the harness's own `*Pass` fields
+use the ≤60% bar only — see §5).
 
 | Scenario | CPU | RAM | GPU | Power |
 |---|---|---|---|---|
