@@ -40,6 +40,13 @@ const LEGACY = Object.freeze({
   // the regular sweep max — the legacy value (30s) never engages it, so
   // DEX_DEBLOAT_BASELINE=1 restores the exact legacy cadence.
   sweepDeepIdleMs: 30 * 1000,
+  // V2: the exact pre-V2 renderer pins. rendererMaxOldSpaceMB 512 is the
+  // pre-V2 js-flags --max-old-space-size; rendererMaxSemiSpaceMB 0 means
+  // "append no --max-semi-space-size flag" (V8's own default new-space cap) —
+  // the A1 "0 = no switch" convention. (A rendererProcessLimit budget was
+  // evaluated in V2 and rejected: see the OPTIMIZED note below.)
+  rendererMaxOldSpaceMB: 512,
+  rendererMaxSemiSpaceMB: 0,
 });
 
 const OPTIMIZED = Object.freeze({
@@ -84,6 +91,21 @@ const OPTIMIZED = Object.freeze({
   // demand or in-flight loads may wait this long between housekeeping sweeps.
   // Must exceed sweepIntervalMs * 3 to have any effect (validated below).
   sweepDeepIdleMs: 10 * 60 * 1000,
+  // V2: renderer memory bounds. Chromium copies the --js-flags switch onto
+  // every renderer command line (RenderProcessHost
+  // PropagateBrowserCommandLineToRenderer), so one switch caps each renderer's
+  // V8 heap: old space 512 -> 256 MB, and the new space pinned at 8 MB
+  // (legacy 0 = no flag = V8 default). Verified live by
+  // build/scripts/probe-memory-footprint.js: the flag is read back off the
+  // real renderer processes (Win32_Process) and the pages themselves report
+  // performance.memory.jsHeapSizeLimit inside the bound.
+  rendererMaxOldSpaceMB: 256,
+  rendererMaxSemiSpaceMB: 8,
+  // V2 REJECTED (measured): renderer-process-limit 6 -> 4. Under
+  // --process-per-site the cap is inert: with 8 distinct sites open,
+  // DEX_PROBE_MULTI_SITE A/B (probe-memory-footprint.js) measured 10 renderer
+  // processes at limit 6 AND at limit 4, tree WS 1375 vs 1371 MB — no
+  // reduction to ship, only risk surface. No budget is shipped for it.
 });
 
 const activeProfile = process.env.DEX_DEBLOAT_BASELINE === '1' ? 'baseline' : 'optimized';
@@ -112,6 +134,12 @@ function clampBudget(name, value) {
     taskHeartbeatNearWindowMs: 0,
     // B2: deep-idle sweep ceiling, bounded to [sweep floor, 30 min].
     sweepDeepIdleMs: 15 * 1000,
+    // V2: renderer bounds. rendererMaxSemiSpaceMB has min 0 — a 0 budget
+    // (legacy profile) means "append no switch" and is skipped by the caller
+    // before clamping (A1 convention). Old-space floor 64 MB keeps any
+    // override runnable.
+    rendererMaxOldSpaceMB: 64,
+    rendererMaxSemiSpaceMB: 0,
   }[name];
   const max = {
     siteRegistryBytes: 128 * 1024 * 1024,
@@ -129,6 +157,11 @@ function clampBudget(name, value) {
     taskHeartbeatIdleMs: 30 * 60 * 1000,
     taskHeartbeatNearWindowMs: 60 * 60 * 1000,
     sweepDeepIdleMs: 30 * 60 * 1000,
+    // V2: 2048 MB is the old-space ceiling (never above V8's own generous
+    // default territory); the new space never exceeds 16 MB (V8's 64-bit
+    // default scale).
+    rendererMaxOldSpaceMB: 2048,
+    rendererMaxSemiSpaceMB: 16,
   }[name];
   if (!Number.isFinite(Number(value)) || !min && min !== 0) return BUDGETS[name];
   return Math.max(min, Math.min(max, Math.trunc(Number(value))));
@@ -153,6 +186,11 @@ function validateBudgets() {
   if (OPTIMIZED.taskHeartbeatNearWindowMs <= 0) errors.push('taskHeartbeatNearWindowMs must select the near window');
   // B2: the deep-idle sweep ceiling must sit at or above the regular sweep.
   if (OPTIMIZED.sweepDeepIdleMs < OPTIMIZED.sweepIntervalMs) errors.push('sweepDeepIdleMs did not rise above sweepIntervalMs');
+  // V2: the renderer bounds must actually tighten against the pre-V2 pins and
+  // stay inside the clamps.
+  if (OPTIMIZED.rendererMaxOldSpaceMB > LEGACY.rendererMaxOldSpaceMB / 2) errors.push('rendererMaxOldSpaceMB did not halve');
+  if (OPTIMIZED.rendererMaxSemiSpaceMB <= 0) errors.push('rendererMaxSemiSpaceMB must bound the new space');
+  if (OPTIMIZED.rendererMaxSemiSpaceMB > 16) errors.push('rendererMaxSemiSpaceMB above the 16MB clamp');
   return { ok: errors.length === 0, errors, activeProfile, budgets: BUDGETS, legacy: LEGACY, optimized: OPTIMIZED };
 }
 

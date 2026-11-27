@@ -72,9 +72,45 @@ if (process.platform === 'win32') app.setAppUserModelId('com.dexerion.browser');
 // main message loop long enough for Windows to declare the app hung
 // (AppHangB1, repeated; SharedImageManager errors in every boot log). A
 // separate GPU process costs one slot and keeps GPU stalls off the UI thread.
+//
+// V2 — renderer heap bounds, driven by named, clamped budgets in
+// src/main/debloat-budgets.js (V2 section): js-flags --max-old-space-size
+// 512 -> 256 MB plus --max-semi-space-size=8 (budgets.rendererMaxOldSpaceMB /
+// rendererMaxSemiSpaceMB). Chromium copies the --js-flags switch onto every
+// renderer command line (RenderProcessHost::
+// PropagateBrowserCommandLineToRenderer), so one switch bounds each renderer's
+// V8 heap; it does NOT reach the GPU process. Verified live:
+// build/scripts/probe-memory-footprint.js reads the real renderer command
+// lines via Win32_Process, and the pages themselves report
+// performance.memory.jsHeapSizeLimit inside the bound (608 MB before the
+// change, 280 MB after, 4192 MB with the kill switch).
+// Kill switch: DEX_HEAP_BUDGET=off drops the js-flags switch entirely (V8
+// defaults); DEX_DEBLOAT_BASELINE=1 restores the exact pre-V2 values (512 MB,
+// no semi-space flag). If the budgets module ever fails to load, the exact
+// pre-V2 switch is appended unchanged.
+// (renderer-process-limit 6 -> 4 was evaluated and REJECTED in V2: under
+// process-per-site the cap is inert — 8 distinct sites produced 10 renderer
+// processes at limit 6 AND at limit 4 (probe-memory-footprint
+// DEX_PROBE_MULTI_SITE A/B, tree WS 1375 vs 1371 MB) — no win to ship.)
 app.commandLine.appendSwitch('renderer-process-limit', '6');
+{
+  let oldSpaceMB = 512, semiSpaceMB = 0;
+  try {
+    const budgets = require('./src/main/debloat-budgets');
+    // A 0 semi-space budget (legacy profile) means "no flag": skip before
+    // clamping, like the A1 cache budgets.
+    oldSpaceMB = budgets.clampBudget('rendererMaxOldSpaceMB', budgets.BUDGETS.rendererMaxOldSpaceMB);
+    semiSpaceMB = budgets.BUDGETS.rendererMaxSemiSpaceMB > 0
+      ? budgets.clampBudget('rendererMaxSemiSpaceMB', budgets.BUDGETS.rendererMaxSemiSpaceMB) : 0;
+  } catch (e) { console.warn('[dexerion] debloat budgets unavailable:', e && e.message); }
+  if (process.env.DEX_HEAP_BUDGET !== 'off') {
+    const flags = [];
+    if (oldSpaceMB > 0) flags.push('--max-old-space-size=' + oldSpaceMB);
+    if (semiSpaceMB > 0) flags.push('--max-semi-space-size=' + semiSpaceMB);
+    if (flags.length) app.commandLine.appendSwitch('js-flags', flags.join(' '));
+  }
+}
 app.commandLine.appendSwitch('process-per-site');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 app.commandLine.appendSwitch('disable-features',
   'TranslateUI,MediaRouter,DialMediaRouteProvider,OptimizationHints,CalculateNativeWinOcclusion');
 

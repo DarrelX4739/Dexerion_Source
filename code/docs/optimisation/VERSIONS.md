@@ -17,7 +17,7 @@ background (fails every scenario).
 | V | Bottleneck (measured) | Change | Result | Kept? |
 |---|---|---|---|---|
 | V1 | active-browsing CPU 137.5% of Edge — caused by the software-rendering policy (compositing on CPU) | Restore hardware-accelerated Adaptive GPU (raster on AC boots, zero-copy, 256/512 MB GPU budget); adaptive controller unchanged | Gates: 8/8 unit, GPU MODES ALL PASS (hardware compositing enabled verified live), verify-all 75 files, boot smoke 3/3. Edge comparison pending V1 re-measure | YES (pending confirm) |
-| V2 | RAM baseline ~163–165% of Edge (idle/active) | renderer memory budgets: cap per-renderer V8 old space + session/history cache bounds | pending | — |
+| V2 | RAM baseline ~163–165% of Edge (idle/active) | renderer V8 heap caps: old space 512→256 MB + semi-space 8 MB (verified propagated: renderer cmdlines + performance.memory.jsHeapSizeLimit 608→280 MB); renderer-process-limit 6→4 evaluated and REJECTED (inert under process-per-site — 10 renderers at both limits, A/B measured) | Gates: verify-all 75 OK, 8/8, GPU MODES ALL PASS, Playwright 43/43 (6.8m incl. 20 intensive rounds, no OOM); probe: tree WS 642–646 MB, caps bind growth headroom (~55% lower per-renderer reservation) | YES |
 | V3–V50 | (reserved; each filled from the previous version's measured bottleneck) | | | — |
 
 ## Status summary (updated per version)
