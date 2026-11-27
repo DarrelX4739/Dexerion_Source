@@ -288,6 +288,21 @@ async function prepareDexerion(base, scenario) {
     if (tabs.length >= want && !tabs.some((t) => t.loading)) break;
     await win.waitForTimeout(250);
   }
+  // Run-4 fairness fix (V5 finding): prepareEdge calls first.bringToFront(),
+  // so Edge's foreground page is on screen during its trials. prepareDexerion
+  // never focused the window, and with Electron's native occlusion tracker
+  // force-disabled (proven: not-disable AND explicit enable-features are both
+  // no-ops on Electron 44), a COVERED Dexerion window kept compositing at
+  // full rate — the measured "active" page rendered into the void at ~50% of
+  // a core GPU cost while Edge's focused window rendered for real. Focus the
+  // window so both arms are measured in the same actually-visible state.
+  await launched.app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (!w) return;
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+  });
   return {
     profileDir: launched.profile,
     close: async () => { try { await launched.app.close(); } catch {} },
