@@ -367,9 +367,9 @@ table.md-table{width:100%;margin:8px 0 10px;border-collapse:collapse;font-size:1
 
 /* ---------- daylight ----------
    A start page is the one surface that is genuinely about *now*, so the room's
-   light is tied to the clock: three wide pools drift on very slow cycles and a
-   phase layer sits low and warm at dawn, high and wide at midday, sinking again
-   through dusk into night. Everything is built from the page's own tokens, so it
+   light is tied to the clock: a phase layer sits low and warm at dawn, high and
+   wide at midday, sinking again through dusk into night. Everything is built
+   from the page's own tokens, so it
    follows the user's light/dark choice and never fights the accent — the accent
    stays a signal here, as it does everywhere else in the browser.
 
@@ -381,7 +381,7 @@ body{background:transparent}
 .sky{position:fixed;inset:-14% -10%;z-index:-1;pointer-events:none;overflow:hidden;
   animation:skyIn 1.6s var(--ease) both}
 @keyframes skyIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:none}}
-.sky .pool{position:absolute;border-radius:50%;will-change:transform,opacity}
+.sky .pool{position:absolute;border-radius:50%}
 .sky .high{width:80vw;height:66vh;left:4vw;top:-28vh;
   background:radial-gradient(closest-side,rgba(255,255,255,.95),rgba(255,255,255,0) 72%)}
 .sky .low{width:98vw;height:74vh;left:-16vw;bottom:-34vh;
@@ -393,22 +393,16 @@ body{background:transparent}
 [data-theme="dark"] .sky .high{background:radial-gradient(closest-side,rgba(122,144,208,.21),rgba(122,144,208,0) 72%)}
 [data-theme="dark"] .sky .low{background:radial-gradient(closest-side,rgba(86,104,168,.19),rgba(86,104,168,0) 74%)}
 [data-theme="dark"] .sky .warm{background:radial-gradient(closest-side,rgba(196,158,120,.14),rgba(196,158,120,0) 76%)}
-/* different periods so the field never repeats itself in a way you can catch */
-@keyframes poolHigh{
-  from{transform:translate3d(0,0,0) scale(1);opacity:.85}
-  to{transform:translate3d(2.4vw,-1.5vh,0) scale(1.06);opacity:1}}
-@keyframes poolLow{
-  from{transform:translate3d(0,0,0) scale(1.05);opacity:.75}
-  to{transform:translate3d(-2vw,1.8vh,0) scale(1);opacity:.95}}
-@keyframes poolWarm{
-  from{transform:translate3d(0,0,0) scale(1);opacity:.7}
-  to{transform:translate3d(-1.6vw,-2vh,0) scale(1.08);opacity:.9}}
-/* A literal ease-in-out on purpose: this stylesheet defines --ease but not
-   --ease-in-out, and an unresolved var() inside the animation shorthand makes
-   the whole declaration invalid, which silently killed the drift. */
-.sky .high{animation:poolHigh 104s cubic-bezier(.42,0,.58,1) infinite alternate}
-.sky .low{animation:poolLow 148s cubic-bezier(.42,0,.58,1) infinite alternate}
-.sky .warm{animation:poolWarm 191s cubic-bezier(.42,0,.58,1) infinite alternate}
+/* V6 (user-approved, measured): the pools no longer drift. The three animated
+   pools were full-window compositor layers re-blended every frame — an
+   animated newtab burned ~63-67% of one CPU core continuously (GPU process
+   ~47% + renderer ~12%) while a static sky costs 2.8%, versus Edge's newtab
+   at ~0%. The drift variants were measured (sky-ab.js): translate, scale and
+   opacity all cost the same — the per-frame blend of the motion itself was
+   the cost, not any component. The look is identical; only the motion is
+   gone. skyIn (one-shot entrance) and the phase crossfade (clock boundary,
+   rare) remain. */
+.sky .high,.sky .low,.sky .warm{animation:none}
 /* the phase layer is not animated: it crossfades when the clock crosses a
    boundary, which gradient interpolation could not do smoothly */
 .sky .phase{position:absolute;inset:0;opacity:1;transition:opacity .9s var(--ease)}
