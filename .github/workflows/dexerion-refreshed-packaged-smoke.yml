@@ -1,0 +1,75 @@
+name: Dexerion refreshed packaged smoke
+
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - .github/workflows/dexerion-refreshed-packaged-smoke.yml
+      - code/build/e2e/refreshed-packaged-boot.spec.js
+      - code/build/package.json
+      - code/build/package-lock.json
+      - code/build/electron-builder.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    if: github.ref == 'refs/heads/darrel-dev-1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install exact packaged app dependencies
+        run: npm ci --include=dev
+      - name: Build an unpacked product only, never sign or publish
+        shell: pwsh
+        run: |
+          # Resolve lazily downloaded Electron in a separate process to keep
+          # install notices out of the path capture for electron-builder.
+          node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $electron = node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dist = Split-Path -Parent $electron
+          $out = Join-Path $env:RUNNER_TEMP 'dexerion-refreshed-smoke'
+          $platform = if ($IsWindows) { '--win' } else { '--linux' }
+          node node_modules/electron-builder/cli.js $platform --dir --x64 --config electron-builder.json "--config.electronDist=$dist" "--config.directories.output=$out" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Exercise the real unpacked product on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:DEX_REFRESHED_PACKED_EXE = Join-Path $env:RUNNER_TEMP 'dexerion-refreshed-smoke/win-unpacked/Dexerion.exe'
+          npm run test:e2e -- e2e/refreshed-packaged-boot.spec.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Exercise the real unpacked product on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          DEX_REFRESHED_PACKED_EXE="$RUNNER_TEMP/dexerion-refreshed-smoke/linux-unpacked/dexerion" \
+            xvfb-run -a -s '-screen 0 1280x900x24' npm run test:e2e -- e2e/refreshed-packaged-boot.spec.js
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: refreshed-packaged-smoke-${{ matrix.os }}-failure
+          path: code/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

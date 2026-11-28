@@ -52,14 +52,14 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.0.12",
     "jsdom": "^30.1.2",
+    "lucide": "^1.55.0",
+    "motion": "^14.1.0",
+    "open-props": "^1.7.23",
     "pdfjs-dist": "^6.5.438",
     "tesseract.js": "^7.0.0",
     "tesseract.js-core": "^7.0.0"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "lucide": "^1.55.0",
-    "motion": "^14.1.0",
-    "open-props": "^1.7.23"
+    "adm-zip": "^0.5.16"
   }
 }
