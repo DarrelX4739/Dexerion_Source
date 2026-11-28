@@ -2298,3 +2298,17 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :root:not([data-skin]) #gedit {border-radius:var(--dx-panel-radius);background:var(--surface)}
 :root:not([data-skin]) .gswb.on {outline:1px solid var(--accent);outline-offset:1px}
 :root:not([data-skin]) .gswb:focus-visible {outline-offset:2px}
+
+:root:not([data-skin]) #dmenu {border-radius:var(--dx-panel-radius);background:var(--surface)}
+:root:not([data-skin]) .mitem {border-radius:8px}
+:root:not([data-skin]) .mitem kbd {color:var(--fg2)}
+:root:not([data-skin]) .mlabel {color:var(--fg2);font-weight:650}
+:root:not([data-skin]) .mitem:hover {background:color-mix(in srgb,var(--accent) 9%,var(--hover))}
+:root:not([data-skin]) #rail-timer,
+:root:not([data-skin]) #rail-tasks {border-color:var(--hair2);border-radius:12px}
+:root:not([data-skin]) .rt-time {font-weight:520;letter-spacing:-.04em}
+:root:not([data-skin]) .rt-phase:not(.work),
+:root:not([data-skin]) .rt-row,
+:root:not([data-skin]) .rt-grid label,
+:root:not([data-skin]) .tk-main small:not(.overdue) {color:var(--fg2)}
+:root:not([data-skin]) .tk-row {border-radius:8px}
