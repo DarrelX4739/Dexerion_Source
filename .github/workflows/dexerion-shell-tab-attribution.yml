@@ -1,0 +1,45 @@
+name: Dexerion Windows shell and tab attribution
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-shell-tab-attribution.yml'
+      - 'code/build/scripts/measure-shell-tab-attribution.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  attribute:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '30000'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install the locked runtime
+        run: npm ci
+      - name: Verify positive mappings and compare local workloads
+        shell: pwsh
+        run: |
+          node scripts/measure-shell-tab-attribution.cjs --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/measure-shell-tab-attribution.cjs (Join-Path $env:RUNNER_TEMP 'dex-shell-tab-attribution.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-shell-tab-attribution-windows
+          path: ${{ runner.temp }}/dex-shell-tab-attribution.json
+          if-no-files-found: ignore
+          retention-days: 7
