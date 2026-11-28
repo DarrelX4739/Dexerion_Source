@@ -39,6 +39,11 @@
   --sh1: var(--dx-shadow-1); --sh2: var(--dx-shadow-2); --sh3: var(--dx-shadow-3); --shpop: var(--dx-shadow-3);
   --accent: var(--dx-accent);
 }
+/* Keep accent-filled chrome readable without changing the saved colour or
+   overriding custom skins' own ink choices. */
+@supports (color: contrast-color(#1f6f6b)) {
+  :root:not([data-skin]) { --accent-ink: contrast-color(var(--accent)); }
+}
 /* Native form controls (select popups, checkboxes, date fields) are painted
    by Chromium from color-scheme, not from CSS: without this the model/effort
    dropdowns in the sidebar open as white menus over the dark chrome. Dark is

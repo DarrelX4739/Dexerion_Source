@@ -374,6 +374,13 @@ button { font-family: inherit; }
 }
 .btn.primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px -8px var(--accent); }
 
+/* The saved accent can be darker or lighter than the theme's fallback.
+   Match the ink to the actual fill, including on hover. */
+@supports (color: contrast-color(#1f6f6b)) {
+  :root:not([data-skin]) { --accent-ink: contrast-color(var(--accent)); }
+  :root:not([data-skin]) .btn.primary:hover { filter: none; }
+}
+
 .btn.ghost { background: transparent; }
 .btn.ghost:hover { background: var(--phover); }
 
