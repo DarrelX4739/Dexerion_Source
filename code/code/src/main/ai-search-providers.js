@@ -363,19 +363,24 @@ function providerRequests(queries, opts) {
   return out;
 }
 
-// Parses a provider body into normalised results. `body` is text for all
-// providers; the caller fetches pubmed's second step separately.
-function parseProvider(providerId, body) {
-  const provider = PROVIDERS[String(providerId || '')];
-  if (!provider) return [];
-  let raw = [];
-  try { raw = provider.parse(body) || []; } catch { raw = []; }
+function parseProviderRows(provider, body) {
+  try { return provider.parse(body) || []; } catch { return []; }
+}
+
+function normalizeProviderRows(provider, raw) {
   const out = [];
   for (const item of raw.slice(0, provider.max + 2)) {
     const result = normalizeResult(provider.id, item);
     if (result) out.push(result);
   }
   return out;
+}
+
+// Parses a provider body into normalised results. `body` is text for all
+// providers; the caller fetches pubmed's second step separately.
+function parseProvider(providerId, body) {
+  const provider = PROVIDERS[String(providerId || '')];
+  return provider ? normalizeProviderRows(provider, parseProviderRows(provider, body)) : [];
 }
 
 module.exports = {
@@ -402,5 +407,7 @@ module.exports = {
   parseStackExchangeJson,
   wantsSourceApis,
   providerRequests,
+  parseProviderRows,
+  normalizeProviderRows,
   parseProvider,
 };

@@ -10,6 +10,7 @@
 // on the final URL after redirects, and every citation is a page actually read.
 'use strict';
 
+const { serialize, deserialize } = require('node:v8');
 const planModule = require('./ai-search-plan');
 const providers = require('./ai-search-providers');
 const rankModule = require('./ai-search-rank');
@@ -28,6 +29,7 @@ const FETCH_CONCURRENCY = 4;
 const RETRIEVE_BUDGET_MS = 45000;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 80;
+const MIN_BODY_FOR_ROW_CACHE = 16 * 1024;
 const DIFFICULTIES = ['low', 'medium', 'high', 'max'];
 
 function clampInt(value, lo, hi, fallback) {
@@ -46,7 +48,7 @@ function clampAdaptations(value) {
 
 function createAiSearchRunner(deps) {
   const runs = new Map();
-  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body }
+  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body, ddgRows? }
 
   function emit(run, event) {
     try { deps.emit(run.winId, Object.assign({ reqId: run.reqId }, event)); } catch {}
@@ -109,6 +111,25 @@ function createAiSearchRunner(deps) {
     return entry;
   }
 
+  // DuckDuckGo serves a full HTML page for at most ten extracted rows.
+  // Retain only these rows for larger responses. A serialized snapshot
+  // releases substring references to the HTML and gives every hit fresh
+  // data; the usual normalization (including local dates) runs every time.
+  function duckDuckGoRows(provider, entry) {
+    if (entry.ddgRows) return providers.normalizeProviderRows(provider, deserialize(entry.ddgRows));
+    const rawRows = providers.parseProviderRows(provider, entry.body);
+    const rows = providers.normalizeProviderRows(provider, rawRows);
+    if (entry.body.length < MIN_BODY_FOR_ROW_CACHE) return rows;
+    try {
+      const packed = serialize(rawRows);
+      if (packed.length < entry.body.length / 2) {
+        entry.ddgRows = packed;
+        entry.body = '';
+      }
+    } catch {}
+    return rows;
+  }
+
   async function planStep(run, query, count, history, streamOpts) {
     emit(run, { phase: 'adapt', label: 'Adapting your question', i: 0, n: 1 });
     run.planReq = run.reqId + ':plan';
@@ -157,7 +178,7 @@ function createAiSearchRunner(deps) {
           const pre = readModule.checkFetchUrl(req.url);
           if (!pre.ok) continue;
           const first = await fetchCached(req.url, run.controller.signal);
-          if (!first.ok || !first.body) continue;
+          if (!first.ok || (!first.body && !first.ddgRows)) continue;
           let rows = [];
           if (req.provider === 'pubmed') {
             const ids = providers.PROVIDERS.pubmed.parseIds(first.body);
@@ -165,6 +186,8 @@ function createAiSearchRunner(deps) {
             const second = await fetchCached(providers.PROVIDERS.pubmed.secondUrl(ids.slice(0, MAX_RESULT_LINKS)), run.controller.signal);
             if (!second.ok || !second.body) continue;
             rows = providers.parseProvider('pubmed', second.body);
+          } else if (req.provider === 'duckduckgo') {
+            rows = duckDuckGoRows(provider, first);
           } else {
             rows = providers.parseProvider(req.provider, first.body);
           }
