@@ -511,3 +511,35 @@ button { font-family: inherit; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Internal pages: layout only. Existing theme tokens and all state paints
+   remain the authority. The legacy inline layouts still own the chat state. */
+body:has(> .wrap > #enter) .wrap {
+  max-width:min(100%, 610px);padding-inline:clamp(16px, 6vw, 42px);
+}
+body:has(> .wrap > #enter) .wrap h1 {
+  font-size:clamp(30px, 5.5vw, 44px);letter-spacing:-.035em;line-height:1.12;
+  text-wrap:balance;
+}
+body:has(> .wrap > #enter) .wrap .qline {max-width:400px}
+body:has(> .wrap > #enter) .wrap #enter {height:40px;padding-inline:20px;border-radius:9px}
+@media (max-height:480px) {
+  body:has(> .wrap > #enter) .wrap .mark {width:45px;height:45px;margin-bottom:12px}
+  body:has(> .wrap > #enter) .wrap .date {margin-bottom:12px}
+  body:has(> .wrap > #enter) .wrap .qline {padding-top:12px}
+  body:has(> .wrap > #enter) .wrap #enter {margin-top:16px}
+}
+body:not(.ai):has(> .cmd > #q) .cmd {margin-top:22px}
+body:not(.ai):has(> .cmd > #q) .cmd #q {border-radius:12px}
+body:not(.ai):has(> .cmd > #q) .acts #ai-btn {border-radius:9px}
+body:not(.ai):has(> .cmd > #q) #starred-title {margin-block:32px 12px}
+body:not(.ai):has(> .cmd > #q) #starred .tile {min-width:0;border-radius:9px}
+@media (max-width:430px) {
+  body:not(.ai):has(> .cmd > #q) #starred {grid-template-columns:minmax(0,1fr)}
+}
+
+.dx-page {padding-inline:clamp(16px, 4vw, 32px)}
+.dx-head h1 {line-height:1.15;letter-spacing:-.025em}
+.dx-card-head, .dx-card-body {padding-inline:clamp(14px, 3vw, 22px)}
+.dx-card, .dx-list {border-radius:12px}
+.dx-search input {border-radius:9px}
