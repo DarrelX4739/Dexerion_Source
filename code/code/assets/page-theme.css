@@ -698,3 +698,11 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd
   }
   #swatches .dx-swatch.sel:focus-visible { border-color: Highlight; }
 }
+
+/* The launch column should be readable immediately. Keep the established
+   sky/phase treatment and the assistant page's motion, without staggering
+   the primary wordmark, clock and search controls on every dark New Tab. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > :is(.daylight, .mark, .cmd, .acts),
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .sub {
+  animation: none;
+}
