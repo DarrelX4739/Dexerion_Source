@@ -1,0 +1,87 @@
+name: Dexerion Lucide shell geometry parity
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-lucide-shell-parity.yml'
+      - 'code/build/scripts/*lucide-shell*.cjs'
+      - 'code/build/e2e/lucide-shell.spec.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-geometry:
+    if: github.ref == 'refs/heads/dev-V'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    defaults:
+      run:
+        shell: bash
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked runtime
+        run: npm ci
+      - name: Test unmodified app against its own original renderer
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD:code/code/src/renderer/shell.html)" = 05999482b73f1e612b14a0e5108ab5b75f9fede0
+          test "$(git rev-parse HEAD:code/code/assets/vendor/lucide.min.js)" = 71687654cca14b5f4260e42813d0a4c01fda8323
+          test "$(git rev-parse HEAD:code/code/src/renderer/ai-sidebar.js)" = ab6e3fceb40c7fe80afa7df3e903cd4df4004593
+          test "$(git rev-parse HEAD:code/code/assets/ai-artifacts.js)" = d5680f4d0753d014ab38f0884b8ad7af450bdd2c
+          export DEX_LUCIDE_DIAGNOSTIC_EXPECT=upstream
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a npm run test:e2e -- e2e/lucide-shell.spec.js --output "$RUNNER_TEMP/lucide-upstream"
+          else
+            npm run test:e2e -- e2e/lucide-shell.spec.js --output "$RUNNER_TEMP/lucide-upstream"
+          fi
+      - name: Generate a disposable candidate in the runner checkout only
+        run: |
+          set -eu
+          node scripts/vendor-lucide-shell.cjs
+          node - <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const assert = require('node:assert/strict');
+          const { SHELL, TARGET } = require('./scripts/vendor-lucide-shell.cjs');
+          const source = fs.readFileSync(SHELL, 'utf8');
+          const oldImport = '<script src="../../assets/vendor/lucide.min.js"></script>';
+          const newImport = '<script src="../../assets/vendor/lucide-shell.js"></script>';
+          assert.equal(source.split(oldImport).length, 2);
+          const candidate = source.replace(oldImport, newImport);
+          const blob = (content) => crypto.createHash('sha1').update('blob '+content.length+'\0').update(content).digest('hex');
+          assert.equal(blob(Buffer.from(candidate.replace(/\r\n/g, '\n'))), 'fb76ff6ef1b64e57f345cc8c5a56618ebe81b0d0');
+          assert.equal(blob(fs.readFileSync(TARGET)), '8a4134d8822e703faee9621d1d583d100690f748');
+          fs.writeFileSync(SHELL, candidate);
+          JS
+          node --test scripts/test-lucide-shell.cjs
+          npm run verify
+      - name: Verify current UI and detached report card geometry with the exact subset
+        run: |
+          set -eu
+          export DEX_LUCIDE_DIAGNOSTIC_EXPECT=subset
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a npm run test:e2e -- e2e/lucide-shell.spec.js e2e/sidebar.spec.js --output "$RUNNER_TEMP/lucide-subset"
+          else
+            npm run test:e2e -- e2e/lucide-shell.spec.js e2e/sidebar.spec.js --output "$RUNNER_TEMP/lucide-subset"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lucide-shell-parity-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/lucide-upstream
+            ${{ runner.temp }}/lucide-subset
+          if-no-files-found: ignore
+          retention-days: 7
