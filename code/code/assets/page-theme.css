@@ -636,7 +636,7 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #t
 }
 /* Full details should include the title. Keep resting titles single-line
    so the task list still fits the first three before scrolling. */
-html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded :is(b, .tk-desc) {
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded b {
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -645,6 +645,13 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tas
 }
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded .tk-dot {
   margin-block-start: 7px;
+}
+/* A solid focus ring survives high-contrast palettes that suppress shadows. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt :is(.tk-box, .tk-exp):focus-visible {
+  color: var(--pfg);
+  outline: 2px solid var(--pfg-2);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) :is(#starred, #tasks-nt) > .empty {
   text-align: start;
