@@ -297,3 +297,14 @@ long Unicode-whitespace suffix. In a 12-account fixture with 8 MB of valid
 bookmark files, the probe took 21.47 to 4.49 ms, and sampled transient V8
 heap fell from 15.22 to 8.06 MB; retained heap was unchanged. Do not count
 this as steady-state browser RAM or an Edge improvement.
+
+### Reuse date formatting within each new-tab Tasks paint
+
+Open tasks share a lazy day and time formatter for one paint. The next
+paint still picks up the current locale and zone. Invalid dates still use
+the original code, and per-row overdue checks, ordering, expand and
+mark-done behavior are unchanged. The old/new component fixture compared
+byte-identical DOM across locale, daylight-saving, and boundary cases:
+seven paired medians fell from 65.52 to 46.15 ms for eight tasks over 20
+repaints, and from 155.34 to 65.01 ms for 160 tasks over five repaints.
+These are component timings, not startup or whole-browser CPU.

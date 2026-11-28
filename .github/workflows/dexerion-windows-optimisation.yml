@@ -40,7 +40,7 @@ jobs:
       - name: Run syntax, contracts and focused tests
         run: npm test
       - name: Exercise real chat, search, download and accounts on Windows
-        run: npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js
+        run: npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js e2e/newtab-tasks.spec.js
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

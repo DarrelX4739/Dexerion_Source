@@ -635,10 +635,18 @@ function paintFav(favEl,dataUrl){
   const box=document.getElementById('tasks-nt');
   if(!box)return;
   const nEl=document.getElementById('tasks-n');
-  function dueText(t){
+  const dayOptions={month:'short',day:'numeric'};
+  const timeOptions={hour:'2-digit',minute:'2-digit'};
+  function dueText(t,formatters){
     const d=new Date(t.dueMs);
-    const day=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
-    return t.hasTime?day+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):day;
+    const valid=Number.isFinite(d.getTime());
+    const day=valid
+      ?(formatters.day||=new Intl.DateTimeFormat(undefined,dayOptions)).format(d)
+      :d.toLocaleDateString(undefined,dayOptions);
+    if(!t.hasTime)return day;
+    return day+' '+(valid
+      ?(formatters.time||=new Intl.DateTimeFormat(undefined,timeOptions)).format(d)
+      :d.toLocaleTimeString(undefined,timeOptions));
   }
   function paint(list){
     box.innerHTML='';
@@ -648,6 +656,9 @@ function paintFav(favEl,dataUrl){
       box.innerHTML='<div class="empty"><b>No open tasks</b><br>Add one from the tasks panel in the tab rail.</div>';
       return;
     }
+    // Reuse formatters only for this paint. The next load picks up the
+    // current locale and time zone, and each overdue check stays live.
+    const formatters={};
     open.forEach((t,i)=>{
       const d=document.createElement('div');
       d.className='tk-todo';d.style.animationDelay=(i*38)+'ms';d.title=t.notes||t.title;
@@ -665,7 +676,7 @@ function paintFav(favEl,dataUrl){
         tx.appendChild(desc);
       }
       const sm=document.createElement('small');
-      sm.textContent=dueText(t);
+      sm.textContent=dueText(t,formatters);
       if(t.dueMs<Date.now())sm.classList.add('overdue');
       tx.appendChild(sm);
       d.append(c,tx);
