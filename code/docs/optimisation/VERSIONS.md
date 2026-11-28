@@ -172,3 +172,22 @@ while icons were pending, the old path created 2,412 buttons and issued
 the median of nine alternating 3,000-update batches was 40.99 → 9.18 µs per
 update and the candidate made no button, image, or insertion allocations.
 These are component samples, not whole-app CPU, RAM, GPU, or Edge results.
+
+### Main-process task snapshots: reuse normalized wire rows between mutations
+
+State serialization was replacing, sanitizing and sorting an account's task
+list on every read, including unrelated tab navigation. Reuse the immutable
+public rows while the normalized backing array stays current. The existing
+task and reminder mutation paths replace that array before editing; a weak
+key cannot pin superseded arrays or account objects. The renderer still
+receives the same fields and handles date labels and overdue state as before.
+Set `DEX_TASK_SNAPSHOT_CACHE=off` to restore the old read path.
+
+In a 600-task Linux/Node fixture with unchanged data, 750 reads reduced
+750 normalize/sort passes to one. Median time including the first read
+was 194.26 → 0.62 µs per read across nine alternating batches per arm.
+The cache retains one immutable wire snapshot per currently used list;
+this measurement concerns CPU and repeated allocations, not application
+RAM, Electron IPC cost, or Edge. Tests cover exact serialized rows, malformed
+records, real task-handler mutations, account replacement, reminder flags,
+and the off switch.

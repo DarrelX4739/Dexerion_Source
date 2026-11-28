@@ -522,6 +522,9 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // a new account really has nothing saved. The 'default' account uses the
   // shared default session.
   const accountCache = new Map(); // id -> { bookmarks, history, topSites, closedTabs, logins }
+  // Key by a normalized task list identity, never by account ID. The
+  // pre-mutation ensureTasks() replacement invalidates a list automatically.
+  const taskSnapshots = process.env.DEX_TASK_SNAPSHOT_CACHE === 'off' ? null : new WeakMap();
   const accountSessions = new Map(); // id -> session
   const accountTimers = new Map();
   const AVATAR_COLORS = ['#35c4ff', '#8b7bff', '#3ddc84', '#ffb020', '#ff6b9d', '#ff7a7a'];
@@ -8981,12 +8984,26 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   function ensureTasks(A) {
     if (!A) return [];
     if (!Array.isArray(A.tasks)) A.tasks = [];
+    // This replacement is also the snapshot boundary: every task/reminder
+    // mutation calls ensureTasks() before editing the returned list or rows.
     A.tasks = tasks.sanitizeList(A.tasks);
     return A.tasks;
   }
   function tasksPublic(accountId) {
-    try { return tasks.sortTasks(ensureTasks(accData(accountId))); }
-    catch { return []; }
+    try {
+      const A = accData(accountId);
+      const cached = taskSnapshots?.get(A.tasks);
+      if (cached) return cached;
+      const list = ensureTasks(A);
+      const rows = tasks.sortTasks(list);
+      if (taskSnapshots) {
+        // This array only travels over IPC. Freezing the plain objects keeps
+        // the cached snapshot separate from the mutable persisted tasks.
+        for (const row of rows) Object.freeze(row);
+        taskSnapshots.set(list, Object.freeze(rows));
+      }
+      return rows;
+    } catch { return []; }
   }
   function broadcastTasks(accountId) {
     const list = tasksPublic(accountId);
