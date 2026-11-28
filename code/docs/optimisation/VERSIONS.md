@@ -140,3 +140,18 @@ An isolated Linux/Node A/B with stubbed Electron APIs went from 85.6 to 1.6
 arm). Those times exclude native sampling and are not app CPU or Edge
 results. Tests cover the exact cap, forced over-cap samples, audible/active
 guardrails, warning publication and cleanup, and the disabled saver.
+
+### Focus Timer: retain the blocklist while only the clock changes
+
+The running Focus Timer delivers a new state every 500 ms. Its renderer was
+discarding and rebuilding all blocklist rows on every tick, even when their
+ordered hostnames were identical. Keep the existing controls until a host
+is added, removed, or reordered. The countdown, expanded and collapsed
+controls, audio calls, and site's Unblock action update as before; an
+unchanged Unblock button no longer loses focus on a clock tick.
+
+In a Linux/Node fake-DOM A/B (25 hosts, 3,600 simulated ticks, median of nine
+alternating batches per arm), the timer update went from 18.73 to 5.25 µs
+and created 75 rather than 270,000 list nodes. This measures local code and
+allocation counts, not app CPU %, working set, or Edge. The tests exercise
+timer/audio state, focus retention, list changes, and exact removal targets.

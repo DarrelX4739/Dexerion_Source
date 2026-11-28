@@ -535,11 +535,18 @@ function updateRailMini(p, running) {
     snd.title = off ? 'Unmute (restore White noise)' : 'Mute sound';
   }
 }
+let lastPomoSites = null;
 function renderPomoSites(p) {
   const box = $('#rt-sites');
   if (!box) return;
-  box.replaceChildren();
   const list = (p && p.blocklist) || [];
+  // The timer sends fresh state twice a second, but elapsed time does not
+  // change which sites are listed. Keep the same controls (including focus)
+  // until the ordered host set actually changes.
+  if (lastPomoSites && lastPomoSites.length === list.length &&
+      list.every((host, i) => host === lastPomoSites[i])) return;
+  lastPomoSites = list.slice();
+  box.replaceChildren();
   if (!list.length) {
     const d = document.createElement('div');
     d.className = 'rt-empty';
