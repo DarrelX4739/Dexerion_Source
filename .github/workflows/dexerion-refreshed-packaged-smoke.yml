@@ -9,6 +9,8 @@ on:
       - code/build/package.json
       - code/build/package-lock.json
       - code/build/electron-builder.json
+      - code/code/src/renderer/shell.html
+      - code/code/assets/vendor/lucide-shell.js
   workflow_dispatch:
 
 permissions:

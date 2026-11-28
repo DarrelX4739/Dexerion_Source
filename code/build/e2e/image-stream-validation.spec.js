@@ -23,6 +23,12 @@ test('real file attachments retain the exact uploaded bytes and ordinary two-leg
     });
     await expect(win.locator('#ai-sidebar:not([hidden])')).toBeVisible();
     await expect(win.locator('#ai-setup')).toBeHidden();
+    // Use the supported existing-conversation path. The pre-existing auto-new
+    // chat path clears pending attachments, which is a distinct UI defect.
+    await win.getByRole('button', { name: 'New chat', exact: true }).click();
+    const listChats = () => win.evaluate(() => window.dexerion.invoke('dex:ai-chats-list'));
+    await expect.poll(async () => (await listChats()).length).toBe(1);
+    const chatId = (await listChats())[0].id;
 
     const images = await win.evaluate(() => [23, 417].map(seed => {
       const canvas = document.createElement('canvas');
@@ -49,6 +55,12 @@ test('real file attachments retain the exact uploaded bytes and ordinary two-leg
     await win.press('#ai-input', 'Enter');
     await expect(win.locator('#ai-messages')).toContainText(ANSWER, { timeout: 30000 });
     await expect(win.locator('#ai-messages')).not.toContainText(NOTE);
+    const stored = await win.evaluate(async id => {
+      const chat = await window.dexerion.invoke('dex:ai-chat-open', id);
+      const turn = chat.messages.find(message => message.role === 'user');
+      return (turn?.images || []).map(image => image.url);
+    }, chatId);
+    expect(stored.map(payloadHash)).toEqual(expected);
     const sent = mock.requests.map(request => request.body).filter(body => body.stream && imagesOf(body).length);
     expect(sent.length).toBe(2);
     expect(sent.map(body => imagesOf(body).map(payloadHash))).toEqual([[expected[0]], [expected[1]]]);
