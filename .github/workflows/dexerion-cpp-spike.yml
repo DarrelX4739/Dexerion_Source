@@ -1,0 +1,108 @@
+name: Dexerion C++ experiment
+on:
+  push:
+    branches: [cpp-native-spike]
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    if: github.ref == 'refs/heads/cpp-native-spike'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - uses: actions/checkout@v4
+        with:
+          ref: 64da61e4fbe16b6d7f3fe58752a90517569d45bf
+          path: .electron-reference
+          persist-credentials: false
+      - name: Compare tracked production tree to the copied commit
+        shell: bash
+        run: |
+          ref_tree="$(git -C .electron-reference rev-parse HEAD:code)"
+          branch_tree="$(git rev-parse HEAD:code)"
+          [[ "$ref_tree" == "$branch_tree" ]]
+          [[ "$(git -C .electron-reference rev-parse HEAD:.github/workflows/release.yml)" == "$(git rev-parse HEAD:.github/workflows/release.yml)" ]]
+          echo "Production source, tests, dependencies and release workflow have the original tree IDs."
+      - name: Validate existing Electron implementation
+        working-directory: code/build
+        shell: bash
+        run: |
+          npm ci
+          npm test
+      - name: Exercise existing Electron app on Linux
+        if: runner.os == 'Linux'
+        working-directory: code/build
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js e2e/newtab-tasks.spec.js
+      - name: Exercise existing Electron app on Windows
+        if: runner.os == 'Windows'
+        working-directory: code/build
+        run: npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js e2e/newtab-tasks.spec.js
+
+  native-cef:
+    if: github.ref == 'refs/heads/cpp-native-spike'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, sdk: linux64 }
+          - { os: windows-latest, sdk: windows64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch the exact upstream CEF SDK
+        env:
+          CEF_PLATFORM: ${{ matrix.sdk }}
+        run: |
+          root="$(python experiments/cef-shell/fetch_sdk.py "$CEF_PLATFORM" "$RUNNER_TEMP/dex-cef-sdk")"
+          echo "CEF_SDK_ROOT=$root" >> "$GITHUB_ENV"
+      - name: Configure and build native CEF under Linux
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S experiments/cef-shell -B "$RUNNER_TEMP/dex-cef-build" -DCMAKE_BUILD_TYPE=Release -DCEF_ROOT="$CEF_SDK_ROOT"
+          cmake --build "$RUNNER_TEMP/dex-cef-build" --parallel 3
+      - name: Configure and build native CEF under Windows
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S experiments/cef-shell -B "$RUNNER_TEMP/dex-cef-build" -A x64 -DCEF_ROOT="$CEF_SDK_ROOT"
+          cmake --build "$RUNNER_TEMP/dex-cef-build" --config Release --parallel 3
+      - name: Render a loopback fixture with CEF on Linux
+        if: runner.os == 'Linux'
+        run: |
+          app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe -print -quit)"
+          test -n "$app"
+          sandbox="$(dirname "$app")/chrome-sandbox"
+          test -f "$sandbox"
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
+          xvfb-run -a python experiments/cef-shell/smoke.py "$app"
+      - name: Render a loopback fixture with CEF on Windows
+        if: runner.os == 'Windows'
+        run: |
+          app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
+          test -n "$app"
+          python experiments/cef-shell/smoke.py "$app"
