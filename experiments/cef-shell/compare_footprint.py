@@ -41,6 +41,24 @@ async function proof(step){
 </script>'''
 
 
+def validated_render(data):
+    """Accept only the expected visible, fully-sized synthetic DOM and Chromium UA."""
+    if not all(isinstance(data[k], (int, float)) and 0 < data[k] < 25000
+               for k in ("width", "height", "dpr")):
+        raise ValueError("invalid viewport")
+    if (data["box"] != [640, 360] or data["title"] != "Dexerion footprint fixture" or
+            data["heading"] != "Native footprint fixture" or
+            data["text"] != "One static document, one active tab." or
+            data["width"] < 640 or data["height"] < 360):
+        raise ValueError("fixture DOM area/text changed or does not fit viewport")
+    chrom = re.search(r"\bChrome/(\d+(?:\.\d+){0,3})\b", data["ua"])
+    if not chrom:
+        raise ValueError("missing Chromium UA")
+    result = {k: data[k] for k in ("width", "height", "dpr", "box")}
+    result["reported_chromium"] = chrom.group(1)
+    return result
+
+
 @contextlib.contextmanager
 def fixture():
     key = "/" + secrets.token_urlsafe(24) + "/"
@@ -76,23 +94,12 @@ def fixture():
                 if not 0 < size <= 4096:
                     raise ValueError("invalid proof size")
                 data = json.loads(self.rfile.read(size))
-                if not all(isinstance(data[k], (int, float)) and 0 < data[k] < 25000
-                           for k in ("width", "height", "dpr")):
-                    raise ValueError("invalid viewport")
-                if (data["box"] != [640, 360] or data["title"] != "Dexerion footprint fixture" or
-                        data["heading"] != "Native footprint fixture" or
-                        data["text"] != "One static document, one active tab." or
-                        data["width"] < 640 or data["height"] < 360):
-                    raise ValueError("fixture DOM area/text changed or does not fit viewport")
-                chrom = re.search(r"\bChrome/(\d+(?:\.\d+){0,3})\b", data["ua"])
-                if not chrom:
-                    raise ValueError("missing Chromium UA")
+                proof = validated_render(data)
                 step = self.path.rsplit("/", 1)[-1]
                 if step == "end" and not release.is_set():
                     raise ValueError("premature end proof")
                 observed[step + "s"] += 1
-                observed[step] = {k: data[k] for k in ("width", "height", "dpr", "box")}
-                observed[step]["reported_chromium"] = chrom.group(1)
+                observed[step] = proof
                 self.reply(204)
                 (ready if step == "start" else final).set()
             except (KeyError, TypeError, ValueError):
@@ -220,7 +227,8 @@ def request_electron_window_close(proc):
             raise RuntimeError("could not request a graceful Electron window close")
     else:
         # python-xlib on the disposable CI X display; no window manager required.
-        from Xlib import X, Xatom, display, error, protocol
+        from Xlib import X, Xatom, display, error
+        from Xlib.protocol import event
         d = display.Display()
         try:
             pid_atom = d.intern_atom("_NET_WM_PID"); delete = d.intern_atom("WM_DELETE_WINDOW")
@@ -240,7 +248,7 @@ def request_electron_window_close(proc):
             if len(targets) != 1:
                 raise RuntimeError("could not identify exactly one owned Electron X11 window")
             win = targets[0]
-            win.send_event(protocol.event.ClientMessage(window=win,
+            win.send_event(event.ClientMessage(window=win,
                 client_type=d.intern_atom("WM_PROTOCOLS"), data=(32, [delete, X.CurrentTime, 0, 0, 0])))
             d.sync()
         finally:

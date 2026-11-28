@@ -123,13 +123,13 @@ jobs:
           test -f "$sandbox"
           sudo chown root:root "$sandbox"
           sudo chmod 4755 "$sandbox"
-          xvfb-run -a python experiments/cef-shell/smoke.py "$app"
+          xvfb-run -a python experiments/cef-shell/smoke.py "$app" --storage
       - name: Render a loopback fixture with CEF on Windows
         if: runner.os == 'Windows'
         run: |
           app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
           test -n "$app"
-          python experiments/cef-shell/smoke.py "$app"
+          python experiments/cef-shell/smoke.py "$app" --storage
 
 
       - uses: actions/setup-node@v4
@@ -143,6 +143,7 @@ jobs:
         run: |
           npm ci --prefix code/build
           python -m pip install --only-binary=:all: psutil==7.2.2 'python-xlib==0.33; sys_platform == "linux"'
+          python experiments/cef-shell/test_compare_footprint.py
       - name: Measure separate disposable one-page launch trees
         if: contains(github.event.head_commit.message, '[footprint]')
         run: |

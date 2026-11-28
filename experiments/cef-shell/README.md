@@ -5,7 +5,8 @@ It does not replace the Electron app or change its installer, profiles,
 shortcuts, permission policy or build. The native browser window uses
 CEF Views for navigation controls and Chromium for the page. It currently
 has one view with an HTTP(S) address field, Go, Back, Forward and Reload.
-The address follows committed navigation; popup windows are not ported.
+The address follows committed navigation; Ctrl+L focuses it, Ctrl+R reloads,
+and Alt+Left/Right navigate history. Popup windows are not ported.
 It is not a feature-complete browser or a migration tool.
 
 Use a dedicated absolute profile directory (a new/empty one or one already
@@ -27,3 +28,10 @@ compatibility, and a sandboxed bridge for existing research/AI previews. Do
 not compare this one-view experiment's memory with an entire Dexerion build
 and call the difference a product saving. The page engine and measured
 feature workload would first need to match.
+
+
+The extended smoke checks reject a fake nonempty profile without writing,
+verify the actual native address field updates after a loopback redirect,
+and verify website local storage persists after reopening one dedicated
+profile but is absent in a different profile. This is an early isolation
+check, not a conversion of Dexerion's existing account/session features.

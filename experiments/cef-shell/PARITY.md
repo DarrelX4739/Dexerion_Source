@@ -30,3 +30,17 @@ architecture. Its feature/UI surfaces and engine revision can differ from
 the Electron browser; do not treat smaller totals as a migration approval.
 Security boundaries, accessibility and original feature checks are hard
 gates, not knobs to meet the percentage goal.
+
+
+## Extension architecture gate
+
+The prototype currently uses CEF Alloy-style Views. The
+[maintainer's Alloy guidance](https://github.com/chromiumembedded/cef/issues/3859)
+distinguishes request-context extension functionality from the Chrome
+toolbar/management UI, which isn't available in Alloy. There is also an
+[open runtime extension install API request](https://github.com/chromiumembedded/cef/issues/3877);
+the SDK revision pinned here doesn't expose the old LoadExtension method
+on its public request context. Testing the current unpacked fixture,
+action popup, permissions and per-account filtering is mandatory before
+adopting either Alloy or Chrome style. Do not use preference edits, hidden
+flags or an unsandboxed process as substitutes for supported feature parity.

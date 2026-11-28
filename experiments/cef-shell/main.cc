@@ -39,7 +39,7 @@ namespace fs = std::filesystem;
 
 constexpr char kProfileMarker[] = ".dexerion-cef-experiment";
 constexpr char kTitle[] = "Dexerion C++ experiment";
-constexpr int kBack = 1, kForward = 2, kReload = 3, kGo = 4;
+constexpr int kBack = 1, kForward = 2, kReload = 3, kGo = 4, kFocusLocation = 5;
 
 std::string Utf8Path(const fs::path& path) {
   const auto bytes = path.u8string();
@@ -58,6 +58,7 @@ bool WebAddress(const CefString& input) {
 struct Options {
   CefString url = "about:blank";
   CefString expected_title;
+  CefString expected_url;
   fs::path profile;
   fs::path proof;
   std::int64_t smoke_hold_ms = 0;
@@ -93,6 +94,13 @@ bool ParseOptions(CefRefPtr<CefCommandLine> arguments, Options& options) {
     CefURLParts parts;
     if (!CefParseURL(options.url, parts) || CefString(&parts.scheme) != "http" ||
         CefString(&parts.host) != "127.0.0.1") return false;
+    options.expected_url = arguments->HasSwitch("smoke-final-url")
+        ? arguments->GetSwitchValue("smoke-final-url") : options.url;
+    CefURLParts end;
+    if (!CefParseURL(options.expected_url, end) ||
+        CefString(&end.scheme) != CefString(&parts.scheme) ||
+        CefString(&end.host) != CefString(&parts.host) ||
+        CefString(&end.port) != CefString(&parts.port)) return false;
     if (arguments->HasSwitch("smoke-hold-ms")) {
       const auto text = arguments->GetSwitchValue("smoke-hold-ms").ToString();
       const auto end = text.data() + text.size();
@@ -149,6 +157,7 @@ class Client final : public CefClient,
     if (browser->IsPopup() || !frame || !frame->IsMain()) return;
     committed_url_ = url;
     if (field_ && !field_->HasFocus()) field_->SetText(committed_url_);
+    MaybeFinish(browser);
   }
 
   // The spike has no multi-window/account popup policy yet.
@@ -174,7 +183,7 @@ class Client final : public CefClient,
   void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                  int status) override {
     if (browser->IsPopup() || !frame->IsMain()) return;
-    fixture_loaded_ = status == 200 && frame->GetURL() == options_.url;
+    fixture_loaded_ = status == 200 && frame->GetURL() == options_.expected_url;
     MaybeFinish(browser);
   }
 
@@ -185,7 +194,8 @@ class Client final : public CefClient,
  private:
   void MaybeFinish(CefRefPtr<CefBrowser> browser) {
     if (options_.proof.empty() || finished_ || !fixture_loaded_ ||
-        title_ != options_.expected_title) return;
+        title_ != options_.expected_title || committed_url_ != options_.expected_url ||
+        !field_ || field_->GetText() != committed_url_) return;
     std::ofstream proof(options_.proof);
     proof << "CEF_RENDERED_FIXTURE\n" << title_.ToString() << '\n';
     proof.close();
@@ -235,6 +245,7 @@ class Frame final : public CefWindowDelegate,
     AddButton(bar, "Forward", kForward);
     AddButton(bar, "Reload", kReload);
     address_ = CefTextfield::CreateTextfield(this);
+    address_->SetAccessibleName("Web address");
     address_->SetText(start_);
     client_->SetAddressField(address_);
     bar->AddChildView(address_);
@@ -243,7 +254,12 @@ class Frame final : public CefWindowDelegate,
     window->AddChildView(bar);
     window->AddChildView(view_);
     layout->SetFlexForView(view_, 1);
+    window->SetAccelerator(kFocusLocation, 'L', false, true, false, true);
+    window->SetAccelerator(kReload, 'R', false, true, false, true);
+    window->SetAccelerator(kBack, 37, false, false, true, true);
+    window->SetAccelerator(kForward, 39, false, false, true, true);
     window->Show();
+    view_->RequestFocus();
   }
 
   bool CanClose(CefRefPtr<CefWindow>) override {
@@ -258,15 +274,17 @@ class Frame final : public CefWindowDelegate,
     client_ = nullptr;
   }
 
-  void OnButtonPressed(CefRefPtr<CefButton> button) override {
-    auto browser = view_ ? view_->GetBrowser() : nullptr;
-    if (!browser) return;
-    switch (button->GetID()) {
-      case kBack: if (browser->CanGoBack()) browser->GoBack(); break;
-      case kForward: if (browser->CanGoForward()) browser->GoForward(); break;
-      case kReload: browser->Reload(); break;
-      case kGo: Navigate(browser); break;
+  bool OnAccelerator(CefRefPtr<CefWindow>, int command) override {
+    if (command == kFocusLocation && address_) {
+      address_->RequestFocus();
+      address_->SelectAll(false);
+      return true;
     }
+    return BrowserCommand(command);
+  }
+
+  void OnButtonPressed(CefRefPtr<CefButton> button) override {
+    BrowserCommand(button->GetID());
   }
 
   bool OnKeyEvent(CefRefPtr<CefTextfield>, const CefKeyEvent& event) override {
@@ -279,6 +297,18 @@ class Frame final : public CefWindowDelegate,
   }
 
  private:
+  bool BrowserCommand(int command) {
+    auto browser = view_ ? view_->GetBrowser() : nullptr;
+    if (!browser) return false;
+    switch (command) {
+      case kBack: if (browser->CanGoBack()) browser->GoBack(); return true;
+      case kForward: if (browser->CanGoForward()) browser->GoForward(); return true;
+      case kReload: browser->Reload(); return true;
+      case kGo: Navigate(browser); return true;
+      default: return false;
+    }
+  }
+
   void AddButton(CefRefPtr<CefPanel> bar, const char* label, int id) {
     auto button = CefLabelButton::CreateLabelButton(this, label);
     button->SetID(id);
