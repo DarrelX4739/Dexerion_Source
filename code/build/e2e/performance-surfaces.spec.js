@@ -51,6 +51,61 @@ test('a retained bookmark still navigates the newly active tab', async () => {
   } finally { server.close(); }
 });
 
+test('identical shell state leaves chrome alone without changing navigation or an omnibox draft', async () => {
+  const server = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.end('<title>Chrome writes fixture</title><h1>Chrome writes fixture</h1>');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const target = 'http://127.0.0.1:' + server.address().port + '/chrome-writes';
+  try {
+    await withApp(async (_app, win) => {
+      const omni = win.locator('#omnibox');
+      await win.evaluate((url) => window.dexerion.invoke('dex:new-tab', url, false), target);
+      await expect.poll(() => win.title()).toBe('Chrome writes fixture — Dexerion');
+      await omni.blur();
+      await win.evaluate(() => refresh());
+      await expect(omni).toHaveValue(target);
+      const unchanged = await win.evaluate(async () => {
+        await refresh();
+        let delivered = 0;
+        const watch = new MutationObserver((rows) => { delivered += rows.length; });
+        for (const selector of ['title', '#account-av', '#dmenu-acc']) {
+          watch.observe(document.querySelector(selector), { childList: true });
+        }
+        watch.observe(document.getElementById('account-btn'), { attributes: true, attributeFilter: ['title'] });
+        for (let i = 0; i < 4; i++) await refresh(); // fetch and render actual main-process state
+        const count = delivered + watch.takeRecords().length;
+        watch.disconnect();
+        return count;
+      });
+      expect(unchanged).toBe(0);
+
+      await omni.focus();
+      const draft = await win.evaluate(async () => {
+        const input = document.getElementById('omnibox');
+        // Set exactly the draft and selection being tested, independently of
+        // debounced suggestions that open their own native popup.
+        input.value = 'local draft';
+        input.setSelectionRange(2, 5, 'backward');
+        const bridge = window.dexerion;
+        const current = await bridge.invoke('dex:get-state');
+        await bridge.invoke('dex:account-rename', { id: current.account.id, name: 'New label' });
+        await refresh();
+        return [input === document.activeElement, input.value, input.selectionStart, input.selectionEnd, input.selectionDirection];
+      });
+      expect(draft).toEqual([true, 'local draft', 2, 5, 'backward']);
+      await expect(win.locator('#account-av')).toHaveText('N');
+      await expect(win.locator('#dmenu-acc')).toHaveText('New label (default)');
+      await expect(win.locator('#account-btn')).toHaveAttribute('title', 'Signed in as New label — manage accounts');
+      await omni.blur();
+      await win.evaluate(() => refresh());
+      await expect(omni).toHaveValue(target);
+    });
+  } finally { server.close(); }
+});
+
 test('Focus Timer countdown and unblock action survive unchanged list updates', async () => {
   await withApp(async (_app, win) => {
     await win.evaluate(() => window.dexerion.invoke('dex:pomo-configure',

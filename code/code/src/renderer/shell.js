@@ -400,16 +400,23 @@ function closeGroupEditor() {
   if (p) p.remove();
 }
 
+const chromeTitle = document.head.querySelector('title');
 function updateChromeRest(s) {
   const act = s.tabs.find(t => t.id === s.active);
   // Preview windows name their direction in the title bar, so four of them are
   // tellable apart in the taskbar (the active tab still follows the dot).
-  document.title = SKIN
+  const title = SKIN
     ? 'Dexerion — ' + (SKIN_LABELS[SKIN] || SKIN) + (act ? ' · ' + act.title : '')
     : (act ? act.title + ' — ' : '') + 'Dexerion';
-  // omnibox
+  // The document.title getter normalises whitespace; compare the actual
+  // title node so a meaningful change to its raw text still gets written.
+  if (!chromeTitle || chromeTitle.textContent !== title) document.title = title;
+  // Never overwrite the text or selection being edited in the omnibox.
   const omni = $('#omnibox');
-  if (document.activeElement !== omni) omni.value = displayUrl(act ? act.url : '');
+  if (document.activeElement !== omni) {
+    const url = displayUrl(act ? act.url : '');
+    if (omni.value !== url) omni.value = url;
+  }
   // nav buttons
   document.querySelector('[data-nav=back]').disabled = !(act && act.canBack);
   document.querySelector('[data-nav=forward]').disabled = !(act && act.canForward);
@@ -447,15 +454,20 @@ function updateChromeRest(s) {
   } else if (av.dataset.src) {
     av.dataset.src = ''; av.textContent = initial;
     av.style.background = `linear-gradient(150deg, ${(s.account && s.account.color) || '#35c4ff'}, var(--paper-ink))`;
-  } else {
+  } else if (av.textContent !== initial) {
     av.textContent = initial;
   }
   if (!s.account || !s.account.avatar) {
     av.style.background = `linear-gradient(150deg, ${(s.account && s.account.color) || '#35c4ff'}, var(--paper-ink))`;
   }
-  $('#account-btn').title = `Signed in as ${an}${s.account && s.account.googleEmail ? ' (' + s.account.googleEmail + ')' : ''} — manage accounts`;
+  const accountButton = $('#account-btn');
+  const tooltip = `Signed in as ${an}${s.account && s.account.googleEmail ? ' (' + s.account.googleEmail + ')' : ''} — manage accounts`;
+  if (accountButton.title !== tooltip) accountButton.title = tooltip;
   const dacc = $('#dmenu-acc');
-  if (dacc) dacc.textContent = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
+  if (dacc) {
+    const label = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
+    if (dacc.textContent !== label) dacc.textContent = label;
+  }
   updateBookmarkStar(act);
   updateBookmarksBar(s);
   updateExtensionsToolbar(s.extensions);

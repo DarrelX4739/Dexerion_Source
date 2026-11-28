@@ -242,3 +242,16 @@ median. The isolated post-GC incremental JavaScript heap went from 14.47 MB
 to 25 KB. These figures are not whole-browser RAM; a same-build Electron
 A/B with 12 synthetic accounts measures that separately. Restart, quit,
 write failure, account activation and separation are covered independently.
+
+### Unchanged shell text and input writes
+
+The shell now skips exact duplicate browser-title, unfocused address-bar
+value, avatar fallback, account label and tooltip writes. The new native
+Electron fixture exercises real navigation and account updates and checks
+that unrelated state refreshes do not replace in-progress address-bar text
+or selection. No IPC, layout, account or renderer boundary was changed.
+
+In 500 identical JSDOM chrome updates, 2,000 observed target mutations and
+500 unfocused input setters fell to zero. Alternating mixed fixtures were
+about 7% faster for this component only. This does not establish a
+whole-browser foreground CPU change.
