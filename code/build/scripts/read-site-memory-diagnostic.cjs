@@ -43,9 +43,31 @@ function hexBytes(n){
 function normId(id){
   return typeof id==='string'&&/^(?:0x)?[0-9a-f]{1,16}$/i.test(id)?BigInt('0x'+id.replace(/^0x/i,'')).toString(16):null;
 }
+function allocatorEvents(events){
+  return events.filter(e=>e.ph==='v'&&String(e.cat).split(',').includes('disabled-by-default-memory-infra')&&e.args?.dumps);
+}
+function describeAllocatorRecords(events,dump,pids){
+  const rows=allocatorEvents(events);
+  // No raw dumps, absolute timestamps, addresses, process IDs or arbitrary
+  // strings in artifacts. Keep enough evidence to distinguish export records
+  // sharing an ID from distinct timestamps or disjoint root sets.
+  return pids.map((pid,tab)=>{
+    const records=rows.filter(e=>e.pid===pid);
+    const base=records.find(e=>Number.isFinite(e.ts))?.ts;
+    return {tab,recordCount:records.length,records:records.slice(0,8).map(e=>{
+      const d=e.args.dumps;
+      const names=Object.keys(d.allocators??{});
+      const presentRoots=new Set(names.map(key=>key.split('/')[0]));
+      return {requestIdMatches:normId(dump?.dumpGuid)!==null&&normId(e.id??e.id2?.global)===normId(dump.dumpGuid),
+        offsetUs:Number.isFinite(e.ts)&&Number.isFinite(base)?e.ts-base:null,
+        detailed:d.level_of_detail==='detailed',nodeCount:names.length,recognizedRoots:CATEGORIES.filter(k=>presentRoots.has(k)),
+        hasTotals:Object.hasOwn(d,'process_totals'),hasMaps:Object.hasOwn(d,'process_mmaps')};
+    })};
+  });
+}
 function readAllocatorDump(events,dump,pids) {
   assert(dump?.success===true&&normId(dump.dumpGuid)!==null,'no successful explicit MemoryInfra dump');
-  const tagged=events.filter(e=>e.ph==='v'&&String(e.cat).split(',').includes('disabled-by-default-memory-infra')&&e.args?.dumps);
+  const tagged=allocatorEvents(events);
   const dumpIds=new Set(tagged.map(e=>normId(e.id??e.id2?.global)));
   // Perfetto JSON exports its internal snapshot id, not necessarily the CDP
   // request GUID. This trace is explicitly nonperiodic with exactly one
@@ -68,4 +90,4 @@ function readAllocatorDump(events,dump,pids) {
   }
   return {format:idsMatch?'GUID exact':'single Perfetto export id',rows};
 }
-module.exports={verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,hexBytes,CATEGORIES};
+module.exports={verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes,CATEGORIES};

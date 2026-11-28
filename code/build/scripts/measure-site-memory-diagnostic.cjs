@@ -12,7 +12,7 @@ const { setTimeout:sleep }=require('node:timers/promises');
 const { chromium }=require('@playwright/test');
 const {openNative,edgeExecutable,pagesIn,isShellUrl,waitFor}=require('./measure-native-browser.cjs');
 const {matchesInventory,verifiedNativeTree}=require('./measure-sample-guard.cjs');
-const {verifiedFramePid,verifiedSiteRows,readHeapUsage,readAllocatorDump,CATEGORIES}=require('./read-site-memory-diagnostic.cjs');
+const {verifiedFramePid,verifiedSiteRows,readHeapUsage,readAllocatorDump,describeAllocatorRecords,CATEGORIES}=require('./read-site-memory-diagnostic.cjs');
 
 const PAIRS=3;
 const SHA=process.env.GITHUB_SHA;
@@ -56,6 +56,17 @@ function pidRows(sample,session,kind){
     !/(?:^|\s)--(?:no-sandbox|disable-web-security|disable-gpu|disable-site-isolation-trials)(?:[=\s]|$)/i.test(p.cmdline));
   assert(!tree.unknownParentReferences&&!tree.staleParentReferences,'uncertain Windows process attribution');
   return tree.rows;
+}
+async function attributedSnapshot(session,kind){
+  // One unrelated same-profile process can exit while the CIM inventory is
+  // being enumerated. Retake the whole inventory, never ignore a bad parent.
+  for(let n=0;;n++){
+    try{return pidRows(snapshot(),session,kind);}
+    catch(e){
+      if(e.message!=='uncertain Windows process attribution'||n>=2)throw e;
+      await sleep(300);
+    }
+  }
 }
 function during(p,ms,label){
   return Promise.race([p,sleep(ms,null,{ref:false}).then(()=>{throw new Error(label+' timed out');})]);
@@ -172,7 +183,7 @@ async function probeArm(kind,exe,urls){
     const fps=(f2.frames-f1.frames)*1000/(f2.stamp-f1.stamp);
     assert(fps>=30&&Number.isFinite(fps),'foreground did not advance matched work');
     assert(await inventory());
-    const a=pidRows(snapshot(),session,kind);
+    const a=await attributedSnapshot(session,kind);
     const heap=[];
     for(const [i,page] of pages.entries()){
       heap.push(await usingPage(page,async cdp=>{
@@ -183,15 +194,17 @@ async function probeArm(kind,exe,urls){
         return readHeapUsage(await cdp.send('Runtime.getHeapUsage'));
       }));
     }
-    let allocator=null,allocatorError=null;
+    let allocator=null,allocatorError=null,allocatorRecords=null;
     try{
       const dump=await trace(session.devtools,memCategory,()=>during(session.devtools.send(
         'Tracing.requestMemoryDump',{deterministic:false,levelOfDetail:'detailed'}),18000,'native allocator dump'));
-      allocator=readAllocatorDump(dump.events,dump.action,mapped.map(x=>x.pid));
+      const pids=mapped.map(x=>x.pid);
+      try{allocator=readAllocatorDump(dump.events,dump.action,pids);}
+      catch(e){allocatorRecords=describeAllocatorRecords(dump.events,dump.action,pids);throw e;}
     }catch(e){
       allocatorError=String(e?.message||e).split('\n')[0];
     }
-    const b=pidRows(snapshot(),session,kind);
+    const b=await attributedSnapshot(session,kind);
     assert(await inventory());
     const f3=await foreground();
     assert(f3.visible&&f3.fits&&f3.origin===f2.origin&&f3.dpr===f2.dpr);
@@ -201,7 +214,7 @@ async function probeArm(kind,exe,urls){
       privateResidentAfterBytes:r.privateResidentAfterBytes,...heap[i],
       allocator:allocator?.rows[i]?.categories??null,allocatorRoots:allocator?.rows[i]?.dumpRootNames??null}));
     return {browserVersion,workloadTabs:9,fps,viewport:[f2.width,f2.height,f2.dpr],rows,
-      allocatorFormat:allocator?.format??null,allocatorError};
+      allocatorFormat:allocator?.format??null,allocatorError,allocatorRecords};
   }finally{await session.close();}
 }
 const sum=xs=>xs.every(Number.isFinite)?xs.reduce((s,x)=>s+x,0):null;

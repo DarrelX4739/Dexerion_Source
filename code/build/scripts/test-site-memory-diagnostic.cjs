@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,hexBytes}=require('./read-site-memory-diagnostic.cjs');
+const {verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes}=require('./read-site-memory-diagnostic.cjs');
 test('frame metadata needs the exact verified top frame/URL, not trace emitter PID',()=>{
   const frame={id:'aaaa',url:'http://fixture-1.localhost:123/work'};
   const event={name:'TracingStartedInBrowser',pid:123,args:{data:{frames:[
@@ -42,4 +42,21 @@ test('uses only safe scalar byte values and reports missing, nonadditive allocat
   assert.equal(hexBytes('ffffffffffffffff'),null);
   assert.throws(()=>readAllocatorDump([event(),event('0x1')],{success:true,dumpGuid:'0xa9'},[81]),/no unique/);
   assert.throws(()=>readAllocatorDump([event(),event()],{success:true,dumpGuid:'0xa9'},[81]),/duplicate allocator/);
+});
+
+test('reports bounded structural metadata without admitting ambiguous dump records',()=>{
+  const mk=(ts,nodes,matched)=>({ts,id:matched?'0xab':'0x0',pid:1027,
+    cat:'disabled-by-default-memory-infra',ph:'v',args:{dumps:{
+      level_of_detail:'detailed',allocators:nodes,process_mmaps:{unloggedAddress:'0x1234'}
+    }}});
+  const e1=mk(10000,{'v8/foo':{},'internal_secret_name':{}},true);
+  const e2=mk(10300,{'skia/bar':{}},false);
+  const request={success:true,dumpGuid:'0xab'};
+  const summary=describeAllocatorRecords([e1,e2],request,[1027,1028]);
+  assert.deepEqual(summary,[{tab:0,recordCount:2,records:[
+    {requestIdMatches:true,offsetUs:0,detailed:true,nodeCount:2,recognizedRoots:['v8'],hasTotals:false,hasMaps:true},
+    {requestIdMatches:false,offsetUs:300,detailed:true,nodeCount:1,recognizedRoots:['skia'],hasTotals:false,hasMaps:true}
+  ]},{tab:1,recordCount:0,records:[]}]);
+  assert.throws(()=>readAllocatorDump([e1,e2],request,[1027]),/no unique/);
+  assert.equal(describeAllocatorRecords(Array(10).fill(e1),request,[1027])[0].records.length,8);
 });
