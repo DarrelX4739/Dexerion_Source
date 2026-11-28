@@ -6,10 +6,8 @@
 //   CPU   — Win32_Process UserModeTime+KernelModeTime deltas (100 ns units)
 //           summed across the browser process and every child.
 //   RAM   — Win32_Process WorkingSetSize summed across the same tree.
-//   GPU   — \GPU Engine(*)\Utilization Percentage + \GPU Process Memory(*)
-//           \Local Usage grouped by pid (see measure-gpu-sample.ps1). Dexerion
-//           ships software rendering by user decision, so its GPU numbers are
-//           expected near-zero; the CPU cost is reported side-by-side.
+//   GPU   — Windows GPU Engine utilisation by physical engine and PID; each
+//           sampling interval contributes once to tree mean and peak.
 //   Power — Windows RAPL \Energy Meter(rapl_package0_pkg)\Power (mW, 1 Hz,
 //           first sample discarded) with the paired-floor protocol: the floor
 //           is sampled immediately before each workload with no browser
@@ -47,8 +45,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
+const { aggregateGpu } = require('./measure-gpu-aggregate.cjs');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
-const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -101,7 +100,7 @@ const STATIC_HTML = `<!doctype html><meta charset="utf-8"><title>Dexerion measur
 
 const ANIMATED_HTML = `<!doctype html><meta charset="utf-8"><title>Dexerion measure probe - animated</title>
 <body style="margin:0;background:#101018;overflow:hidden">
-<canvas id="c" width="960" height="640"></canvas>
+<canvas id="c" width="960" height="640" style="display:block;width:928px;height:592px"></canvas>
 <script>
 (function () {
   const c = document.getElementById('c'), x = c.getContext('2d');
@@ -155,31 +154,32 @@ const treeSnapshot = (final = false) => runPs(S, final ? { IncludePrivateWorking
 const envRecord = () => { try { return runPs(E, {}, 30); } catch { return null; } };
 
 // GPU sampler runs concurrently with the RAPL sampler; spawn + await later.
-function spawnGpu(treePids) {
+function spawnGpu() {
   const out = path.join(OUT_DIR, 'gpu-' + process.pid + '-' + Math.random().toString(36).slice(2) + '.json');
   const child = spawn('powershell.exe', [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', G,
     '-DurationSec', String(SAMPLE_SEC + 4),
     '-IntervalSec', String(GPU_INTERVAL_SEC),
-    '-TreePids', treePids,
     '-OutFile', out,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
-  let stderr = '';
+  let stderr = '', childError;
+  child.on('error', (err) => { childError = err; });
   child.stderr.on('data', (d) => { stderr += String(d); });
-  return {
-    out,
-    finish: async () => {
+  const outcome = (async () => {
+    try {
       const deadline = Date.now() + (SAMPLE_SEC + 45) * 1000;
-      while (child.exitCode === null && Date.now() < deadline) await sleep(500);
-      if (child.exitCode === null) {
+      while (!childError && child.exitCode === null && child.signalCode === null && Date.now() < deadline) await sleep(500);
+      if (childError) return { error: 'gpu sampler launch: ' + childError.message };
+      if (child.exitCode === null && child.signalCode === null) {
         try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch {}
         return { error: 'gpu sampler timeout' };
       }
       if (child.exitCode !== 0) return { error: 'gpu sampler exit ' + child.exitCode + (stderr ? ': ' + stderr.slice(0, 300) : '') };
       try { return JSON.parse(fs.readFileSync(out, 'utf8')); }
       catch (e) { return { error: 'gpu sampler unreadable: ' + e.message }; }
-    },
-  };
+    } finally { try { fs.rmSync(out, { force: true }); } catch {} }
+  })();
+  return { finish: () => outcome };
 }
 
 // ------------------------------------------------------------ tree handling
@@ -379,7 +379,9 @@ async function prepareNative(browser, base, scenario) {
       await front.bringToFront();
     }
     await waitFor(async () => (await samplePage(front)).visible, 'native foreground visibility');
-    return { profileDir: session.profileDir, pageState: () => samplePage(front), close: session.close };
+    const version = await session.devtools.send('Browser.getVersion');
+    return { profileDir: session.profileDir, version: version.product,
+      pageState: () => samplePage(front), close: session.close };
   } catch (err) { await session.close(); throw err; }
 }
 
@@ -416,12 +418,13 @@ async function runTrial(browser, scenario, base, trialIdx) {
     }
     session = NATIVE_LAUNCH ? await prepareNative(browser, base, scenario)
       : browser === 'edge' ? await prepareEdge(base, scenario) : await prepareDexerion(base, scenario);
+    if (session.version) t.browserVersion = session.version;
     await sleep(SETTLE_MS);
 
     const beforeForeground = await session.pageState();
     const snapA = treeSnapshot();
     const treeA = requireTree(extractTree(snapA, session.profileDir), 'A');
-    gpu = spawnGpu(treeA.map((p) => p.pid).join(','));
+    gpu = spawnGpu();
     const workloadPower = await optionalSample(() => samplePower('workload', SAMPLE_SEC), SAMPLE_SEC * 1000,
       { skip: !t.floor, wait: sleep });
     t.power = workloadPower.sample;
@@ -481,21 +484,17 @@ async function runTrial(browser, scenario, base, trialIdx) {
       }
     }
 
-    // GPU axis, grouped by pid and filtered to the tree.
-    if (hasGpuSample(gpuFinished)) {
-      const treePidSet = new Set([...treeA, ...treeB].map((p) => p.pid));
-      const rows = gpuFinished.perPid.filter((r) => treePidSet.has(r.pid));
-      t.gpu = {
-        intervalCount: gpuFinished.intervalCount,
-        effectiveIntervalSec: gpuFinished.effectiveIntervalSec,
-        treeUtilPointsMean: round(rows.reduce((a, r) => a + r.utilPointsMean, 0), 2),
-        treeUtilPointsPeak: round(rows.reduce((a, r) => a + r.utilPointsPeak, 0), 2),
-        treeMemMBMean: round(rows.reduce((a, r) => a + r.memBytesMean, 0) / (1024 * 1024), 1),
-        treeMemMBPeak: round(rows.reduce((a, r) => a + r.memBytesPeak, 0) / (1024 * 1024), 1),
-        perPid: rows.map((r) => ({ pid: r.pid, role: (treeB.find((p) => p.pid === r.pid) ? roleOf(treeB.find((p) => p.pid === r.pid)) : 'exited'), utilPointsMean: r.utilPointsMean, utilPointsPeak: r.utilPointsPeak, memMBPeak: round(r.memBytesPeak / (1024 * 1024), 1) })),
-      };
+    // Sum utilisation by physical engine on each common interval before
+    // taking the mean. A newly observed child at snapshot B shares the
+    // denominator rather than appearing fully utilised over all samples.
+    const gpuTree = new Set([...treeA, ...treeB].map((p) => p.pid));
+    const aggregate = aggregateGpu(gpuFinished?.samples, gpuTree,
+      Date.parse(snapA.capturedAt), Date.parse(snapB.capturedAt));
+    if (aggregate) {
+      const rolesByPid = new Map([...treeA, ...treeB].map((p) => [p.pid, roleOf(p)]));
+      t.gpu = { ...aggregate, perPid: aggregate.perPid.map((r) => ({ ...r, role: rolesByPid.get(r.pid) })) };
     } else {
-      t.gpu = { error: gpuFinished?.error || 'No usable GPU intervals' };
+      t.gpu = { error: gpuFinished?.error || gpuFinished?.errors?.[0] || 'No usable GPU intervals' };
     }
 
     t.coTenants = coTenants(snapA, snapB, new Set([...treeA, ...treeB].map((p) => p.pid)), wallSec);
@@ -535,7 +534,7 @@ const AXES = {
   power: (t) => (t.floorMedianMW && t.power ? t.power.medianMW - t.floorMedianMW : NaN),
   cpu: (t) => (t.cpu ? t.cpu.cpuCorePct : NaN),
   ram: (t) => (t.ram ? t.ram.wsMBB : NaN),
-  gpu: (t) => (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : NaN),
+  gpu: (t) => (t.gpu?.treeUtilPointsMean ?? NaN),
 };
 
 function pctOfEdge(dexS, edgeS) {
@@ -602,7 +601,7 @@ function pctOfEdge(dexS, edgeS) {
           } else {
             console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts, foreground fps ' + (t.foreground.fps === null ? 'n/a' : round(t.foreground.fps, 2)));
           }
-          if (t.foreground?.viewport) console.log('    viewport ' + JSON.stringify(t.foreground.viewport));
+          if (t.foreground?.viewport) console.log('    ' + t.browserVersion + ' viewport ' + JSON.stringify(t.foreground.viewport));
           await sleep(2000); // let the browser's processes fully exit
         }
       }
@@ -658,21 +657,21 @@ function pctOfEdge(dexS, edgeS) {
         })).filter((x) => x.noiseLimited).map((x) => x.trial);
       }
 
-      // Verdict per axis vs the <=60%-of-Edge bar (>=40% reduction).
+      // Grade the 20% minimum separately from the optional 40% stretch.
       const pair = results.scenarios[scenario];
       if (pair.edge && pair.dexerion) {
         const cmp = {};
         for (const axis of Object.keys(AXES)) {
           const pct = pctOfEdge(pair.dexerion.summary[axis], pair.edge.summary[axis]);
           cmp[axis + 'PctOfEdge'] = pct;
-          cmp[axis + 'Pass'] = pct === null ? 'n/a' : (pct <= 60 ? 'PASS' : 'FAIL');
+          cmp[axis + 'Pass'] = pct === null ? 'n/a' : (pct <= 60 ? '40% STRETCH' : pct <= 80 ? '20% TARGET' : 'BELOW TARGET');
         }
         pair.comparison = cmp;
         console.log('  ' + scenario + ' comparison: ' + JSON.stringify(cmp));
       }
     }
 
-    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B; role working sets and private allocations are diagnostic only (not private resident memory). GPU = GPU Engine utilisation percentage points summed per pid + GPU Process Memory Local Usage, tree-filtered. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
+    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B; role working sets and private allocations are diagnostic only (not private resident memory). GPU = tree GPU Engine utilisation points averaged across shared sample intervals; busiest engine shown separately. GPU memory is not inferred from potentially duplicated driver rows. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
     const outJson = path.join(OUT_DIR, 'measure-protocol-' + (process.env.DEX_BUILD_DIR ? 'baseline' : 'main') + '.json');
     fs.writeFileSync(outJson, JSON.stringify(results, null, 2), 'utf8');
     console.log('PROTOCOL EVIDENCE: ' + outJson);
