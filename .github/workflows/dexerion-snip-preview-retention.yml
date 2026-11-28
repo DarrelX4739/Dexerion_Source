@@ -1,0 +1,99 @@
+name: Dexerion Snip discarded preview retention diagnostic
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-snip-preview-retention.yml'
+      - 'code/build/e2e/snip-preview-retention.spec.js'
+      - 'code/build/scripts/test-snip-preview-retention.cjs'
+permissions:
+  contents: read
+jobs:
+  same-source:
+    if: github.ref == 'refs/heads/dev-V'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 14
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked desktop test dependencies
+        run: npm ci --include=dev
+      - name: Compare stock with an exact ephemeral candidate, keeping app sandbox unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=../code/src/renderer/snip.html
+          cp "$file" snip.original.fixture
+          trap 'cp snip.original.fixture "$file"; rm -f snip.original.fixture' EXIT
+          test "$(git rev-parse HEAD:code/code/src/renderer/snip.html)" = 17089d8863ecf5b62cdf0419483fd1d9eb599090
+          function Native-Snip() {
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run -a -s '-screen 0 1280x900x24' npm run test:e2e -- e2e/snip-preview-retention.spec.js --output "$RUNNER_TEMP/snip-retention-trace-$DEX_SNIP_NATIVE"
+            else
+              npm run test:e2e -- e2e/snip-preview-retention.spec.js --output "$RUNNER_TEMP/snip-retention-trace-$DEX_SNIP_NATIVE"
+            fi
+          }
+          DEX_SNIP_PHASE=stock node --test scripts/test-snip-preview-retention.cjs
+          DEX_SNIP_NATIVE=stock DEX_SNIP_OUT="$RUNNER_TEMP/snip-retention-stock.json" Native-Snip
+          node - "$file" <<'NODE'
+          const assert=require('node:assert/strict'),fs=require('node:fs');
+          const digest=s=>require('node:child_process').execFileSync('git',['hash-object','--stdin'],{encoding:'utf8',input:s}).trim();
+          const p=process.argv[2],raw=fs.readFileSync(p,'utf8'),crlf=raw.includes('\r\n');
+          let s=raw.replace(/\r\n/g,'\n');
+          assert.equal(digest(s),'17089d8863ecf5b62cdf0419483fd1d9eb599090');
+          const a='function revokeVideoUrl() {';
+          const b=[
+            '// A discarded screenshot is no longer used by preview, copy, save or attach.',
+            'function releasePreviewImage() {',
+            "  $('#pv-img').removeAttribute('src');",
+            '}',
+            a,
+          ].join('\n');
+          const c="  $('#pv-vid').src = u; $('#pv-vid').hidden = false; $('#pv-img').hidden = true;";
+          const d="$('#preview').hidden = true; previewUrl = null; recVideoBlob = null; revokeVideoUrl(); clearSel();";
+          s=s.replace(a,b).replace(c,c+'\n  releasePreviewImage();').replaceAll(d,d.replace('revokeVideoUrl()', 'releasePreviewImage(); revokeVideoUrl()'));
+          assert.equal(digest(s),'e1f554958ca3f490db84d100d3e66da00924d6a9');
+          fs.writeFileSync(p,crlf?s.replace(/\n/g,'\r\n'):s);
+          NODE
+          DEX_SNIP_PHASE=candidate node --test scripts/test-snip-preview-retention.cjs
+          DEX_SNIP_NATIVE=candidate DEX_SNIP_OUT="$RUNNER_TEMP/snip-retention-candidate.json" Native-Snip
+          cp snip.original.fixture "$file"
+          git diff --exit-code -- "$file"
+          node - "$RUNNER_TEMP/snip-retention-stock.json" "$RUNNER_TEMP/snip-retention-candidate.json" <<'NODE'
+          const assert=require('node:assert/strict'),fs=require('node:fs');
+          const [stock,candidate]=process.argv.slice(2).map(p=>JSON.parse(fs.readFileSync(p,'utf8')));
+          assert.equal(stock.phase,'stock');assert.equal(candidate.phase,'candidate');
+          assert.deepEqual(stock.dimensions,candidate.dimensions);
+          assert.deepEqual(stock.eventsAfterValid,candidate.eventsAfterValid);
+          assert.deepEqual(stock.race.replacement,candidate.race.replacement);
+          assert.deepEqual(stock.race.discarded,[{event:'load',width:1}]);
+          assert.deepEqual(candidate.race.discarded,[]);
+          assert.deepEqual(stock.discarded.map(x=>x.action),['pv-retake','pv-close','video']);
+          assert.deepEqual(stock.discarded.map(x=>x.visibleEncodedBytes),candidate.discarded.map(x=>x.visibleEncodedBytes));
+          assert(stock.discarded.every(x=>x.discardedAttributeBytes===x.visibleEncodedBytes&&x.visibleEncodedBytes>2000000));
+          assert(candidate.discarded.every(x=>x.discardedAttributeBytes===0));
+          console.log('Exact native preview lifecycle evidence:',JSON.stringify({stock,candidate}));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-snip-retention-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/snip-retention-*.json
+            ${{ runner.temp }}/snip-retention-trace-stock/
+            ${{ runner.temp }}/snip-retention-trace-candidate/
+          if-no-files-found: ignore
+          retention-days: 7
