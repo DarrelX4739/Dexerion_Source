@@ -2,6 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('setup', {
+  sandboxed: process.sandboxed === true,
   info: () => ipcRenderer.invoke('setup:info'),
   browse: folder => ipcRenderer.invoke('setup:browse', folder),
   target: folder => ipcRenderer.invoke('setup:target', folder),

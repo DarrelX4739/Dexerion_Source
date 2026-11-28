@@ -31,7 +31,7 @@ if [ "$(id -u)" -eq 0 ]; then
   printf '%s\n' 'Run Dexerion Setup as your regular user, without sudo.' >&2
   exit 1
 fi
-unset ELECTRON_RUN_AS_NODE NODE_OPTIONS NODE_PATH
+unset ELECTRON_RUN_AS_NODE NODE_OPTIONS NODE_PATH CHROME_DEVEL_SANDBOX
 export DEX_SETUP_ROOT="$work"
 export DEX_SETUP_MODE="$mode"
 # Avoid writing Setup-only state or caches into the real browser profile.
@@ -41,5 +41,17 @@ export DEX_SETUP_ORIGINAL_DATA_HOME="${XDG_DATA_HOME-}"
 export XDG_CACHE_HOME="$work/cache"
 export XDG_CONFIG_HOME="$work/config"
 export XDG_DATA_HOME="$work/data"
-"$work/runtime/dexerion-setup"
-exit $?
+# The installer is a normal user program. Require Chromium's user-namespace
+# sandbox rather than its root-owned setuid alternative. This flag does not
+# disable Chromium's namespace or renderer seccomp sandbox.
+status=0
+"$work/runtime/dexerion-setup" --disable-setuid-sandbox 2>"$work/runtime-stderr" || status=$?
+if [ "$status" -ne 0 ]; then
+  cat "$work/runtime-stderr" >&2
+  if grep -Eqi 'No usable sandbox|Failed to move to new namespace|SUID sandbox' "$work/runtime-stderr"; then
+    printf '%s\n' 'Dexerion Setup requires Chromium user-namespace sandbox support.' \
+      'Your Linux security policy may restrict it. Use a supported Linux environment;' \
+      'do not run Setup as root or disable the Chromium sandbox.' >&2
+  fi
+fi
+exit "$status"

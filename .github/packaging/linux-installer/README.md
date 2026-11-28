@@ -30,8 +30,16 @@ starting Electron. `--preview` runs the UI without installing anything.
 the logo and accent, exercises the folder chooser and install confirmation, and
 verifies that the test home remains untouched. Run this on an ordinary non-root
 desktop Linux account with a display session and the same desktop system libraries
-and Chromium sandbox support that Electron typically requires. There is no
-installer-side sandbox bypass.
+and Chromium sandbox support that Electron typically requires. Setup omits
+Chromium's root-owned setuid helper and uses Chromium's user-namespace and
+renderer sandbox. Ubuntu 22.04 is a suitable baseline; on Ubuntu 24.04,
+AppArmor may restrict unprivileged user namespaces for locally unpacked
+applications. If Setup reports a sandbox restriction, use a Linux environment
+with user namespaces available to Chromium or ask your administrator about
+the host's application-specific policy. Setup does not change that policy
+and should not be run as root. See
+[Ubuntu's AppArmor notes](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
+and [Chromium's Linux sandbox documentation](https://chromium.googlesource.com/chromium/src/+/main/sandbox/linux).
 
 Run the executable with no arguments to install. Temporary extraction requires
 space for the setup runtime and bundled AppImage and a temporary directory that

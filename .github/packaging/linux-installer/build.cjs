@@ -62,6 +62,9 @@ async function build({ runtime, payload, output, arch = 'x64', logo = path.join(
     // Copy only Electron's runtime dependencies; never copy Dexerion's app.asar,
     // archives, launcher wrapper, or Electron's default app from this directory.
     for (const entry of await fs.readdir(runtime, { withFileTypes: true })) {
+      // The setuid helper only works when installed by the system as root.
+      // Never bundle it in a private, user-owned temporary extraction.
+      if (entry.name === 'chrome-sandbox') continue;
       if (!/^(?:dexerion-bin|chrome(?:[-_][\w.-]+)?|icudtl\.dat|.*\.so(?:\.[\d.]+)?|.*\.bin|.*\.pak|vk_swiftshader_icd\.json|LICENSE(?:S\.chromium\.html)?(?:\.electron\.txt)?|locales)$/.test(entry.name)) continue;
       if (!(entry.isFile() || (entry.name === 'locales' && entry.isDirectory()))) throw Error('Unexpected Electron runtime link');
       await fs.cp(path.join(runtime, entry.name), path.join(distro, entry.name === 'dexerion-bin' ? 'dexerion-setup' : entry.name), { recursive: true });
