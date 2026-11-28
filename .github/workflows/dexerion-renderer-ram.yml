@@ -25,16 +25,24 @@ jobs:
         run: |
           set -e
           test "$(git rev-parse HEAD:code/code/preload.js)" = 'ab054824f86b67e0a72ecc0a8b3d3a72b5851436'
-          test "$(git rev-parse HEAD:code/code)" = 'd26d533baded8690771bd327dc1621990ff78cab'
+          test "$(git rev-parse HEAD:code/code/src/main/browser.js)" = 'f5da6da8a44a8aadbea8709e767dac66abdb3cc9'
           npm ci --prefix code/build
           node --check experiments/renderer-ram/electron.cjs
           node --check experiments/renderer-ram/measure.cjs
+          node --check experiments/renderer-ram/compat.cjs
+          node --check experiments/renderer-ram/compat-run.cjs
+      - name: Test compatibility of both render configurations
+        if: contains(github.event.head_commit.message, '[renderer-compat]')
+        run: node experiments/renderer-ram/compat-run.cjs renderer-compat.json
       - name: Measure matched one- and nine-tab private working sets
+        if: ${{ !contains(github.event.head_commit.message, '[renderer-compat]') }}
         run: node experiments/renderer-ram/measure.cjs renderer-ram.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dexerion-matched-renderer-ram
-          path: renderer-ram.json
+          path: |
+            renderer-ram.json
+            renderer-compat.json
           if-no-files-found: ignore
           retention-days: 7
