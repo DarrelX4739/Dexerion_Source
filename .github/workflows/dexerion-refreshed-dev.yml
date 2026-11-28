@@ -41,7 +41,7 @@ jobs:
           node scripts/test-polish-unit.js
           node scripts/test-scout-mapping.js
           shopt -s nullglob
-          focused=(scripts/test-search-*cache.cjs scripts/test-chat-wire-image-budget.cjs scripts/test-provider-reasoning-cap.cjs scripts/test-provider-sse-scanning.cjs scripts/test-provider-control-channel.cjs scripts/test-files-search-offset.cjs scripts/test-lucide-shell.cjs scripts/test-scout-scoring-parity.cjs)
+          focused=(scripts/test-search-*cache.cjs scripts/test-chat-wire-image-budget.cjs scripts/test-provider-reasoning-cap.cjs scripts/test-provider-sse-scanning.cjs scripts/test-provider-control-channel.cjs scripts/test-files-search-offset.cjs scripts/test-lucide-shell.cjs scripts/test-agent-deadline-lifecycle.cjs scripts/test-scout-scoring-parity.cjs)
           if (( ${#focused[@]} )); then node --test "${focused[@]}"; fi
       - name: Exercise real segmented AI streaming on Windows
         if: runner.os == 'Windows'
@@ -59,6 +59,11 @@ jobs:
         env:
           DEX_LUCIDE_DIAGNOSTIC_EXPECT: subset
         run: xvfb-run -a npm run test:e2e -- e2e/lucide-shell.spec.js
+      - name: Verify real planned-step cleanup on Windows
+        if: runner.os == 'Windows'
+        env:
+          DEX_AGENT_DEADLINE_FIXTURE: candidate
+        run: npm run test:e2e -- e2e/agent-deadline-lifecycle.spec.js
       - name: Exercise actual desktop and AI search on Windows
         if: runner.os == 'Windows'
         run: npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js

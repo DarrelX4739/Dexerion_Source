@@ -931,13 +931,17 @@ function createAgentRunner(deps) {
       return { text, isError: !res.ok, result: res };
     }
 
-    // Step timeout: if the dispatch exceeds timeoutMs, abort with a timeout error.
+    // Report the existing deadline without changing how dispatch is cancelled.
     const dispatchPromise = deps.dispatch(run, name, args, run.refs);
     let res;
     if (timeoutMs && timeoutMs > 0) {
-      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('step timeout after ' + timeoutMs + 'ms')), timeoutMs));
+      let deadline;
+      const timeout = new Promise((_, rej) => {
+        deadline = setTimeout(() => rej(new Error('step timeout after ' + timeoutMs + 'ms')), timeoutMs);
+      });
       try { res = await Promise.race([dispatchPromise, timeout]); }
       catch (err) { res = { ok: false, error: (err && err.message) ? err.message : String(err) }; }
+      finally { clearTimeout(deadline); }
     } else {
       try { res = await dispatchPromise; }
       catch (err) { res = { ok: false, error: (err && err.message) ? err.message : String(err) }; }
