@@ -29,16 +29,21 @@ padding:24px;border:1px solid #345;color:#123;font:18px sans-serif}</style>
 <main><h1>Native footprint fixture</h1><p>One static document, one active tab.</p></main>
 <script>
 async function frame(){await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));}
-function phase(name){return fetch('phase/'+name,{keepalive:true}).catch(()=>{});}
+function phase(name){fetch('phase/'+name,{keepalive:true}).catch(()=>{});}
+function metrics(){
+  const dims=[innerWidth,innerHeight].map(x=>String(Math.max(0,Math.min(25000,x)))).join('/');
+  phase('state/'+document.visibilityState+'/'+(document.hasFocus()?'focused':'unfocused')+'/'+dims);
+}
 async function proof(step){
-  await frame();if(document.visibilityState!=='visible'){await phase('hidden');throw new Error('fixture not visible');}
+  await frame();if(document.visibilityState!=='visible'){phase('hidden');throw new Error('fixture not visible');}
   const el=document.querySelector('main'),rect=el.getBoundingClientRect();
   await fetch('proof/'+step,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,ua:navigator.userAgent,
     box:[rect.width,rect.height],title:document.title,heading:el.querySelector('h1').textContent,
     text:el.querySelector('p').textContent})});
 }
-(async()=>{await phase('script');await proof('start');await fetch('hold');await proof('end')})()
+phase('script');metrics();setTimeout(metrics,1000);
+(async()=>{await proof('start');await fetch('hold');await proof('end')})()
 .catch(()=>phase('error'));
 </script>'''
 
@@ -85,6 +90,10 @@ def fixture():
                 if self.path == key + "phase/" + name:
                     observed[name] = observed.get(name, 0) + 1
                     return self.reply(204)
+            state = re.fullmatch(re.escape(key) + r"phase/state/(visible|hidden)/(focused|unfocused)/(\d{1,5})/(\d{1,5})", self.path)
+            if state:
+                observed.setdefault("frame_diagnostic", []).append(list(state.groups()))
+                return self.reply(204)
             if self.path == key:
                 observed["loads"] += 1
                 return self.reply(200, HTML, "text/html; charset=utf-8")
