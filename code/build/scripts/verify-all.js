@@ -96,6 +96,12 @@ function checkVersions() {
 }
 
 function checkContracts() {
+  const { generate, TARGET, SHELL } = require('./vendor-lucide-shell.cjs');
+  assert(fs.readFileSync(TARGET, 'utf8') === generate(),
+    'shell Lucide registry is stale; run node scripts/vendor-lucide-shell.cjs');
+  assert(/lucide-shell\.js/.test(fs.readFileSync(SHELL, 'utf8')),
+    'shell does not load its reduced Lucide bundle');
+
   const sitePrompt = load('site-system-prompt.js').siteSystemPrompt(30);
   assert(sitePrompt.includes('exactly ONE object'), 'site prompt lost the one-index.html contract');
   assert(/online research|source material/i.test(sitePrompt), 'site prompt lost the online-source-as-material rule');

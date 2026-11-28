@@ -101,3 +101,25 @@ from network completions.
   was left unchanged.
 - Eight focused tests, the 82-file fast gate, and 16 packaging tests passed.
   No Windows/Edge resource result is claimed for these changes.
+
+### Shell startup: load only the Lucide icons used by the browser chrome
+
+The shell loaded 2,137 Lucide registry entries at startup, though its markup
+needs only 14 and detached artifact menus reference two ellipsis aliases.
+The shell now loads a generated subset with the original upstream SVG helpers
+and the same load order. The full vendor file stays in the repository as the
+generator input; this change does not shrink the installer or lazy-load AI.
+
+- Startup script read: 449,915 → 5,448 bytes (98.8% less).
+- Isolated Linux/Node V8 A/B (17 alternating fresh processes per arm, median):
+  parse and initialise 21.89 → 0.29 ms; retained JS heap 2,602,872 → 24,136 bytes.
+  These are component readings, not Electron process RAM, CPU %, or Edge results.
+- Exact SVG trees, geometry, classes and ARIA attributes matched the full
+  bundle for every shell placeholder and both artifact menu aliases. The
+  fast verify gate checks that the checked-in bundle matches its generator.
+
+From the repository root, run the parity test with
+`node --test code/build/scripts/test-lucide-shell.cjs`, the A/B with
+`node code/build/scripts/bench-lucide-shell.cjs`, or regenerate after adding
+an icon with `node code/build/scripts/vendor-lucide-shell.cjs`. If a new icon
+is created dynamically, add its registry name to the generator as well.
