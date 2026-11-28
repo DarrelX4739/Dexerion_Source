@@ -60,7 +60,7 @@ function audit(first, second) {
 }
 
 function auditRuntime(stock, subset) {
-  const visit = root => {
+  const visit = (root, executable) => {
     const result = new Map();
     function crawl(dir) {
       for(const item of fs.readdirSync(dir,{withFileTypes:true})) {
@@ -69,16 +69,26 @@ function auditRuntime(stock, subset) {
         if(item.isDirectory())crawl(source);
         else {
           assert(item.isFile(),'unexpected link or special executable resource: '+rel);
-          if(rel!=='resources/app.asar')result.set(rel,hash(fs.readFileSync(source)));
+          if(rel==='resources/app.asar')continue;
+          if(source===executable)result.set(rel,null);
+          else result.set(rel,hash(fs.readFileSync(source)));
         }
       }
     }
     crawl(root);
     return result;
   };
-  const a=visit(path.dirname(stock)),b=visit(path.dirname(subset));
+  const basename=path.basename(stock);
+  assert.equal(basename,path.basename(subset));
+  const windows=/^Dexerion\.exe$/i.test(basename);
+  const a=visit(path.dirname(stock),windows?stock:null),b=visit(path.dirname(subset),windows?subset:null);
   assert.deepEqual(a,b,'other installed runtime resources must be exactly equal');
-  return a.size;
+  if(!windows)return {otherIdenticalInstalledFiles:a.size};
+  assert(a.has(basename) && a.get(basename)===null,'audit requires both actual package executables');
+  const {auditWindowsAsarIntegrity}=require('./audit-windows-asar-integrity.cjs');
+  const archive=exe=>path.join(path.dirname(exe),'resources','app.asar');
+  return {otherIdenticalInstalledFiles:a.size-1,
+    verifiedExecutable:auditWindowsAsarIntegrity(stock,subset,archive(stock),archive(subset))};
 }
 
 function windowsSnapshot() {
@@ -217,16 +227,20 @@ function summarize(trials) {
 async function main() {
   const [stock,subset,out] = process.argv.slice(2);
   if (stock==='--audit') {
-    const result=audit(subset,out);
     const rootMarker=arc=>path.resolve(arc,'..','..','runtime-name-not-used');
-    result.otherIdenticalInstalledFiles=auditRuntime(rootMarker(subset),rootMarker(out));
-    return console.log(JSON.stringify(result));
+    return console.log(JSON.stringify({...audit(subset,out),...auditRuntime(rootMarker(subset),rootMarker(out))}));
+  }
+  if(stock==='--audit-windows') {
+    const exe=[subset,out].map(p=>path.resolve(p));
+    assert(exe.every(p=>/^Dexerion\.exe$/i.test(path.basename(p))));
+    return console.log(JSON.stringify({...audit(...exe.map(p=>path.join(path.dirname(p),'resources','app.asar'))),
+      ...auditRuntime(...exe)}));
   }
   assert(process.platform==='win32'&&process.env.GITHUB_ACTIONS==='true','only isolated hosted Windows');
   assert(stock&&subset&&out&&[stock,subset,out].every(p=>path.isAbsolute(p)));
   const archive=exe=>path.join(path.dirname(exe),'resources','app.asar');
-  const auditResult=audit(archive(stock),archive(subset));
-  auditResult.otherIdenticalInstalledFiles=auditRuntime(stock,subset);
+  const auditResult={...audit(archive(stock),archive(subset)),...auditRuntime(stock,subset)};
+  console.log('Strict installed Windows parity:',JSON.stringify(auditResult));
   const { upstreamFixture }=require('./lucide-shell-oracle.cjs');
   const reference=upstreamFixture();
   const subsetCount=Object.keys(require('../../code/assets/vendor/lucide-shell.js').icons).length;

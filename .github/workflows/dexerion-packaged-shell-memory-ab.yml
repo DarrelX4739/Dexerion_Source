@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/dexerion-packaged-shell-memory-ab.yml'
       - 'code/build/scripts/measure-packaged-lucide-startup.cjs'
+      - 'code/build/scripts/audit-windows-asar-integrity.cjs'
+      - 'code/build/scripts/test-windows-asar-integrity-audit.cjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +31,8 @@ jobs:
           cache-dependency-path: code/build/package-lock.json
       - name: Install locked Electron builder and runtime
         run: npm ci --include=dev
+      - name: Verify fail-closed executable audit controls
+        run: node --test scripts/test-windows-asar-integrity-audit.cjs
       - name: Build both local unpacked controls, no signing or publishing
         shell: pwsh
         run: |
