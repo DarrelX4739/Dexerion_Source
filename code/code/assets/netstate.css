@@ -85,3 +85,20 @@
   .bars i { animation: none !important; transform: scaleY(.8); }
   .bars.done i { transform: scaleY(1); }
 }
+
+/* On dark status pages, put the host in readable neutral ink. The accent is
+   still used by the network indicator and primary action. */
+[data-theme="dark"] .state {
+  grid-template-columns: minmax(0, 1fr);
+  padding-inline: clamp(16px, 5vw, 24px);
+}
+[data-theme="dark"] .state .wrap { width: min(560px, 100%); }
+[data-theme="dark"] .state .host {
+  color: var(--pfg-2);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-height: 500px) {
+  [data-theme="dark"] .state { padding-block: 20px; align-items: safe center; }
+  [data-theme="dark"] .state .actions { margin-top: 18px; }
+}
