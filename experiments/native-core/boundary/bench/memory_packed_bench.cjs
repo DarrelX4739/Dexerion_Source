@@ -60,7 +60,7 @@ for(const name of ['under','over1','over8','over32','over128','over512']) {
    work(f);times[k].push((performance.now()-t)*1e3/runs);
   }
  }
- const med=a=>[...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];
+ const med=a=>{const t=[...a].sort((x,y)=>x-y);return (t[Math.floor((t.length-1)/2)]+t[Math.floor(t.length/2)])/2;};
  rows.push({scenario:name,rounds,runsPerRound:runs,checksum:verified,
    jsUs:+med(times.js).toFixed(3),nativeObjectUs:+med(times.nativeObject).toFixed(3),nativePackedUs:+med(times.nativePacked).toFixed(3)});
 }

@@ -16,7 +16,9 @@ function compare(a,b){return a.done!==b.done?(a.done?1:-1):a.dueMs!==b.dueMs?a.d
 function direct(rows){return rows.map(t=>({...t})).sort(compare);}
 function original(rows){return js.sortTasks(rows);}
 function native(rows){return n.sort(js.sanitizeList(rows));} // detach fresh rows, preserve cache freezing semantics
-const methods={original,direct,native};
+// Matched normalized controls here pay exactly the same record-clone cost.
+function nativeNormalized(rows){return n.sort(rows.map(t=>({...t})));}
+const methods=process.argv.includes('--matched-clone')?{direct,nativeNormalized}:{original,direct,native};
 const out=[];
 for(const size of [0,3,20,100,500,2000]){
  const corp=Array.from({length:8},(_,s)=>make(size,s)), runs=Math.max(12,Math.floor(12000/(1+size))),
@@ -35,10 +37,10 @@ for(const size of [0,3,20,100,500,2000]){
   if(expected===undefined)expected=checksum;assert.equal(checksum,expected);}
  for(const f of Object.values(methods))run(f);
  for(let r=0;r<12;r++){
-  const ids=Object.keys(methods), order=ids.map((_,i)=>ids[(i+Math.floor(r/2))%3]);if(r%2)order.reverse();
+  const ids=Object.keys(methods), order=ids.map((_,i)=>ids[(i+Math.floor(r/2))%ids.length]);if(r%2)order.reverse();
   for(const k of order){const t=performance.now();run(methods[k]);latency[k].push((performance.now()-t)*1000/runs);}
  }
- const med=a=>[...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];
+ const med=a=>{const t=[...a].sort((x,y)=>x-y);return (t[Math.floor((t.length-1)/2)]+t[Math.floor(t.length/2)])/2;};
  out.push({records:size,runsPerRound:runs,medianUs:Object.fromEntries(Object.keys(latency).map(k=>[k,+med(latency[k]).toFixed(3)]))});
 }
 console.log(JSON.stringify({scope:'tasksPublic cache-miss sort after first ensureTasks; retained detached rows; excludes common freeze, IPC, persistence and store normalization already done by caller',out},null,2));

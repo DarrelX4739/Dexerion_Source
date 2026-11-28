@@ -13,7 +13,7 @@ const executable = path.join(__dirname,process.argv[2]==='binary'?'binary_pipe':
 const T = js.TIERS;
 const opts=process.argv.slice(2);
 const mean=xs=>xs.reduce((n,x)=>n+x,0)/xs.length;
-function pctl(xs,p) {const t=[...xs].sort((a,b)=>a-b);return t[Math.min(t.length-1,Math.round((t.length-1)*p))];}
+function pctl(xs,p) {const t=[...xs].sort((a,b)=>a-b);const idx=(t.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx);return t[lo]+(t[hi]-t[lo])*(idx-lo);}
 function stats(xs) { return {n:xs.length,median:+pctl(xs,.5).toFixed(3),p10:+pctl(xs,.1).toFixed(3),p90:+pctl(xs,.9).toFixed(3),min:+Math.min(...xs).toFixed(3),max:+Math.max(...xs).toFixed(3)}; }
 const budgets={sweepIntervalMs:60000,idleSleepMs:180000,sweepDeepIdleMs:600000};
 function row(i,kind) {
@@ -157,6 +157,8 @@ async function paced(){
  const ms=Number(opts[1]||1000),n=Number(opts[2]||12), log=opts[3];
  assert.ok(ms>=10&&ms<=600000&&n>=4&&n<=60);
  const child=await ipcStart(), rows=corpora.mixed;
+ const single=opts[0]==='paced-single',start=Number(opts[3]||0);
+ if(single)assert.ok(Number.isInteger(start)&&start>=0&&start<4);
  const records=[];try{
   // Integration can be idle between occasional calls. Warm both native/JS paths,
   // then clock each single call after the requested quiet interval.
@@ -164,7 +166,7 @@ async function paced(){
   for(let i=0;i<n;i++){
    const r=i%2?rows[(i*19)%rows.length]:corpora.idle[(i*19)%rows.length];
    const expected=jsCall(r), allNames=['js','napiObject','napiPacked','pipe'];
-   const names=allNames.map((_,j)=>allNames[(Math.floor(i/2)+j)%4]);if(i%2)names.reverse();
+   const names=single?[allNames[(i+start)%4]]:allNames.map((_,j)=>allNames[(Math.floor(i/2)+j)%4]);if(!single&&i%2)names.reverse();
    await delay(ms);
    const us={}, outputs={};
    for(const k of names){
@@ -175,8 +177,9 @@ async function paced(){
    }
    for(const p of Object.values(outputs))assert.deepEqual(p,expected);
    records.push({order:names,us});
-   if(log)fs.appendFileSync(log,JSON.stringify({tick:i+1,elapsedSec:(i+1)*ms/1000,us})+'\n');
+   if(log&&!single)fs.appendFileSync(log,JSON.stringify({tick:i+1,elapsedSec:(i+1)*ms/1000,us})+'\n');
   }
+  if(single)return {intervalMs:ms,start,records};
   return {intervalMs:ms,callsPerMethod:n,usPerDecision:Object.fromEntries(
    ['js','napiObject','napiPacked','pipe'].map(k=>[k,stats(records.map(x=>x.us[k]))])),idleHelper:mem(child.pid)};
  } finally{await child.close();}

@@ -9,6 +9,8 @@ import shutil
 import statistics
 import subprocess
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 
 HEADERS = {
@@ -27,9 +29,15 @@ def main():
     p.add_argument("--core-source", type=Path, help="defaults to REPO/experiments/native-core")
     p.add_argument("--hosts", type=int, default=5, choices=range(1, 10))
     p.add_argument("--paced-seconds", type=int, default=0, choices=[0, 1, 60, 600])
+    p.add_argument("--independent-wakes", action="store_true", help="first-call-only, four staggered hosts; requires --paced-seconds")
+    p.add_argument("--idle-helper-seconds", type=int, choices=[1, 60], help="observe persistent binary and text helper with no decisions; --hosts gives fresh pairs")
     p.add_argument("--samples", type=int, default=12, choices=range(4, 33))
     p.add_argument("--out", type=Path)
     a = p.parse_args()
+    if a.idle_helper_seconds and (a.paced_seconds or a.independent_wakes):
+        p.error("choose either helper-idle or wake-latency diagnostics")
+    if a.independent_wakes and (not a.paced_seconds or a.samples % 4):
+        p.error("independent wakes needs --paced-seconds and --samples divisible by four")
     if platform.system() != "Linux" or platform.machine() not in {"x86_64","AMD64"}:
         p.error("this measurement harness uses x64 Linux process counters")
     repo = a.repo.resolve(strict=True)
@@ -59,17 +67,39 @@ def main():
             subprocess.run([*cmd,test,str(core/"src"/(lib+".cpp")),"-o",output],cwd=work,check=True)
         def bench(*args):
             return json.loads(subprocess.check_output([str(electron),*args],cwd=work,env=env,text=True,timeout=240))
-        if a.paced_seconds:
+        if a.idle_helper_seconds:
+            import runpy
+            overall = runpy.run_path(str(work / "idle_helpers.py"))["measure"](work, a.idle_helper_seconds, a.hosts)
+        elif a.independent_wakes:
+            def worker(start):
+                # Stagger so a timed wake does not directly contend with another arm.
+                time.sleep(start * .20)
+                cmd = [str(electron),"adaptive_bench.cjs","paced-single",str(a.paced_seconds*1000),str(a.samples),str(start)]
+                return json.loads(subprocess.check_output(cmd,cwd=work,env=env,text=True,
+                                  timeout=a.paced_seconds*a.samples+120))["results"]["records"]
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                observed=list(pool.map(worker,range(4)))
+            vals={k:[] for k in ["js","napiObject","napiPacked","pipe"]}
+            for host in observed:
+                for row in host:
+                    if len(row["us"]) != 1: raise RuntimeError("expected one first call per wake")
+                    for k,v in row["us"].items(): vals[k].append(v)
+            if any(len(arr)!=a.samples for arr in vals.values()): raise RuntimeError("unbalanced sample count")
+            overall={"independentWakeHosts":4,"elapsedIntervalSeconds":a.paced_seconds,
+                     "samplesPerMethod":a.samples,"methodOrder":"rotated per host and per wake; only one timed policy after each real interval",
+                     "wallMedianUs":{k:mid(v) for k,v in vals.items()},
+                     "wallMinMaxUs":{k:[min(v),max(v)] for k,v in vals.items()}}
+        elif a.paced_seconds:
             cmd=[str(electron),"adaptive_bench.cjs","paced",str(a.paced_seconds*1000),str(a.samples)]
             overall=json.loads(subprocess.check_output(cmd,cwd=work,env=env,text=True,
                                timeout=a.paced_seconds*a.samples+120))
         else:
-            observations={k:[] for k in ["hot","cpu","binary","text","memory","packedMemory","tasks"]}
+            observations={k:[] for k in ["hot","cpu","binary","text","memory","packedMemory","tasks","tasksMatched"]}
             for i in range(a.hosts):
                 for k,cmd in [("hot",("adaptive_bench.cjs","hot")),("cpu",("adaptive_bench.cjs","cpu")),
                               ("binary",("adaptive_bench.cjs","binary")),("text",("adaptive_bench.cjs","ipc")),
                               ("memory",("memory_bench.cjs",)),("packedMemory",("memory_packed_bench.cjs",)),
-                              ("tasks",("tasks_bench.cjs",))]:
+                              ("tasks",("tasks_bench.cjs",)),("tasksMatched",("tasks_bench.cjs","--matched-clone"))]:
                     observations[k].append(bench(*cmd))
             overall={"hosts":a.hosts,"electron":version,"architecture":platform.machine(),
                      "scope":"Synthetic policy decisions; not whole-browser or Edge results."}
@@ -90,6 +120,9 @@ def main():
             overall["tasksCacheMissUs"]={str(r["records"]):{k:mid([x["out"][i]["medianUs"][k]
                 for x in observations["tasks"]]) for k in ("original","direct","native")}
                 for i,r in enumerate(observations["tasks"][0]["out"])}
+            overall["tasksMatchedCloneUs"]={str(r["records"]):{k:mid([x["out"][i]["medianUs"][k]
+                for x in observations["tasksMatched"]]) for k in ("direct","nativeNormalized")}
+                for i,r in enumerate(observations["tasksMatched"][0]["out"])}
         text=json.dumps(overall,indent=2,sort_keys=True)
         if a.out:a.out.write_text(text+"\n",encoding="utf-8")
         print(text)

@@ -1,140 +1,278 @@
 {
   "architecture": "x86_64",
   "binaryPipeUs": {
-    "batch1": 26.29,
-    "batch128": 0.726,
-    "batch32": 1.101,
-    "batch8": 3.995
+    "batch1": 32.679,
+    "batch128": 0.815,
+    "batch32": 1.262,
+    "batch8": 5.194
+  },
+  "counts": {
+    "freshHelperLaunchesPerHost": 24,
+    "hotAdaptiveDecisionsPerArmPerRound": 32768,
+    "hotAdaptiveRoundsPerHostPerArm": 16,
+    "memoryRoundsPerHostPerArm": 8,
+    "memorySnapshotSetsPerSize": 32,
+    "tasksListsPerSize": 8,
+    "tasksRoundsPerHostPerArm": 12
   },
   "cpuAdaptiveUs": {
     "idle": {
-      "js": 0.484,
-      "napiObject": 2.404,
-      "napiPacked": 0.148,
+      "js": 0.482,
+      "napiObject": 2.376,
+      "napiPacked": 0.146,
       "normalizedJS": 0.066
     },
     "mixed": {
-      "js": 0.9,
-      "napiObject": 2.458,
-      "napiPacked": 0.151,
-      "normalizedJS": 0.086
+      "js": 0.892,
+      "napiObject": 2.379,
+      "napiPacked": 0.152,
+      "normalizedJS": 0.085
     }
   },
   "electron": "44.4.5",
   "environment": {
+    "compilerBuild": "Debian 14.2.0-19",
     "cpuModel": "AMD EPYC 9V74 80-Core Processor",
+    "cpuSet": "0\u20138",
     "g++": "14.2.0 -O2",
+    "kernel": "Linux 6.18.57",
     "mode": "Electron run-as-Node; no GUI/GPU",
     "node": "24.21.0",
+    "os": "Debian GNU/Linux 13 (trixie)",
     "v8": "15.2.124.28-electron.0"
   },
   "hosts": 5,
   "hotAdaptiveUs": {
     "idle": {
-      "js": 0.477,
-      "napiObject": 2.346,
-      "napiPacked": 0.143,
-      "normalizedJS": 0.064
+      "js": 0.48,
+      "napiObject": 2.344,
+      "napiPacked": 0.146,
+      "normalizedJS": 0.066
     },
     "mixed": {
-      "js": 0.896,
-      "napiObject": 2.392,
-      "napiPacked": 0.148,
-      "normalizedJS": 0.084
+      "js": 0.886,
+      "napiObject": 2.347,
+      "napiPacked": 0.15,
+      "normalizedJS": 0.083
+    }
+  },
+  "incrementalQuietHelper": {
+    "clockTicksPerSec": 100,
+    "freshPairs": 5,
+    "maxScheduledNs": {
+      "binary": 0,
+      "text": 0
+    },
+    "medians": {
+      "binary": {
+        "cpuTicks": 0,
+        "privateResidentKiB": 144,
+        "pssKiB": 152,
+        "quietSeconds": 60.01287353200132,
+        "rssKiB": 632,
+        "scheduledNs": 0
+      },
+      "text": {
+        "cpuTicks": 0,
+        "privateResidentKiB": 248,
+        "pssKiB": 378,
+        "quietSeconds": 60.01269349100039,
+        "rssKiB": 1836,
+        "scheduledNs": 0
+      }
+    },
+    "requestedQuietSec": 60,
+    "scope": "Single-thread persistent helper only, after one validated decision. No Electron host or IPC while quiet."
+  },
+  "independentFirstCallAt60Seconds": {
+    "elapsedIntervalSeconds": 60,
+    "independentWakeHosts": 4,
+    "methodOrder": "rotated per host and per wake; only one timed policy after each real interval",
+    "samplesPerMethod": 12,
+    "wallMedianUs": {
+      "js": 120.241,
+      "napiObject": 818.9185,
+      "napiPacked": 330.0975,
+      "pipe": 2251.801
+    },
+    "wallMinMaxUs": {
+      "js": [
+        9.334,
+        773.244
+      ],
+      "napiObject": [
+        44.927,
+        3106.638
+      ],
+      "napiPacked": [
+        17.937,
+        812.463
+      ],
+      "pipe": [
+        673.354,
+        4341.927
+      ]
     }
   },
   "memoryUs": {
     "over1": {
-      "jsUs": 0.066,
-      "nativeObjectUs": 1.882
+      "jsUs": 0.065,
+      "nativeObjectUs": 1.811
     },
     "over128": {
-      "jsUs": 10.142,
-      "nativeObjectUs": 136.084
+      "jsUs": 9.768,
+      "nativeObjectUs": 134.144
     },
     "over32": {
-      "jsUs": 2.097,
-      "nativeObjectUs": 34.878
+      "jsUs": 2.042,
+      "nativeObjectUs": 34.819
     },
     "over512": {
-      "jsUs": 54.445,
-      "nativeObjectUs": 550.004
+      "jsUs": 57.159,
+      "nativeObjectUs": 559.01
     },
     "over8": {
-      "jsUs": 0.391,
-      "nativeObjectUs": 9.619
+      "jsUs": 0.396,
+      "nativeObjectUs": 9.676
     },
     "under": {
-      "jsUs": 0.032,
-      "nativeObjectUs": 0.692
+      "jsUs": 0.031,
+      "nativeObjectUs": 0.707
     }
   },
-  "oneSecondPacedSamplesPerMethod": 16,
-  "oneSecondPacedWallUs": {
-    "js": 9.204,
-    "napiObject": 40.831,
-    "napiPacked": 8.513,
-    "pipe": 345.701
+  "paced": {
+    "1s": {
+      "samplesPerMethod": 16,
+      "wallMedianUs": {
+        "js": 8.818,
+        "napiObject": 37.586,
+        "napiPacked": 8.322,
+        "pipe": 343.528
+      }
+    },
+    "600s": {
+      "methodOrder": "four invocations per wake, rotating order (not fully balanced at n=4)",
+      "samplesPerMethod": 4,
+      "wallMedianUs": {
+        "js": 14.577,
+        "napiObject": 180.117,
+        "napiPacked": 19.5945,
+        "pipe": 1686.514
+      },
+      "wallMinMaxUs": {
+        "js": [
+          6.049,
+          82.784
+        ],
+        "napiObject": [
+          46.52,
+          436.588
+        ],
+        "napiPacked": [
+          13,
+          97.456
+        ],
+        "pipe": [
+          895.899,
+          3147.705
+        ]
+      }
+    },
+    "60s": {
+      "samplesPerMethod": 12,
+      "wallMedianUs": {
+        "js": 9.75,
+        "napiObject": 471.901,
+        "napiPacked": 23.436,
+        "pipe": 1356.928
+      }
+    }
   },
   "packedMemoryUs": {
     "over1": {
-      "jsUs": 0.067,
-      "nativePackedUs": 0.179
+      "jsUs": 0.066,
+      "nativePackedUs": 0.178
     },
     "over128": {
-      "jsUs": 10.024,
-      "nativePackedUs": 14.069
+      "jsUs": 9.862,
+      "nativePackedUs": 14.209
     },
     "over32": {
-      "jsUs": 2.004,
-      "nativePackedUs": 3.477
+      "jsUs": 2.037,
+      "nativePackedUs": 3.469
     },
     "over512": {
-      "jsUs": 54.256,
-      "nativePackedUs": 65.855
+      "jsUs": 54.211,
+      "nativePackedUs": 67.796
     },
     "over8": {
-      "jsUs": 0.431,
-      "nativePackedUs": 1.199
+      "jsUs": 0.389,
+      "nativePackedUs": 1.163
     },
     "under": {
-      "jsUs": 0.024,
-      "nativePackedUs": 0.088
+      "jsUs": 0.022,
+      "nativePackedUs": 0.09
     }
   },
   "scope": "Synthetic policy decisions; not whole-browser or Edge results.",
-  "spawnHelperUs": 3101.841,
+  "spawnHelperUs": 3201.1,
   "tasksCacheMissUs": {
     "0": {
-      "direct": 0.025,
-      "native": 0.092,
-      "original": 0.042
+      "direct": 0.022,
+      "native": 0.093,
+      "original": 0.038
     },
     "100": {
-      "direct": 10.83,
-      "native": 64.823,
-      "original": 19.485
+      "direct": 11.376,
+      "native": 66.211,
+      "original": 19.705
     },
     "20": {
-      "direct": 1.479,
-      "native": 12.493,
-      "original": 2.578
+      "direct": 1.471,
+      "native": 12.566,
+      "original": 2.62
     },
     "2000": {
-      "direct": 483.62,
-      "native": 1646.773,
-      "original": 892.113
+      "direct": 486.317,
+      "native": 1707.194,
+      "original": 925.015
     },
     "3": {
-      "direct": 0.196,
-      "native": 2.14,
-      "original": 0.312
+      "direct": 0.204,
+      "native": 2.205,
+      "original": 0.31
     },
     "500": {
-      "direct": 98.158,
-      "native": 378.577,
-      "original": 176.028
+      "direct": 102.369,
+      "native": 394.355,
+      "original": 182.003
     }
   },
-  "textPipeSingleUs": 38.759
+  "tasksMatchedCloneUs": {
+    "0": {
+      "direct": 0.027,
+      "nativeNormalized": 0.081
+    },
+    "100": {
+      "direct": 9.906,
+      "nativeNormalized": 56.832
+    },
+    "20": {
+      "direct": 1.368,
+      "nativeNormalized": 11.045
+    },
+    "2000": {
+      "direct": 483.94,
+      "nativeNormalized": 1545.836
+    },
+    "3": {
+      "direct": 0.181,
+      "nativeNormalized": 1.939
+    },
+    "500": {
+      "direct": 98.528,
+      "nativeNormalized": 345.344
+    }
+  },
+  "textPipeSingleUs": 39.544
 }
