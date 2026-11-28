@@ -12,7 +12,7 @@ const { launchDexerion } = require('../e2e/app');
 
 const historyCount = 150;
 const stepSize = 16384;
-const chunkCount = 12;
+const chunkCount = 10; // Each byte chunk is one exact 10% Electron progress increment.
 
 function seedProfile(profile) {
   const dir = path.join(profile, 'fixture-downloads');
