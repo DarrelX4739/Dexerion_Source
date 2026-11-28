@@ -275,3 +275,14 @@ on the existing paths. The component fixture compares exact DOM after each
 transition: 105 to 14 row insertions for 14 steps and 990 to 44 for 44 steps.
 Seven paired JSDOM medians were 26.10 to 4.05 ms and 79.39 to 3.88 ms;
 these do not include Chromium layout, network or whole-browser CPU.
+
+### Keep settled download rows during progress notifications
+
+Same-order updates retain unchanged completed rows. In-flight, focused and
+pending-delete rows, as well as list shape changes, keep their original
+render paths. Controls, IPC, timing and formatting are unchanged. Paired
+component fixtures verified identical DOM after each update: 336 to 16 row
+insertions with 20 completed downloads and 4,824 to 24 with 200 completed.
+These are DOM work counts during a transfer, not aggregate browser CPU.
+A real Electron test exercises a held-open local transfer and checks the same
+rows, order, progress and completion.
