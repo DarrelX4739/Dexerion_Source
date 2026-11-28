@@ -96,4 +96,29 @@ function rendererRoleMap(observations) {
   return labels;
 }
 
-module.exports = { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
+// Conservative subset of CPU, not a replacement for whole-tree accounting:
+// only the same process in both snapshots with a monotonic CPU counter.
+function stableCpuByRole(treeA, treeB, classify) {
+  const a = new Map(treeA.map((p) => [p.pid, p]));
+  const used = new Map();
+  let measured = 0;
+  let total100ns = 0;
+  for (const p of treeB) {
+    const previous = a.get(p.pid);
+    if (!previous || typeof p.startedUtc !== 'string' || !p.startedUtc ||
+        p.startedUtc !== previous.startedUtc || !Number.isFinite(previous.cpu100ns) ||
+        !Number.isFinite(p.cpu100ns) || p.cpu100ns < previous.cpu100ns) continue;
+    const delta = p.cpu100ns - previous.cpu100ns;
+    const role = classify(p);
+    const b = used.get(role) || { processes: 0, cpu100ns: 0 };
+    b.processes++;
+    b.cpu100ns += delta;
+    used.set(role, b);
+    total100ns += delta;
+    measured++;
+  }
+  return { measured, skippedAtEnd: treeB.length - measured,
+    missingAtEnd: treeA.length - measured, total100ns, roles: Object.fromEntries(used) };
+}
+
+module.exports = { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };

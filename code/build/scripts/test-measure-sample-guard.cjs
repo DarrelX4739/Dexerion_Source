@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -114,4 +114,16 @@ test('uses the foreground page clock rather than the different CPU snapshot boun
   assert.deepEqual(foregroundSample(before, after, 1, true), { visible: true, fps: 60 });
   assert.throws(() => foregroundSample(before, { ...after, timeOrigin: 1001 }, 1, true), /navigation or clock/);
   assert.throws(() => foregroundSample(before, { ...after, clockMs: 10 }, 1, true), /navigation or clock/);
+});
+
+test('stable process CPU splits exact matching PIDs by role, not reused or missing processes', () => {
+  const p = (pid, name, startedUtc, cpu100ns) => ({ pid, name, startedUtc, cpu100ns });
+  const a = [p(1, 'browser', 't0', 10), p(2, 'renderer', 't0', 20),
+    p(3, 'gpu', 't0', 30), p(5, 'renderer', 't0', 10), p(8, 'utility', null, 7)];
+  const b = [p(1, 'browser', 't0', 40), p(2, 'renderer', 't0', 41),
+    p(3, 'gpu', 'changed', 300), p(6, 'renderer', 'new', 100), p(8, 'utility', null, 25)];
+  assert.deepEqual(stableCpuByRole(a, b, (row) => row.name), {
+    measured: 2, skippedAtEnd: 3, missingAtEnd: 3, total100ns: 51,
+    roles: { browser: { processes: 1, cpu100ns: 30 }, renderer: { processes: 1, cpu100ns: 21 } },
+  });
 });

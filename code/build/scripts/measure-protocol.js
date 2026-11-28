@@ -50,7 +50,7 @@ const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
 const { aggregateGpu } = require('./measure-gpu-aggregate.cjs');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
-const { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -522,9 +522,11 @@ async function runTrial(browser, scenario, base, trialIdx) {
         role, { count: row.count, wsMiB: toMiB(row.wsBytes), privateMiB: toMiB(row.privateBytes), privateWsMiB: toMiB(row.privateWsBytes) },
       ])),
     };
+    let cpuLabels = new Map();
     if (session.rendererRoles) {
       try {
         const labels = rendererRoleMap(await session.rendererRoles());
+        cpuLabels = labels;
         const rendererTree = treeB.filter((p) => roleOf(p) === 'renderer');
         t.ram.dexRendererBreakdown = Object.fromEntries(Object.entries(
           memoryByRole(rendererTree, (p) => labels.get(p.pid) || 'renderer-unmapped').byRole,
@@ -536,6 +538,18 @@ async function runTrial(browser, scenario, base, trialIdx) {
         t.ram.dexRendererError = String(err?.message || err).split('\n')[0];
       }
     }
+
+    const stableRoles = stableCpuByRole(treeA, treeB, (p) => cpuLabels.get(p.pid) || roleOf(p));
+    t.cpu.stableRoleAttribution = {
+      matchedProcesses: stableRoles.measured,
+      unmatchedAtEnd: stableRoles.skippedAtEnd,
+      unmatchedAtStart: stableRoles.missingAtEnd,
+      measuredCpuMs: round(stableRoles.total100ns / 1e4, 2),
+      roles: Object.fromEntries(Object.entries(stableRoles.roles).map(([kind, row]) => [kind, {
+        processes: row.processes, cpuMs: round(row.cpu100ns / 1e4, 2),
+        pctOfCore: round(row.cpu100ns / 1e7 / wallSec * 100, 3),
+      }])),
+    };
 
     // Sum utilisation by physical engine on each common interval before
     // taking the mean. A newly observed child at snapshot B shares the
@@ -708,6 +722,11 @@ function pctOfEdge(dexS, edgeS) {
         g.targetCounts = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.visibleAndBackgroundTargets || {})))].sort().map((target) => [
           target, summarize(valid, (t) => t.visibleAndBackgroundTargets ? t.visibleAndBackgroundTargets[target] ?? 0 : NaN),
         ]));
+        const stableCpuRoles = [...new Set(valid.flatMap((t) =>
+          Object.keys(t.cpu?.stableRoleAttribution?.roles || {})))].sort();
+        g.stableCpuByRole = Object.fromEntries(stableCpuRoles.map((role) => [role,
+          summarize(valid, (t) => t.cpu?.stableRoleAttribution?.roles?.[role]?.pctOfCore)]));
+        console.log('  Stable process CPU by role ' + browser + ': ' + JSON.stringify(g.stableCpuByRole));
         console.log('  Process counts ' + browser + ': ' + JSON.stringify(g.processCounts));
         if (Object.keys(g.targetCounts).length) console.log('  Target counts ' + browser + ': ' + JSON.stringify(g.targetCounts));
         g.privateMiB = summarize(valid, (t) => t.ram?.privateMiBB);

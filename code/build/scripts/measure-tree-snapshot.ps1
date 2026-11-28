@@ -50,6 +50,7 @@ foreach ($p in $procs) {
     pid       = [int]$p.ProcessId
     ppid      = [int]$p.ParentProcessId
     name      = $p.Name
+    startedUtc = $(if ($p.CreationDate) { ([datetime]$p.CreationDate).ToUniversalTime().ToString('o') } else { $null })
     cpu100ns  = ($user + $kernel)
     wsBytes   = $ws
     privateBytes = $privateByPid[[int]$p.ProcessId]
