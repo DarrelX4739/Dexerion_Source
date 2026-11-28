@@ -525,3 +525,10 @@ button { font-family: inherit; }
 .dx-item:hover {background:color-mix(in srgb,var(--accent) 5%,var(--phover))}
 .dx-search input {border-radius:10px}
 .dx-empty {background:radial-gradient(ellipse at top,var(--dx-optical-light),transparent 69%)}
+
+@media (forced-colors: active) {
+  body:has(> .wrap > #enter) .enter {border-color:ButtonText}
+  body:has(> .wrap > #enter) .enter:focus-visible {outline-color:Highlight}
+  body:has(> .cmd > #q) #q:focus-visible {outline:2px solid Highlight;outline-offset:2px}
+  body:has(> .cmd > #q) :is(.mark .crest, #starred .tile) {border:1px solid CanvasText}
+}

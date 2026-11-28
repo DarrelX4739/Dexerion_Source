@@ -2321,3 +2321,12 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :root:not([data-skin]) #ai-sidebar .ai-empty-mark {box-shadow:0 0 0 4px var(--dx-optical-light),var(--sh1)}
 :root:not([data-skin]) #ai-sidebar .ai-empty-title {font-weight:650;letter-spacing:-.035em}
 :root:not([data-skin]) #ai-sidebar .ai-empty-hint {color:var(--fg2)}
+
+/* User-selected normal themes still use the original state colours and slots.
+   In forced colours, explicitly distinguish an active tab without shadows. */
+@media (forced-colors: active) {
+  :root:not([data-skin]) .tab.active {border-color:Highlight}
+  :root:not([data-skin]) .gchip {border-color:ButtonText}
+  :root:not([data-skin]) .gchip .gdot {border:1px solid ButtonText}
+  :root:not([data-skin]) #omnibox:focus {outline:2px solid Highlight;outline-offset:1px}
+}
