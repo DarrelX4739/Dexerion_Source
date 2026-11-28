@@ -1,0 +1,49 @@
+name: Dexerion page reader native DOM experiment
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-page-reader-dom.yml'
+      - 'experiments/page-reader-dom/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    timeout-minutes: 12
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install the exact Electron build
+        working-directory: code/build
+        run: npm ci
+      - name: Read actual fixture tabs on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          node experiments/page-reader-dom/compare.cjs page-reader-dom.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Read actual fixture tabs on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1280x900x24' node experiments/page-reader-dom/compare.cjs page-reader-dom.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: page-reader-dom-${{ matrix.os }}
+          path: page-reader-dom.json
+          if-no-files-found: ignore
+          retention-days: 7
