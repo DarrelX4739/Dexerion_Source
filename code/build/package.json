@@ -7,7 +7,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "npm run verify && node --test \"scripts/test-*.cjs\"",
+    "test": "npm run verify && npm run test:contracts && node --test \"scripts/test-*.cjs\"",
+    "test:contracts": "node scripts/test-adaptive-power.js && node scripts/test-nextgen-unit.js && node scripts/test-polish-unit.js && node scripts/test-scout-mapping.js",
     "test:smoke": "playwright test e2e/boot.spec.js e2e/performance-surfaces.spec.js e2e/cold-accounts.spec.js",
     "test:ai": "node scripts/test-ai.js",
     "test:agent": "node scripts/test-agent.js",
