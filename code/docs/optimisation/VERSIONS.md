@@ -286,3 +286,14 @@ insertions with 20 completed downloads and 4,824 to 24 with 200 completed.
 These are DOM work counts during a transfer, not aggregate browser CPU.
 A real Electron test exercises a held-open local transfer and checks the same
 rows, order, progress and completion.
+
+### Avoid decoding dormant bookmark trees during the reminder sweep
+
+The task-only loader still reads the same file and rejects exactly the same
+JSON `null` document. It no longer creates an object tree just to check that
+condition. Active-account bookmark loading and persistence are untouched.
+The parity fixture exercises BOMs, JSON whitespace, malformed data, and a
+long Unicode-whitespace suffix. In a 12-account fixture with 8 MB of valid
+bookmark files, the probe took 21.47 to 4.49 ms, and sampled transient V8
+heap fell from 15.22 to 8.06 MB; retained heap was unchanged. Do not count
+this as steady-state browser RAM or an Edge improvement.

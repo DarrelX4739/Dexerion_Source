@@ -13,6 +13,20 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 }
 
+// The reminder probe only cares whether readJson would return null. Scan
+// for non-JSON whitespace without an anchored run that backtracks on a
+// long malformed suffix. Strip at most one BOM, and only at the beginning.
+function isNullJson(text) {
+  const start = text.charCodeAt(0) === 0xFEFF ? 1 : 0;
+  if (text.charCodeAt(start) === 0x7B) return false; // ordinary bookmark object
+  const nonWhitespace = /[^ \t\r\n]/g;
+  nonWhitespace.lastIndex = start;
+  const first = nonWhitespace.exec(text);
+  if (!first || !text.startsWith('null', first.index)) return false;
+  nonWhitespace.lastIndex = first.index + 4;
+  return !nonWhitespace.test(text);
+}
+
 // Atomic write: a crash or power loss mid-write must never truncate a store —
 // a torn file loads as DEFAULTS, which reads as "Dexerion reset my data". The
 // temp file is written and flushed first, then renamed over the real one, so
@@ -174,11 +188,15 @@ class ProfileStore {
 
   loadAccountReminderData(id) {
     const d = this.accountDir(id);
-    let bookmarks;
-    // The full loader rejects a parsed null bookmark document. Keep that
-    // existing skip for reminders too, without retaining the bookmark tree.
-    try { bookmarks = readJson(path.join(d, 'bookmarks.json')); } catch {}
-    if (bookmarks === null) throw new TypeError('Invalid account bookmarks');
+    let nullBookmarks = false;
+    // Only a successfully parsed null makes the full loader reject the
+    // account. Match that JSON value without allocating the bookmark tree:
+    // one initial BOM, JSON whitespace only, and an exact end of input.
+    try {
+      const text = fs.readFileSync(path.join(d, 'bookmarks.json'), 'utf8');
+      nullBookmarks = isNullJson(text);
+    } catch {}
+    if (nullBookmarks) throw new TypeError('Invalid account bookmarks');
     let tasks = [];
     try { tasks = readJson(path.join(d, 'tasks.json')); } catch {}
     return { tasks };
