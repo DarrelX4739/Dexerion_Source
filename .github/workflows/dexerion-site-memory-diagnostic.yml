@@ -1,0 +1,57 @@
+name: Dexerion Windows site renderer memory diagnostic
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-site-memory-diagnostic.yml'
+      - 'code/build/scripts/measure-site-memory-diagnostic.cjs'
+      - 'code/build/scripts/read-site-memory-diagnostic.cjs'
+      - 'code/build/scripts/test-site-memory-diagnostic.cjs'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 16
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked runtime and verify evidence guards
+        shell: pwsh
+        run: |
+          npm ci --include=dev
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-site-memory-diagnostic.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-sample-guard.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build the current unpacked product only, no release
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'dex-site-memory'
+          node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$out" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Inspect private resident and JS heap on matched actual renderer processes
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'dex-site-memory/win-unpacked/Dexerion.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'dex-site-renderer-heap.json'
+          node scripts/measure-site-memory-diagnostic.cjs $exe $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-site-renderer-memory-diagnostic
+          path: ${{ runner.temp }}/dex-site-renderer-heap.json
+          if-no-files-found: ignore
+          retention-days: 7
