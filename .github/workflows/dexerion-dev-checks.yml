@@ -28,24 +28,17 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: code/build/package-lock.json
+      - name: Install Electron and dependencies
+        id: electron
+        run: |
+          npm ci
+          node -p "require('electron')"
       - name: Verify source and run unit checks
         run: |
           npm run verify
           node --test scripts/test-*.cjs ../../.github/packaging/linux-launcher.test.cjs
-      - name: Install Electron and dependencies
-        run: |
-          npm ci
-          node -p "require('electron')"
       - name: Check real Electron boot, AI and toolbar controls
         run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js
-      - name: Keep failed Electron test evidence
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: electron-test-failures
-          path: code/build/test-results/
-          if-no-files-found: ignore
-          retention-days: 7
       - name: Compare whole-browser CPU and RAM against Chrome
         env:
           DEX_CLOUD_TRIALS: '5'
@@ -56,5 +49,16 @@ jobs:
         with:
           name: cloud-linux-comparison
           path: code/build/cloud-comparison.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Run full Electron regression suite at milestones
+        if: ${{ !cancelled() && steps.electron.outcome == 'success' && contains(github.event.head_commit.message, '[full-regression]') }}
+        run: xvfb-run -a npm run test:e2e
+      - name: Keep failed Electron test evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-test-failures
+          path: code/build/test-results/
           if-no-files-found: ignore
           retention-days: 7

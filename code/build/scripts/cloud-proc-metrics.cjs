@@ -59,16 +59,52 @@ function cpuDelta(a, b, hz, seconds) {
   return { started, exited, pctOfOneCore: started || exited ? null : ticks * 100 / hz / seconds };
 }
 
-function sumPss(tree, proc = '/proc') {
-  let total = 0;
+function readPss(tree, proc = '/proc') {
+  const values = new Map();
   for (const pid of tree.keys()) {
     try {
       const pss = /^Pss:\s+(\d+)\s+kB\b/m.exec(fs.readFileSync(proc + '/' + pid + '/smaps_rollup', 'utf8'));
       if (!pss) return null;
-      total += Number(pss[1]);
+      values.set(pid, Number(pss[1]) / 1024);
     } catch { return null; }
   }
-  return total > 0 ? total / 1024 : null;
+  return values;
 }
 
-module.exports = { parseStat, selectTree, readTree, cpuDelta, sumPss };
+function sumPss(tree, proc = '/proc') {
+  const values = readPss(tree, proc);
+  const total = values ? [...values.values()].reduce((a, b) => a + b, 0) : 0;
+  return total > 0 ? total : null;
+}
+
+function classifyProcess(pid, rootPid, raw, labels = {}) {
+  if (pid === rootPid) return 'browser';
+  if (['shell-renderer', 'page-renderer', 'other-renderer'].includes(labels[pid])) return labels[pid];
+  const argv = raw.split('\0');
+  if (argv[0].includes('crashpad')) return 'crash-handler';
+  const type = argv.find((arg) => arg.startsWith('--type='))?.slice(7);
+  return ['renderer', 'gpu-process', 'utility', 'zygote'].includes(type) ? type : 'other';
+}
+
+function processRoles(tree, rootPid, labels, proc = '/proc') {
+  return new Map([...tree.keys()].map((pid) => {
+    let raw = '';
+    try { raw = fs.readFileSync(proc + '/' + pid + '/cmdline', 'utf8'); } catch {}
+    return [pid, classifyProcess(pid, rootPid, raw, labels)];
+  }));
+}
+
+function breakDown(a, b, roles, pss, hz, seconds) {
+  const cpu = cpuDelta(a, b, hz, seconds);
+  const result = {};
+  for (const [pid, current] of b) {
+    const name = roles.get(pid) || 'other';
+    const row = result[name] ||= { processes: 0, cpu: cpu.pctOfOneCore === null ? null : 0, ram: pss ? 0 : null };
+    row.processes++;
+    if (row.cpu !== null) row.cpu += (current.ticks - a.get(pid).ticks) * 100 / hz / seconds;
+    if (row.ram !== null) row.ram += pss.get(pid);
+  }
+  return result;
+}
+
+module.exports = { parseStat, selectTree, readTree, cpuDelta, sumPss, readPss, classifyProcess, processRoles, breakDown };

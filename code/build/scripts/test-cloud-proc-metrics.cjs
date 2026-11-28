@@ -42,3 +42,20 @@ test('normalises CPU to one core and withholds samples with process churn or PID
   assert.deepEqual(cpuDelta(a, c, 100, 2), { started: 1, exited: 1, pctOfOneCore: null });
   assert.throws(() => cpuDelta(b, a, 100, 2), /backwards/);
 });
+
+test('role attribution is bounded and shares measured totals without exporting process arguments', () => {
+  const { classifyProcess, breakDown } = require('./cloud-proc-metrics.cjs');
+  assert.equal(classifyProcess(10, 10, '/browser\0', {}), 'browser');
+  assert.equal(classifyProcess(20, 10, '/browser\0--type=renderer\0', { 20: 'shell-renderer' }), 'shell-renderer');
+  assert.equal(classifyProcess(20, 10, '/browser\0--type=renderer\0', { 20: 'unknown' }), 'renderer');
+  assert.equal(classifyProcess(21, 10, '/path/chrome_crashpad_handler\0--ignored\0', {}), 'crash-handler');
+  const tree = (...rows) => selectTree(rows.map((r) => parseStat(stat(...r))), 10);
+  const a = tree([10, 1, 20, 0, 100], [30, 10, 5, 0, 101]);
+  const b = tree([10, 1, 70, 0, 100], [30, 10, 55, 0, 101]);
+  const roles = new Map([[10, 'browser'], [30, 'renderer']]);
+  const pss = new Map([[10, 20], [30, 10]]);
+  assert.deepEqual(breakDown(a, b, roles, pss, 100, 2), {
+    browser: { processes: 1, cpu: 25, ram: 20 },
+    renderer: { processes: 1, cpu: 25, ram: 10 },
+  });
+});
