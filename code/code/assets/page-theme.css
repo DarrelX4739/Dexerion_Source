@@ -634,6 +634,18 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #t
   margin: 22px 0 0;
   max-height: none;
 }
+/* Full details should include the title. Keep resting titles single-line
+   so the task list still fits the first three before scrolling. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded :is(b, .tk-desc) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded :is(.tk-box, .tk-exp, .tk-dot) {
+  align-self: flex-start;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded .tk-dot {
+  margin-block-start: 7px;
+}
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) :is(#starred, #tasks-nt) > .empty {
   text-align: start;
   padding: 12px 13px;
