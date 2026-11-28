@@ -51,3 +51,15 @@ Main-process PSS fell from 125.35 to 98.84 MiB (21.2%); the whole tree fell
 from 369.75 to 344.36 MiB (6.9%). This isolates a real app gain for a large
 multi-account profile; it does not extrapolate to a fresh profile or claim
 a general 6.9% improvement against another browser.
+
+
+### Automation caveat
+
+Linux Chrome was started with a disposable profile and a small explicit
+flag set. Dexerion was started with the Playwright Electron harness, which
+adds Chromium automation switches that can change throttling and other
+behaviour. This qualifies the Chrome comparisons as directional, especially
+the background workloads. The paired Dexerion control and candidate use
+the same harness and remain the more useful comparison for code changes.
+Retest against both binaries with minimal launch flags before making
+claims about normal-use cross-browser savings.
