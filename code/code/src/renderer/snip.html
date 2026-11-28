@@ -428,6 +428,10 @@ function showPreview(url, kind) {
   $('#pv-meta').textContent = (kind === 'full' ? 'Full page' : 'Snip') + ' • PNG • ~' + kb + ' KB';
   $('#preview').hidden = false;
 }
+// A discarded screenshot is no longer used by preview, copy, save or attach.
+function releasePreviewImage() {
+  $('#pv-img').removeAttribute('src');
+}
 function revokeVideoUrl() {
   if (previewVideoUrl) { try { URL.revokeObjectURL(previewVideoUrl); } catch {} previewVideoUrl = null; }
   try { $('#pv-vid').removeAttribute('src'); } catch {}
@@ -439,6 +443,7 @@ function showVideoPreview(blob, secs) {
   const u = URL.createObjectURL(blob);
   previewVideoUrl = u;
   $('#pv-vid').src = u; $('#pv-vid').hidden = false; $('#pv-img').hidden = true;
+  releasePreviewImage();
   $('#pv-copy').style.display = 'none';
   $('#pv-meta').textContent = 'Recording • WebM • ' + fmtT((secs || 0) * 1000).replace(/^(\d\d):(\d\d)$/, '$1m $2s')
     + ' • ' + (blob.size / 1048576).toFixed(1) + ' MB';
@@ -475,8 +480,8 @@ $('#pv-attach').onclick = async () => {
   try { await attachImage(previewUrl); dismiss(); }
   catch {}
 };
-$('#pv-retake').onclick = () => { $('#preview').hidden = true; previewUrl = null; recVideoBlob = null; revokeVideoUrl(); clearSel(); if (mode === 'full') setMode('area'); };
-$('#pv-close').onclick = () => { $('#preview').hidden = true; previewUrl = null; recVideoBlob = null; revokeVideoUrl(); clearSel(); };
+$('#pv-retake').onclick = () => { $('#preview').hidden = true; previewUrl = null; recVideoBlob = null; releasePreviewImage(); revokeVideoUrl(); clearSel(); if (mode === 'full') setMode('area'); };
+$('#pv-close').onclick = () => { $('#preview').hidden = true; previewUrl = null; recVideoBlob = null; releasePreviewImage(); revokeVideoUrl(); clearSel(); };
 
 // ---------- video recording (window capture + MediaRecorder) ----------
 // Pinned to this window by its exact capture id: the clip always comes from
