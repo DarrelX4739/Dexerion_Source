@@ -29,15 +29,17 @@ padding:24px;border:1px solid #345;color:#123;font:18px sans-serif}</style>
 <main><h1>Native footprint fixture</h1><p>One static document, one active tab.</p></main>
 <script>
 async function frame(){await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));}
+function phase(name){return fetch('phase/'+name,{keepalive:true}).catch(()=>{});}
 async function proof(step){
-  await frame();if(document.visibilityState!=='visible')throw new Error('fixture not visible');
+  await frame();if(document.visibilityState!=='visible'){await phase('hidden');throw new Error('fixture not visible');}
   const el=document.querySelector('main'),rect=el.getBoundingClientRect();
   await fetch('proof/'+step,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,ua:navigator.userAgent,
     box:[rect.width,rect.height],title:document.title,heading:el.querySelector('h1').textContent,
     text:el.querySelector('p').textContent})});
 }
-(async()=>{await proof('start');await fetch('hold');await proof('end')})()
+(async()=>{await phase('script');await proof('start');await fetch('hold');await proof('end')})()
+.catch(()=>phase('error'));
 </script>'''
 
 
@@ -79,6 +81,10 @@ def fixture():
                 self.wfile.write(body)
 
         def do_GET(self):
+            for name in ("script", "hidden", "error"):
+                if self.path == key + "phase/" + name:
+                    observed[name] = observed.get(name, 0) + 1
+                    return self.reply(204)
             if self.path == key:
                 observed["loads"] += 1
                 return self.reply(200, HTML, "text/html; charset=utf-8")
@@ -102,7 +108,15 @@ def fixture():
                 observed[step] = proof
                 self.reply(204)
                 (ready if step == "start" else final).set()
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError) as error:
+                # Only fixed, non-sensitive fixture diagnostic labels.
+                observed["rejected_proofs"] = observed.get("rejected_proofs", 0) + 1
+                safe_reasons = {"invalid viewport", "missing Chromium UA", "premature end proof",
+                                "invalid proof size", "fixture DOM area/text changed or does not fit viewport"}
+                observed["last_rejection"] = str(error) if str(error) in safe_reasons else "invalid fixture payload"
+                if "data" in locals() and isinstance(data, dict):
+                    observed["rejected_metrics"] = {k: data[k] for k in ("width", "height", "dpr")
+                                                    if isinstance(data.get(k), (int, float))}
                 self.reply(400)
 
     with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
@@ -323,6 +337,7 @@ def trial(kind, args, build_dir):
                     request_electron_window_close(proc)
                     verify_saved_tabs(profile, url)
             except Exception:
+                print(kind + " fixture diagnostic: " + json.dumps(observed), file=sys.stderr)
                 log.flush()
                 print(kind + " stderr tail:", console.read_bytes()[-2000:].decode(errors="replace"),
                       file=sys.stderr)
