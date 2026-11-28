@@ -1,0 +1,57 @@
+name: Dexerion and Edge Windows long-idle exploratory pair
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-quiet-five-minute-pair.yml'
+      - 'code/build/scripts/measure-long-idle.cjs'
+      - 'code/build/scripts/read-long-idle.cjs'
+      - 'code/build/scripts/test-long-idle.cjs'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 16
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked application runtime and verify evidence guards
+        shell: pwsh
+        run: |
+          npm ci --include=dev
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-long-idle.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-sample-guard.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build the exact Windows product without publishing
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'dex-long-idle'
+          node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$package" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Observe stock Edge then stock Dexerion after a quiet tab session
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'dex-long-idle/win-unpacked/Dexerion.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'dex-long-idle.json'
+          node scripts/measure-long-idle.cjs $exe $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-windows-five-minute-exploratory-pair
+          path: ${{ runner.temp }}/dex-long-idle.json
+          if-no-files-found: ignore
+          retention-days: 7
