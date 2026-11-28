@@ -750,6 +750,60 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd
   outline: 2px solid var(--pfg);
   outline-offset: 2px;
 }
+
+/* Settings only: a quiet list of sections. Keep every existing label,
+   control and section in place; allow dense control groups to wrap. */
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-head {
+  padding-block-end: 18px;
+  margin-block-end: 22px;
+  border-block-end: 1px solid var(--pborder);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  margin-block-end: 24px;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-card + .dx-card {
+  border-block-start: 1px solid var(--pborder);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-head {
+  padding: 18px 0 0;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-head h3 {
+  color: var(--pfg);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-body {
+  padding: 6px 0 0;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  max-inline-size: 62%;
+  justify-content: flex-end;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl > :is(input, select) {
+  min-inline-size: 0 !important;
+  max-inline-size: 100%;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) #aimodel-custom {
+  margin-inline-start: 0 !important;
+}
+@media (max-width: 560px) {
+  html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl {
+    max-inline-size: 100%;
+    justify-content: flex-start;
+  }
+}
 @media (max-width: 560px) {
   .dx-card:has(#swatches) .dx-row:has(#swatches) { flex-wrap: wrap; gap: 10px; }
   .dx-card:has(#swatches) .dx-row:has(#swatches) > .tx { flex: 1 0 100%; }
