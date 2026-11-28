@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -57,21 +57,21 @@ test('multitasking uses one distinct foreground URL and a matching inventory', (
 
 test('memory roles sum counts and counters independently without converting missing values to zero', () => {
   const result = memoryByRole([
-    { role: 'browser', wsBytes: 10, privateBytes: 5 },
-    { role: 'renderer', wsBytes: 40, privateBytes: 20 },
-    { role: 'renderer', wsBytes: 50, privateBytes: null },
-    { role: 'gpu-process', wsBytes: 0, privateBytes: 0 },
+    { role: 'browser', wsBytes: 10, privateBytes: 5, privateWsBytes: 2 },
+    { role: 'renderer', wsBytes: 40, privateBytes: 20, privateWsBytes: 15 },
+    { role: 'renderer', wsBytes: 50, privateBytes: null, privateWsBytes: 30 },
+    { role: 'gpu-process', wsBytes: 0, privateBytes: 0, privateWsBytes: 0 },
   ], (p) => p.role);
   assert.deepEqual(result, {
     byRole: {
-      browser: { count: 1, wsBytes: 10, privateBytes: 5 },
-      renderer: { count: 2, wsBytes: 90, privateBytes: null },
-      'gpu-process': { count: 1, wsBytes: 0, privateBytes: 0 },
+      browser: { count: 1, wsBytes: 10, privateBytes: 5, privateWsBytes: 2 },
+      renderer: { count: 2, wsBytes: 90, privateBytes: null, privateWsBytes: 45 },
+      'gpu-process': { count: 1, wsBytes: 0, privateBytes: 0, privateWsBytes: 0 },
     },
-    totals: { count: 4, wsBytes: 100, privateBytes: null },
+    totals: { count: 4, wsBytes: 100, privateBytes: null, privateWsBytes: 47 },
   });
   const missingWorkingSet = memoryByRole([{ role: 'renderer', privateBytes: 42 }], (p) => p.role);
-  assert.deepEqual(missingWorkingSet.totals, { count: 1, wsBytes: null, privateBytes: 42 });
+  assert.deepEqual(missingWorkingSet.totals, { count: 1, wsBytes: null, privateBytes: 42, privateWsBytes: null });
 });
 
 test('trial orders alternate from either starting browser without mutating the input', () => {
@@ -83,4 +83,16 @@ test('trial orders alternate from either starting browser without mutating the i
   assert.deepEqual(workloadOrder(pair, 2, true), pair);
   assert.deepEqual(workloadOrder(['edge'], 1, true), ['edge']);
   assert.deepEqual(pair, ['edge', 'dexerion']);
+});
+
+
+test('native renderer attribution does not count shared process memory twice', () => {
+  const labels = rendererRoleMap([
+    { pid: 10, kind: 'shell' }, { pid: 11, kind: 'foreground' },
+    { pid: 12, kind: 'background' }, { pid: 12, kind: 'background' },
+    { pid: 13, kind: 'background' }, { pid: 13, kind: 'foreground' },
+    { pid: 0, kind: 'other' }, { pid: 14, kind: 'invalid' },
+  ]);
+  assert.deepEqual([...labels], [[10, 'renderer-shell'], [11, 'renderer-foreground'],
+    [12, 'renderer-background'], [13, 'renderer-mixed']]);
 });

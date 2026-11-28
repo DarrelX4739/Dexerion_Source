@@ -45,7 +45,7 @@ function matchesInventory(tabs, expected) {
 
 function memoryByRole(tree, roleOf) {
   const byRole = new Map();
-  const totals = { count: 0, wsBytes: 0, privateBytes: 0 };
+  const totals = { count: 0, wsBytes: 0, privateBytes: 0, privateWsBytes: 0 };
   const add = (row, field, value) => {
     // Missing counters are not zeros. If any process lacks a measurement,
     // keep the affected total unavailable rather than under-reporting it.
@@ -54,11 +54,12 @@ function memoryByRole(tree, roleOf) {
   };
   for (const process of tree) {
     const role = roleOf(process);
-    if (!byRole.has(role)) byRole.set(role, { count: 0, wsBytes: 0, privateBytes: 0 });
+    if (!byRole.has(role)) byRole.set(role, { count: 0, wsBytes: 0, privateBytes: 0, privateWsBytes: 0 });
     for (const row of [byRole.get(role), totals]) {
       row.count++;
       add(row, 'wsBytes', process.wsBytes);
       add(row, 'privateBytes', process.privateBytes);
+      add(row, 'privateWsBytes', process.privateWsBytes);
     }
   }
   return { byRole: Object.fromEntries(byRole), totals };
@@ -69,4 +70,15 @@ function workloadOrder(browsers, trial, reverseFirst) {
     ? [...browsers].reverse() : [...browsers];
 }
 
-module.exports = { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
+function rendererRoleMap(observations) {
+  const labels = new Map();
+  for (const { pid, kind } of observations) {
+    if (!Number.isInteger(pid) || pid <= 0 || !['shell', 'foreground', 'background', 'other'].includes(kind)) continue;
+    const label = 'renderer-' + kind;
+    const old = labels.get(pid);
+    labels.set(pid, !old || old === label ? label : 'renderer-mixed');
+  }
+  return labels;
+}
+
+module.exports = { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };

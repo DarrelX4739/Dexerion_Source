@@ -48,7 +48,7 @@ const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
-const { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -151,7 +151,7 @@ function runPs(script, args, timeoutSec) {
 }
 
 const samplePower = (label, secs) => runPs(PS_SCRIPT, { DurationSec: secs }, secs + 40);
-const treeSnapshot = () => runPs(S, {}, 60);
+const treeSnapshot = (final = false) => runPs(S, final ? { IncludePrivateWorkingSet: true } : {}, 60);
 const envRecord = () => { try { return runPs(E, {}, 30); } catch { return null; } };
 
 // GPU sampler runs concurrently with the RAPL sampler; spawn + await later.
@@ -316,6 +316,17 @@ async function prepareDexerion(base, scenario) {
     });
     return {
       profileDir: profile,
+      rendererRoles: () => app.evaluate(({ BrowserWindow, webContents }, [foreground, ...background]) => {
+        const shells = new Set(BrowserWindow.getAllWindows().map((w) => w.webContents.id));
+        return webContents.getAllWebContents().flatMap((wc) => {
+          try {
+            const url = wc.getURL();
+            const kind = shells.has(wc.id) ? 'shell' : url === foreground ? 'foreground'
+              : background.includes(url) ? 'background' : 'other';
+            return [{ pid: wc.getOSProcessId(), kind }];
+          } catch { return []; }
+        });
+      }, urls),
       pageState: () => app.evaluate(async ({ webContents }, url) => {
         const page = webContents.getAllWebContents().find((wc) => wc.getURL() === url);
         return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })") : null;
@@ -415,7 +426,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
       { skip: !t.floor, wait: sleep });
     t.power = workloadPower.sample;
     t.powerError = workloadPower.error;
-    const snapB = treeSnapshot();
+    const snapB = treeSnapshot(true);
     const afterForeground = await session.pageState();
     gpuFinished = await gpu.finish();
 
@@ -450,10 +461,25 @@ async function runTrial(browser, scenario, base, trialIdx) {
       wsMBA: toMiB(memoryA.totals.wsBytes),
       wsMBB: toMiB(memoryB.totals.wsBytes),
       privateMiBB: toMiB(memoryB.totals.privateBytes),
+      privateWsMiBB: toMiB(memoryB.totals.privateWsBytes),
       byRoleB: Object.fromEntries(Object.entries(memoryB.byRole).map(([role, row]) => [
-        role, { count: row.count, wsMiB: toMiB(row.wsBytes), privateMiB: toMiB(row.privateBytes) },
+        role, { count: row.count, wsMiB: toMiB(row.wsBytes), privateMiB: toMiB(row.privateBytes), privateWsMiB: toMiB(row.privateWsBytes) },
       ])),
     };
+    if (session.rendererRoles) {
+      try {
+        const labels = rendererRoleMap(await session.rendererRoles());
+        const rendererTree = treeB.filter((p) => roleOf(p) === 'renderer');
+        t.ram.dexRendererBreakdown = Object.fromEntries(Object.entries(
+          memoryByRole(rendererTree, (p) => labels.get(p.pid) || 'renderer-unmapped').byRole,
+        ).map(([role, row]) => [role, {
+          count: row.count, wsMiB: toMiB(row.wsBytes), privateMiB: toMiB(row.privateBytes),
+          privateWsMiB: toMiB(row.privateWsBytes),
+        }]));
+      } catch (err) {
+        t.ram.dexRendererError = String(err?.message || err).split('\n')[0];
+      }
+    }
 
     // GPU axis, grouped by pid and filtered to the tree.
     if (hasGpuSample(gpuFinished)) {
@@ -606,13 +632,25 @@ function pctOfEdge(dexS, edgeS) {
         g.summary = {};
         for (const [axis, fn] of Object.entries(AXES)) g.summary[axis] = summarize(valid, fn);
         g.privateMiB = summarize(valid, (t) => t.ram?.privateMiBB);
+        g.privateWsMiB = summarize(valid, (t) => t.ram?.privateWsMiBB);
         g.ramByRole = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.ram?.byRoleB || {})))].sort().map((role) => [
           role, {
             wsMiB: summarize(valid, (t) => t.ram?.byRoleB[role]?.wsMiB),
             privateMiB: summarize(valid, (t) => t.ram?.byRoleB[role]?.privateMiB),
+            privateWsMiB: summarize(valid, (t) => t.ram?.byRoleB[role]?.privateWsMiB),
           },
         ]));
         console.log('  RAM by role ' + browser + ': ' + JSON.stringify(g.ramByRole));
+        console.log('  Private resident RAM ' + browser + ': ' + JSON.stringify(g.privateWsMiB));
+        const rendererNames = [...new Set(valid.flatMap((t) => Object.keys(t.ram?.dexRendererBreakdown || {})))].sort();
+        if (rendererNames.length) {
+          g.dexRendererBreakdown = Object.fromEntries(rendererNames.map((role) => [role, {
+            wsMiB: summarize(valid, (t) => t.ram?.dexRendererBreakdown[role]?.wsMiB),
+            privateMiB: summarize(valid, (t) => t.ram?.dexRendererBreakdown[role]?.privateMiB),
+            privateWsMiB: summarize(valid, (t) => t.ram?.dexRendererBreakdown[role]?.privateWsMiB),
+          }]));
+          console.log('  Dexerion renderer attribution: ' + JSON.stringify(g.dexRendererBreakdown));
+        }
         // Within-sample power spread flag (noise-limited attribution).
         g.noiseLimited = valid.map((t) => ({
           trial: t.trial,
