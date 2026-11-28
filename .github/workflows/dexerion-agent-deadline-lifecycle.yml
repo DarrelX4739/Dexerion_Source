@@ -1,0 +1,78 @@
+name: Dexerion planned-step timer lifecycle
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-agent-deadline-lifecycle.yml'
+      - 'code/build/e2e/agent-deadline-lifecycle.spec.js'
+      - 'code/build/scripts/test-agent-deadline-lifecycle.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-lifecycle:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '35000'
+    defaults:
+      run:
+        working-directory: code/build
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked Electron runtime
+        run: npm ci
+      - name: Observe inherited live deadlines after real tab closure
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD:code/code/src/main/ai-agent.js)" = 3e6901d295b5d090026ba35b2cc28949e5fb11ab
+          DEX_AGENT_DEADLINE_FIXTURE=stock npm run test:e2e -- e2e/agent-deadline-lifecycle.spec.js --output "$RUNNER_TEMP/agent-deadline-stock"
+      - name: Verify exact same-source cleanup with existing app policy and navigation
+        run: |
+          set -eu
+          src=../code/src/main/ai-agent.js
+          tmp=$(mktemp)
+          cp "$src" "$tmp"
+          trap 'cp "$tmp" "$src"; rm -f "$tmp"' EXIT
+          node - "$src" <<'JS'
+          const fs = require('node:fs');
+          const hash = require('node:crypto').createHash;
+          const assert = require('node:assert/strict');
+          const p = process.argv[2];
+          const raw = fs.readFileSync(p,'utf8');
+          const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+          let lines = raw.split(/\r?\n/);
+          const n = lines.findIndex(s => s.includes("setTimeout(() => rej(new Error('step timeout after '"));
+          assert(n > 0);
+          assert(lines[n-4].includes('Step timeout:'));
+          lines[n-4] = '    // Report the existing deadline without changing how dispatch is cancelled.';
+          assert(lines[n+1].includes('Promise.race') && lines[n+2].includes('catch (err)') && lines[n+3].includes('} else {'));
+          lines.splice(n+3,0,'      finally { clearTimeout(deadline); }');
+          lines.splice(n,1,'      let deadline;','      const timeout = new Promise((_, rej) => {',
+            "        deadline = setTimeout(() => rej(new Error('step timeout after ' + timeoutMs + 'ms')), timeoutMs);",'      });');
+          const canonical=Buffer.from(lines.join('\n'));
+          assert.equal(hash('sha1').update('blob '+canonical.length+'\0').update(canonical).digest('hex'),'2dde96258d4b96dbf86e948aa965e730f99bdf8f');
+          fs.writeFileSync(p,lines.join(eol));
+          JS
+          node --test scripts/test-agent-deadline-lifecycle.cjs
+          DEX_AGENT_DEADLINE_FIXTURE=candidate npm run test:e2e -- e2e/agent-deadline-lifecycle.spec.js --output "$RUNNER_TEMP/agent-deadline-candidate"
+      - name: Verify original production file restored
+        run: git diff --exit-code -- ../code/src/main/ai-agent.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-deadline-lifecycle-windows
+          path: |
+            ${{ runner.temp }}/agent-deadline-stock
+            ${{ runner.temp }}/agent-deadline-candidate
+          if-no-files-found: ignore
+          retention-days: 7
