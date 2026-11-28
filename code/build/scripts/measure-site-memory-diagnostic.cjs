@@ -199,8 +199,16 @@ async function probeArm(kind,exe,urls){
       const dump=await trace(session.devtools,memCategory,()=>during(session.devtools.send(
         'Tracing.requestMemoryDump',{deterministic:false,levelOfDetail:'detailed'}),18000,'native allocator dump'));
       const pids=mapped.map(x=>x.pid);
-      try{allocator=readAllocatorDump(dump.events,dump.action,pids);}
-      catch(e){allocatorRecords=describeAllocatorRecords(dump.events,dump.action,pids);throw e;}
+      try{
+        allocator=readAllocatorDump(dump.events,dump.action,pids);
+        if(allocator.rows.some(r=>r.ambiguous)){
+          allocatorError='conflicting allocator records for fixture renderer(s)';
+          allocatorRecords=describeAllocatorRecords(dump.events,dump.action,pids);
+        }
+      }catch(e){
+        allocatorRecords=describeAllocatorRecords(dump.events,dump.action,pids);
+        throw e;
+      }
     }catch(e){
       allocatorError=String(e?.message||e).split('\n')[0];
     }

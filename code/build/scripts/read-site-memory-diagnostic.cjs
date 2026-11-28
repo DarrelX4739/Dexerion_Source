@@ -1,5 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
+const {isDeepStrictEqual}=require('node:util');
 
 // A browser-level trace has no owning WebContents. Read each page's own trace
 // metadata and match its exact main-frame token + URL; never use the browser
@@ -76,10 +77,17 @@ function readAllocatorDump(events,dump,pids) {
   const idsMatch=dumpIds.has(normId(dump.dumpGuid));
   const rows=[];
   for(const pid of pids){
-    const a=tagged.filter(e=>e.pid===pid&&e.args.dumps.allocators);
-    assert(a.length<=1,'duplicate allocator records for a fixture renderer');
+    // Perfetto can emit a process-totals companion with allocators: {}.
+    // It is not a second allocator observation. Never merge populated nodes.
+    const a=tagged.filter(e=>e.pid===pid&&Object.keys(e.args.dumps.allocators??{}).length);
     if(!a.length){rows.push({pid,categories:null});continue;}
     const nodes=a[0].args.dumps.allocators;
+    if(a.length>1&&(!Number.isFinite(a[0].ts)||a.some(e=>e.ts!==a[0].ts||
+      e.args.dumps.level_of_detail!==a[0].args.dumps.level_of_detail||
+      !isDeepStrictEqual(e.args.dumps.allocators,nodes)))){
+      rows.push({pid,categories:null,ambiguous:true});
+      continue;
+    }
     const bytes=(node,key)=>node?.attrs?.[key]?.type==='scalar'&&node.attrs[key].units==='bytes'
       ? hexBytes(node.attrs[key].value):null;
     const categories=Object.fromEntries(CATEGORIES.map(name=>{

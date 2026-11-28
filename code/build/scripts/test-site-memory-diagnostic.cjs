@@ -41,7 +41,20 @@ test('uses only safe scalar byte values and reports missing, nonadditive allocat
   assert.equal(hexBytes('0'),0);
   assert.equal(hexBytes('ffffffffffffffff'),null);
   assert.throws(()=>readAllocatorDump([event(),event('0x1')],{success:true,dumpGuid:'0xa9'},[81]),/no unique/);
-  assert.throws(()=>readAllocatorDump([event(),event()],{success:true,dumpGuid:'0xa9'},[81]),/duplicate allocator/);
+  const dump={success:true,dumpGuid:'0xa9'};
+  const valid={...event(),ts:142};
+  const totals={...valid,args:{dumps:{allocators:{},process_totals:{}}}};
+  const differentTs={...valid,ts:143};
+  const differentData=structuredClone(valid);
+  differentData.args.dumps.allocators.v8.attrs.size.value='200';
+  assert.deepEqual(readAllocatorDump([valid,totals,structuredClone(valid)],dump,[81]).rows[0],result.rows[0]);
+  for(const duplicate of [differentData,differentTs]){
+    // A conflict in one exact PID masks only that PID, never its neighbors.
+    assert.deepEqual(readAllocatorDump([valid,duplicate,{...valid,pid:82}],dump,[81,82]).rows,[
+      {pid:81,categories:null,ambiguous:true},{...result.rows[0],pid:82},
+    ]);
+  }
+  assert.equal(readAllocatorDump([event(),event()],dump,[81]).rows[0].ambiguous,true);
 });
 
 test('reports bounded structural metadata without admitting ambiguous dump records',()=>{
