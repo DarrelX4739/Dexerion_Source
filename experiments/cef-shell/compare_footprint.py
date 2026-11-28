@@ -280,6 +280,70 @@ def request_electron_window_close(proc):
         raise RuntimeError("Electron did not exit cleanly after its window closed")
 
 
+def activate_owned_window(proc):
+    """Request ordinary foreground activation on a dedicated CI desktop."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        user = ctypes.WinDLL("user32", use_last_error=True)
+        cb_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        user.EnumWindows.argtypes = [cb_type, wintypes.LPARAM]
+        user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user.IsWindowVisible.argtypes = [wintypes.HWND]
+        user.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        user.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user.GetForegroundWindow.restype = wintypes.HWND
+        targets = []
+        @cb_type
+        def visit(hwnd, _):
+            pid = wintypes.DWORD()
+            user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value == proc.pid and user.IsWindowVisible(hwnd):
+                name = ctypes.create_unicode_buffer(256)
+                user.GetClassNameW(hwnd, name, len(name))
+                if name.value.startswith("Chrome_WidgetWin_"):
+                    targets.append(hwnd)
+            return True
+        if user.EnumWindows(visit, 0) and len(targets) == 1:
+            return "already-active" if user.GetForegroundWindow() == targets[0] else (
+                "requested" if user.SetForegroundWindow(targets[0]) else "activation-refused")
+        return f"owned-windows={len(targets)}"
+    from Xlib import X, Xatom, display, error
+    from Xlib.protocol import event
+    d = display.Display()
+    try:
+        root = d.screen().root
+        pid_atom = d.intern_atom("_NET_WM_PID")
+        active_atom = d.intern_atom("_NET_ACTIVE_WINDOW")
+        delete = d.intern_atom("WM_DELETE_WINDOW")
+        targets, pending = [], list(root.query_tree().children)
+        while pending:
+            w = pending.pop()
+            try:
+                value = w.get_full_property(pid_atom, Xatom.CARDINAL)
+                if (value is not None and list(value.value) == [proc.pid] and
+                        w.get_attributes().map_state == X.IsViewable and
+                        delete in (w.get_wm_protocols() or [])):
+                    targets.append(w)
+                else:
+                    pending.extend(w.query_tree().children)
+            except error.BadWindow:
+                continue
+        if len(targets) != 1:
+            return f"owned-windows={len(targets)}"
+        target = targets[0]
+        old = root.get_full_property(active_atom, Xatom.WINDOW)
+        if old is not None and list(old.value) == [target.id]:
+            return "already-active"
+        root.send_event(event.ClientMessage(window=target, client_type=active_atom,
+            data=(32, [1, X.CurrentTime, 0, 0, 0])),
+            event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+        d.sync()
+        return "requested"
+    finally:
+        d.close()
+
+
 def verify_saved_tabs(profile, url):
     rows = json.loads((profile / "tabs.json").read_text(encoding="utf-8-sig"))["windows"]
     if len(rows) != 1 or rows[0].get("activeIndex") != 0 or len(rows[0]["tabs"]) != 1:
@@ -290,13 +354,19 @@ def verify_saved_tabs(profile, url):
         raise RuntimeError("Electron did not confirm the loaded fixture in its own session snapshot")
 
 
-def wait_proof(event, proc, root, known, timeout):
-    until = time.monotonic() + timeout
+def wait_proof(event, proc, root, known, timeout, observed=None):
+    tick = time.monotonic()
+    until = tick + timeout
+    next_activation = tick + 0.6
     while not event.wait(0.15):
         if proc.poll() is not None:
             raise RuntimeError(f"browser exited before fixture proof ({proc.returncode})")
-        if time.monotonic() > until:
+        tick = time.monotonic()
+        if tick > until:
             raise RuntimeError("timed out waiting for visible renderer fixture proof")
+        if observed is not None and tick >= next_activation:
+            observed["activation"] = activate_owned_window(proc)
+            next_activation = tick + 2
         known.update(stable_tree(root))
 
 
@@ -324,7 +394,7 @@ def trial(kind, args, build_dir):
             root = psutil.Process(proc.pid)
             known = {root}
             try:
-                wait_proof(ready, proc, root, known, 55)
+                wait_proof(ready, proc, root, known, 55, observed)
                 time.sleep(args.settle)
                 samples = []
                 retries = 0
@@ -355,7 +425,7 @@ def trial(kind, args, build_dir):
                 release.set()
                 shutdown(proc, root, known)
         return {"arm": kind, "renderer": observed["start"], "two_visible_frame_proofs": True,
-                "fixture_loads": observed["loads"],
+                "fixture_loads": observed["loads"], "activation": observed.get("activation", "not-needed"),
                 "workload_check": "canonical one-window/one-tab saved session" if kind == "electron"
                                   else "one BrowserView by construction and exactly one verified page load",
                 "samples": samples, "unstable_samples_retried": retries, "median": summarize(samples)}
