@@ -1,7 +1,7 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
-const { createReadStream, createWriteStream } = require('node:fs');
+const { constants, createReadStream, createWriteStream } = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -33,7 +33,22 @@ async function checkBinary(file, arch, appImage) {
   }
 }
 
-async function build({ runtime, payload, output, arch = 'x64' }) {
+async function readLogo(file) {
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size < 33 || info.size > 10 * 1024 * 1024) throw Error('Setup logo must be a regular PNG file under 10 MiB');
+    const logo = await handle.readFile();
+    if (logo.subarray(0, 16).toString('hex') !== '89504e470d0a1a0a0000000d49484452' ||
+        !logo.readUInt32BE(16) || !logo.readUInt32BE(20) || logo.readUInt32BE(16) > 4096 || logo.readUInt32BE(20) > 4096) {
+      throw Error('Setup logo is not a valid PNG with dimensions between 1 and 4096 px');
+    }
+    return logo;
+  } finally { await handle.close(); }
+}
+
+async function build({ runtime, payload, output, arch = 'x64', logo = path.join(__dirname, '../../../code/code/assets/logo.png') }) {
+  const logoBytes = await readLogo(logo);
   await checkBinary(path.join(runtime, 'dexerion-bin'), arch, false);
   await checkBinary(payload, arch, true);
   await fs.mkdir(path.dirname(output), { recursive: true });
@@ -54,7 +69,7 @@ async function build({ runtime, payload, output, arch = 'x64' }) {
     for (const file of ['package.json', 'main.cjs', 'preload.cjs', 'install.cjs', 'index.html', 'style.css', 'view.js']) {
       await fs.copyFile(path.join(__dirname, file), path.join(app, file));
     }
-    await fs.copyFile(path.join(__dirname, '../../../code/code/assets/logo.png'), path.join(app, 'logo.png'));
+    await fs.writeFile(path.join(app, 'logo.png'), logoBytes, { flag: 'wx' });
     const packedPayload = path.join(stage, 'bundle', 'Dexerion.AppImage');
     await fs.copyFile(payload, packedPayload);
     await fs.chmod(packedPayload, 0o755);
@@ -79,10 +94,10 @@ async function build({ runtime, payload, output, arch = 'x64' }) {
 
 if (require.main === module) {
   const { values } = require('node:util').parseArgs({ options: {
-    runtime: { type: 'string' }, payload: { type: 'string' }, output: { type: 'string' }, arch: { type: 'string' }
+    runtime: { type: 'string' }, payload: { type: 'string' }, output: { type: 'string' }, arch: { type: 'string' }, logo: { type: 'string' }
   } });
   if (!values.runtime || !values.payload || !values.output) {
-    console.error('Usage: node build.cjs --runtime linux-unpacked --payload Dexerion.AppImage --output Dexerion-Setup-Linux-x64.run [--arch x64|arm64]');
+    console.error('Usage: node build.cjs --runtime linux-unpacked --payload Dexerion.AppImage --output Dexerion-Setup-Linux-x64.run [--arch x64|arm64] [--logo path/to/logo.png]');
     process.exitCode = 1;
   } else build(values).then(console.log, error => { console.error(error.message); process.exitCode = 1; });
 }

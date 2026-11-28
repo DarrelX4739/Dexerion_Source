@@ -16,13 +16,15 @@ node --test .github/packaging/linux-installer/install.test.cjs
 node .github/packaging/linux-installer/build.cjs \
   --runtime path/to/linux-unpacked \
   --payload path/to/Dexerion.AppImage \
+  --logo code/code/assets/logo.png \
   --output path/to/Dexerion-Setup-Linux-x64.run
 ./path/to/Dexerion-Setup-Linux-x64.run --verify
 ./path/to/Dexerion-Setup-Linux-x64.run --preview
 xvfb-run -a ./path/to/Dexerion-Setup-Linux-x64.run --smoke-test
 ```
 
-`--verify` verifies archive integrity and the embedded AppImage digest without
+`--logo` accepts the original PNG directly from the app source checkout; it
+defaults to the PNG in the Setup source checkout if omitted. `--verify` verifies archive integrity and the embedded AppImage digest without
 starting Electron. `--preview` runs the UI without installing anything.
 `--smoke-test` runs a real Electron preview in a temporary home directory, checks
 the logo and accent, exercises the folder chooser and install confirmation, and
