@@ -46,7 +46,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
-const { optionalSample, requireTree, hasGpuSample } = require('./measure-sample-guard.cjs');
+const { optionalSample, requireTree, hasGpuSample, foregroundSample } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -105,6 +105,7 @@ const ANIMATED_HTML = `<!doctype html><meta charset="utf-8"><title>Dexerion meas
   let f = 0;
   function frame() {
     f += 1;
+    window.__dexMeasureFrames = f;
     x.fillStyle = '#101018'; x.fillRect(0, 0, c.width, c.height);
     for (let i = 0; i < 28; i += 1) {
       const a = (f / 30 + i / 28) * Math.PI * 2;
@@ -260,6 +261,7 @@ async function prepareEdge(base, scenario) {
   await first.bringToFront();
   return {
     profileDir: dir,
+    pageState: () => first.evaluate(() => ({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })),
     close: async () => { try { await context.close(); } catch {} try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} },
   };
 }
@@ -308,7 +310,14 @@ async function prepareDexerion(base, scenario) {
   });
   return {
     profileDir: launched.profile,
-    close: async () => { try { await launched.app.close(); } catch {} },
+    pageState: () => launched.app.evaluate(async ({ webContents }, url) => {
+      const page = webContents.getAllWebContents().find((wc) => wc.getURL() === url);
+      return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })") : null;
+    }, base + '/' + def.foreground),
+    close: async () => {
+      try { await launched.app.close(); } catch {}
+      try { fs.rmSync(launched.profile, { recursive: true, force: true }); } catch {}
+    },
   };
 }
 
@@ -348,6 +357,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
       : await prepareDexerion(base, scenario);
     await sleep(SETTLE_MS);
 
+    const beforeForeground = await session.pageState();
     const snapA = treeSnapshot();
     const treeA = requireTree(extractTree(snapA, session.profileDir), 'A');
     gpu = spawnGpu(treeA.map((p) => p.pid).join(','));
@@ -356,12 +366,15 @@ async function runTrial(browser, scenario, base, trialIdx) {
     t.power = workloadPower.sample;
     t.powerError = workloadPower.error;
     const snapB = treeSnapshot();
+    const afterForeground = await session.pageState();
     gpuFinished = await gpu.finish();
 
     const treeB = requireTree(extractTree(snapB, session.profileDir), 'B');
     const wallMs = Date.parse(snapB.capturedAt) - Date.parse(snapA.capturedAt);
     const wallSec = Math.max(1, wallMs / 1000);
     t.wallSec = round(wallSec, 1);
+    t.foreground = foregroundSample(beforeForeground, afterForeground, wallSec,
+      SCENARIOS[scenario].foreground === 'animated');
 
     // CPU + RAM across the whole tree.
     const cd = cpuDelta(treeA, treeB);
@@ -499,7 +512,7 @@ function pctOfEdge(dexS, edgeS) {
             results.invalidTrials.push({ browser, scenario, trial: t.trial, reason: t.invalidReason });
             console.log('    INVALID: ' + t.invalidReason);
           } else {
-            console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts');
+            console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts, foreground fps ' + (t.foreground.fps === null ? 'n/a' : round(t.foreground.fps, 2)));
           }
           await sleep(2000); // let the browser's processes fully exit
         }

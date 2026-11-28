@@ -21,4 +21,15 @@ function hasGpuSample(gpu) {
   return Boolean(gpu && !gpu.error && gpu.intervalCount > 0 && Array.isArray(gpu.perPid));
 }
 
-module.exports = { optionalSample, requireTree, hasGpuSample };
+function foregroundSample(before, after, seconds, animated) {
+  if (!(before?.visible && after?.visible)) throw new Error('Foreground page was not visible across the sample');
+  if (!animated) return { visible: true, fps: null };
+  if (!(Number.isFinite(before.frames) && Number.isFinite(after.frames) && seconds > 0)) {
+    throw new Error('Foreground frame counter missing');
+  }
+  const fps = (after.frames - before.frames) / seconds;
+  if (!(fps >= 15)) throw new Error('Foreground animation below the 15-fps validation floor');
+  return { visible: true, fps };
+}
+
+module.exports = { optionalSample, requireTree, hasGpuSample, foregroundSample };

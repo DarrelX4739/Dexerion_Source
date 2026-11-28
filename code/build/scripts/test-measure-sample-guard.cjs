@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { optionalSample, requireTree, hasGpuSample } = require('./measure-sample-guard.cjs');
+const { optionalSample, requireTree, hasGpuSample, foregroundSample } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -33,4 +33,13 @@ test('no GPU intervals is missing, but a measured zero tree can remain valid', (
   assert.equal(hasGpuSample({ intervalCount: 0, perPid: [] }), false);
   assert.equal(hasGpuSample(null), false);
   assert.equal(hasGpuSample({ intervalCount: 2, perPid: [] }), true);
+});
+
+test('foreground samples require visibility and verify animation advances', () => {
+  const state = (frames, visible = true) => ({ frames, visible });
+  assert.deepEqual(foregroundSample(state(20), state(260), 4, true), { visible: true, fps: 60 });
+  assert.deepEqual(foregroundSample(state(0), state(0), 4, false), { visible: true, fps: null });
+  assert.throws(() => foregroundSample(state(0, false), state(180), 4, true), /not visible/);
+  assert.throws(() => foregroundSample(state(0), state(4), 4, true), /below the 15-fps/);
+  assert.throws(() => foregroundSample(state(undefined), state(30), 4, true), /counter missing/);
 });

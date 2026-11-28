@@ -39,3 +39,15 @@ No broad foreground CPU win was demonstrated. Background CPU was low and
 the idle Chrome CPU changed substantially across runners, so idle percent
 reduction is not treated as a stable result. Hardware GPU and power
 remain unmeasured in this Linux comparison.
+
+## Dormant-account RAM, isolated on one build
+
+[Run 46092715294](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46092715294)
+compared the same Electron build `ebb9eb0` with
+`DEX_COLD_ACCOUNT_TASKS=off` and with it on, six alternating trials per arm.
+The fixture had 12 unopened synthetic accounts, 3,000 history entries and
+50 archived chats per account. The normal boot reminder sweep had time to run.
+Main-process PSS fell from 125.35 to 98.84 MiB (21.2%); the whole tree fell
+from 369.75 to 344.36 MiB (6.9%). This isolates a real app gain for a large
+multi-account profile; it does not extrapolate to a fresh profile or claim
+a general 6.9% improvement against another browser.

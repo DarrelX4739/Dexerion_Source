@@ -38,14 +38,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs
       - name: Measure stock Edge and Dexerion on the same virtual Windows host
+        env:
+          FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
         run: |
+          if ($env:FOCUS_ONLY -eq 'true') { $env:MEASURE_SCENARIOS = 'active-browsing' }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $file = Join-Path $env:MEASURE_OUT_DIR 'measure-protocol-main.json'
           node scripts/grade-edge-target.cjs $file
           if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
-          node -e "const r=require(process.argv[1]); const names=['active-browsing','background-tabs','idle','multitasking']; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=3)))))process.exit(1)" $file
+          node -e "const r=require(process.argv[1]); const names=r.config.scenarioOrder; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=3)))))process.exit(1)" $file
       - name: Keep Windows comparison evidence
         if: always()
         uses: actions/upload-artifact@v4
