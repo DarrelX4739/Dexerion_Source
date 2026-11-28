@@ -11,16 +11,26 @@ npm install
 npm start
 ```
 
-## Self-test (automated, needs a display + network)
+## Run checks
+
+From the repository root, install locked dependencies and run the source and
+unit checks:
 
 ```powershell
-node scripts/smoke.js
-npx electron . --no-sandbox --run-selftest
+npm --prefix code/build ci
+npm --prefix code/build test
 ```
 
-Covers: unpacked MV3 load, background SW, content-script injection,
-`storage`, navigation, history, bookmarks, session persistence,
-disable/re-enable/reload/remove.
+Run the real Electron smoke tests with a desktop display (use `xvfb-run -a`
+in front of this command on a headless Linux worker):
+
+```powershell
+npm --prefix code/build run test:smoke
+```
+
+The smoke tests use disposable profiles and started local fixtures. They cover
+boot, navigation, the AI sidebar, bookmarks, timer controls, installed
+extension popups, and activation of a dormant account.
 
 ## Package (Windows)
 
