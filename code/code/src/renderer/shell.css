@@ -2330,3 +2330,14 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   outline:2px solid var(--dx-focus-ring);outline-offset:-2px;
   box-shadow:inset 0 1px 0 var(--hl);
 }
+
+/* A short signal for the horizontal layout; a group tint stays on the row,
+   while the active row is distinguished by its label and marker. */
+:where(:root:not([data-skin])) body:not(.vertical) .tab.active::after {
+  left:10px;right:10px;border-radius:2px;
+}
+:where(:root:not([data-skin])) body:not(.vertical) .tab.active .t {font-weight:600}
+:where(:root:not([data-skin])) body.vertical #tabstrip.rail-open .tab.active.grouped {
+  background:color-mix(in srgb,var(--identity) 10%,var(--hover));
+}
+:where(:root:not([data-skin])) #tabstrip.rail-open .gchip .gdot {width:8px;height:8px}
