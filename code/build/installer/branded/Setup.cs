@@ -53,6 +53,7 @@ internal sealed class Wizard
     private readonly bool preview;
     private readonly Window window;
     private readonly StackPanel pages;
+    private readonly BitmapSource brandLogo;
     private readonly Button primary, back, cancel, close, minimize;
     private readonly ScrollViewer scroller;
     private Stage stage;
@@ -80,7 +81,8 @@ internal sealed class Wizard
             image.StreamSource = source;
             image.EndInit();
             image.Freeze();
-            Element<Image>("Logo").Source = image;
+            brandLogo = image;
+            Element<Image>("Logo").Source = brandLogo;
             window.Icon = image;
         }
         window.Width = Math.Min(window.Width, SystemParameters.WorkArea.Width);
@@ -134,16 +136,42 @@ internal sealed class Wizard
         };
     }
 
-    private void Lead(string title, string note, int size = 34)
+    private void Lead(string title, string note, int size = 34, Panel destination = null)
     {
+        var container = destination ?? pages;
         var heading = Text(title, size, "Ink", true);
         heading.Margin = new Thickness(0, 0, 0, 5);
-        pages.Children.Add(heading);
+        container.Children.Add(heading);
         var description = Text(note, 14, "Muted", false);
         description.MaxWidth = 470;
         description.HorizontalAlignment = HorizontalAlignment.Left;
         description.Margin = new Thickness(0, 0, 0, 19);
-        pages.Children.Add(description);
+        container.Children.Add(description);
+    }
+
+    private void Welcome()
+    {
+        var lockup = new DockPanel { LastChildFill = true };
+        var mark = new Image
+        {
+            Source = brandLogo, Width = 124, Height = 124, Stretch = Stretch.Uniform,
+            Margin = new Thickness(0, 0, 27, 0), VerticalAlignment = VerticalAlignment.Top
+        };
+        AutomationProperties.SetName(mark, "Dexerion logo");
+        DockPanel.SetDock(mark, Dock.Left);
+        lockup.Children.Add(mark);
+
+        var intro = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        intro.Children.Add(new Border
+        {
+            Width = 26, Height = 2, Background = BrushFor("Accent"),
+            HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 12)
+        });
+        Lead("Install Dexerion",
+            preview ? "Walk through Setup without installing Dexerion or changing this PC."
+            : "Set up the Dexerion desktop browser. Your existing browser profile stays in place.", 43, intro);
+        lockup.Children.Add(intro);
+        pages.Children.Add(lockup);
     }
 
     private void Show(Stage next)
@@ -151,7 +179,7 @@ internal sealed class Wizard
         stage = next;
         pages.Children.Clear();
         scroller.ScrollToTop();
-        pages.Margin = new Thickness(0, next == Stage.Welcome ? 64 : next == Stage.Installing || next == Stage.Ready ? 41 : 0, 10, 0);
+        pages.Margin = new Thickness(0, next == Stage.Welcome ? 86 : next == Stage.Installing || next == Stage.Ready ? 41 : 0, 10, 0);
         primary.Tag = next == Stage.Ready ? "finish" : next == Stage.Error ? "back" : null;
         primary.IsEnabled = true;
         primary.Visibility = next == Stage.Installing ? Visibility.Collapsed : Visibility.Visible;
@@ -163,9 +191,7 @@ internal sealed class Wizard
         switch (next)
         {
             case Stage.Welcome:
-                Lead("Install Dexerion",
-                    preview ? "Walk through Setup without installing Dexerion or changing this PC."
-                    : "Set up the Dexerion desktop browser. Your existing browser profile stays in place.", 44);
+                Welcome();
                 primary.Content = "_Continue";
                 primary.Focus();
                 break;
