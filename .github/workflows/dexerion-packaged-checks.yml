@@ -15,7 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        include:
+          - { os: ubuntu-24.04, engine: locked }
+          - { os: windows-latest, engine: locked }
+          - { os: ubuntu-24.04, engine: '44.11.6' }
+          - { os: windows-latest, engine: '44.11.6' }
+    name: Packaged ${{ matrix.os }} (${{ matrix.engine }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -24,6 +29,7 @@ jobs:
         working-directory: code/build
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      DEX_PACKAGED_ENGINE: ${{ matrix.engine }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +46,9 @@ jobs:
           const path = require('node:path');
           const config = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
           config.directories.output = 'packaged-smoke-dist';
+          if (process.env.DEX_PACKAGED_ENGINE !== 'locked') {
+            config.electronVersion = process.env.DEX_PACKAGED_ENGINE;
+          }
           if (process.platform === 'linux') {
             config.linux = { executableName: 'dexerion', icon: '../code/assets/logo.png' };
             config.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');

@@ -31,7 +31,8 @@ test('the installed-format application boots the shell and navigates a local pag
     }));
     expect(info.packaged).toBe(true);
     expect(info.archive).toMatch(/app\.asar$/);
-    expect(info.electron).toBe(require('electron/package.json').version);
+    const override = process.env.DEX_PACKAGED_ENGINE;
+    expect(info.electron).toBe(override && override !== 'locked' ? override : require('electron/package.json').version);
     await expect(win.locator('#omnibox')).toBeVisible();
     await expect(win.locator('script[src$="lucide-shell.js"]')).toHaveCount(1);
     const id = await win.evaluate(() => window.dexerion.invoke('dex:get-state').then((s) => s.active));
