@@ -58,7 +58,11 @@ test('the current visible shell and report card preserve Lucide geometry and acc
     const more = card.getByRole('button', { name: 'More actions', exact: true });
     await expect(more.locator('svg')).toBeVisible();
     expect(await more.locator('svg').evaluateAll(svgShapes)).toEqual([reference.detached[0]]);
-    await win.screenshot({ path: testInfo.outputPath('lucide-shell-fixture.png') });
+    // Compare the same painted state, not two arbitrary frames of the card
+    // entrance transition. These Playwright capture options do not edit CSS.
+    await expect(win.locator('#ai-send')).toHaveAttribute('aria-label', 'Send');
+    await win.evaluate(() => document.fonts.ready.then(() => true));
+    await win.screenshot({ path: testInfo.outputPath('lucide-shell-fixture.png'), animations: 'disabled', caret: 'hide' });
   } finally {
     try { if (launched) await launched.app.close(); } finally {
       await mock.close();
