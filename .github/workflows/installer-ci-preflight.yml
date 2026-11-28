@@ -1,0 +1,11 @@
+name: Installer CI access check
+on:
+  push:
+    branches: [installer-ci-validation]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Installer CI validation runner is available.'
