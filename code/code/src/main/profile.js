@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS = {
   downloadDir: '',
   clearOnExit: [],
   theme: 'dark', // dark | light (dark is the default)
-  accent: '#35c4ff',
+  accent: '#1F6F6B', // SC Teal; a saved accent still takes precedence.
   // V51+ interface density: compact | comfortable | spacious.
   uiDensity: 'comfortable',
   verticalTabs: true, // Dexerion is vertical-tabs only (migrated on launch)
