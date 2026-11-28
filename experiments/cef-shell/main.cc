@@ -96,11 +96,11 @@ bool ParseOptions(CefRefPtr<CefCommandLine> arguments, Options& options) {
         CefString(&parts.host) != "127.0.0.1") return false;
     options.expected_url = arguments->HasSwitch("smoke-final-url")
         ? arguments->GetSwitchValue("smoke-final-url") : options.url;
-    CefURLParts end;
-    if (!CefParseURL(options.expected_url, end) ||
-        CefString(&end.scheme) != CefString(&parts.scheme) ||
-        CefString(&end.host) != CefString(&parts.host) ||
-        CefString(&end.port) != CefString(&parts.port)) return false;
+    CefURLParts final_parts;
+    if (!CefParseURL(options.expected_url, final_parts) ||
+        CefString(&final_parts.scheme) != CefString(&parts.scheme) ||
+        CefString(&final_parts.host) != CefString(&parts.host) ||
+        CefString(&final_parts.port) != CefString(&parts.port)) return false;
     if (arguments->HasSwitch("smoke-hold-ms")) {
       const auto text = arguments->GetSwitchValue("smoke-hold-ms").ToString();
       const auto end = text.data() + text.size();
