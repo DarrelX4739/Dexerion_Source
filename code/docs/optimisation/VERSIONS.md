@@ -123,3 +123,20 @@ From the repository root, run the parity test with
 `node code/build/scripts/bench-lucide-shell.cjs`, or regenerate after adding
 an icon with `node code/build/scripts/vendor-lucide-shell.cjs`. If a new icon
 is created dynamically, add its registry name to the generator as well.
+
+### Background sweeps: no tab scan when there cannot be a sleep victim
+
+Memory Saver previously asked for every live tab's PID and audibility at each
+sweep, even when the measured working set was at or below the configured cap.
+The sweep keeps the same cadence and process sample, but skips per-tab work
+when the planner cannot use it. Above the cap, sleep priorities, active and
+audible-tab protection, and warnings still use the old path. Below the cap,
+stale warning cleanup still runs.
+
+In a 100-live-tab fixture, the under-cap path went from 100 PID and 100
+audibility calls per sweep to zero; the single process sample stayed.
+An isolated Linux/Node A/B with stubbed Electron APIs went from 85.6 to 1.6
+µs per under-cap sweep (median of nine alternating 4,000-sweep batches per
+arm). Those times exclude native sampling and are not app CPU or Edge
+results. Tests cover the exact cap, forced over-cap samples, audible/active
+guardrails, warning publication and cleanup, and the disabled saver.

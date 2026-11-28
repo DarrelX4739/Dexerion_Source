@@ -1565,7 +1565,11 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     const snap = memSnapshot();
     const totalMB = Number.isFinite(Number(forcedTotalMB)) ? Number(forcedTotalMB) : snap.workingSetMB;
     const capMB = clampCapMB(S.settings.memoryCapMB);
-    const plan = planSweep(collectTabSnaps(snap), {
+    // The planner cannot choose any victims at or below the cap. Skip the
+    // native PID/audibility queries and per-tab objects in that common case;
+    // still feed the plan to the notice check so a stale warning clears.
+    const tabSnaps = totalMB > capMB ? collectTabSnaps(snap) : [];
+    const plan = planSweep(tabSnaps, {
       totalMB, capMB, now: Date.now(),
       floorMs: Number.isFinite(floorMs) ? Number(floorMs) : undefined,
     });
