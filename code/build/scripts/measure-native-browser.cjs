@@ -117,6 +117,8 @@ function isShellUrl(url) {
 const samplePage = (page) => page.evaluate(() => ({
   visible: document.visibilityState === 'visible',
   frames: window.__dexMeasureFrames || 0,
+  clockMs: performance.now(),
+  timeOrigin: performance.timeOrigin,
   width: innerWidth,
   height: innerHeight,
   scale: devicePixelRatio,

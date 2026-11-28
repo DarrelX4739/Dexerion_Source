@@ -106,3 +106,12 @@ test('each arm appears once in every position in the four-arm launch control', (
     for (const order of orders) assert.deepEqual(new Set(order), new Set(arms));
   }
 });
+
+
+test('uses the foreground page clock rather than the different CPU snapshot boundaries', () => {
+  const before = { visible: true, frames: 14, clockMs: 20, timeOrigin: 1000 };
+  const after = { visible: true, frames: 134, clockMs: 2020, timeOrigin: 1000 };
+  assert.deepEqual(foregroundSample(before, after, 1, true), { visible: true, fps: 60 });
+  assert.throws(() => foregroundSample(before, { ...after, timeOrigin: 1001 }, 1, true), /navigation or clock/);
+  assert.throws(() => foregroundSample(before, { ...after, clockMs: 10 }, 1, true), /navigation or clock/);
+});

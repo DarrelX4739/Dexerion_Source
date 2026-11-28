@@ -27,7 +27,16 @@ function foregroundSample(before, after, seconds, animated) {
   if (!(Number.isFinite(before.frames) && Number.isFinite(after.frames) && seconds > 0)) {
     throw new Error('Foreground frame counter missing');
   }
-  const fps = (after.frames - before.frames) / seconds;
+  let duration = seconds;
+  if (before.clockMs !== undefined || after.clockMs !== undefined) {
+    if (!(Number.isFinite(before.clockMs) && Number.isFinite(after.clockMs) &&
+        Number.isFinite(before.timeOrigin) && before.timeOrigin === after.timeOrigin &&
+        after.clockMs > before.clockMs)) {
+      throw new Error('Foreground navigation or clock changed during the sample');
+    }
+    duration = (after.clockMs - before.clockMs) / 1000;
+  }
+  const fps = (after.frames - before.frames) / duration;
   if (!(fps >= 15)) throw new Error('Foreground animation below the 15-fps validation floor');
   return { visible: true, fps };
 }

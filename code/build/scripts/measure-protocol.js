@@ -280,7 +280,7 @@ async function prepareEdge(base, scenario) {
     await first.bringToFront();
     return {
       profileDir: dir,
-      pageState: () => first.evaluate(() => ({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })),
+      pageState: () => first.evaluate(() => ({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0, clockMs: performance.now(), timeOrigin: performance.timeOrigin })),
       close,
     };
   } catch (err) { await close(); throw err; }
@@ -337,7 +337,7 @@ async function prepareDexerion(base, scenario) {
       }, urls),
       pageState: () => app.evaluate(async ({ webContents }, url) => {
         const page = webContents.getAllWebContents().find((wc) => wc.getURL() === url);
-        return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })") : null;
+        return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0, clockMs: performance.now(), timeOrigin: performance.timeOrigin })") : null;
       }, urls[0]),
       close,
     };
