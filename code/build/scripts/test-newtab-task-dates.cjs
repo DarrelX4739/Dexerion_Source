@@ -50,7 +50,8 @@ function fixture(code = source, t, locale = 'en-AU', zone = 'Australia/Sydney') 
   const start = code.indexOf('(async function tasksNt(){');
   const end = code.indexOf('/* ================= Dexerion AI', start);
   assert.ok(start > 0 && end > start);
-  const instrumented = code.slice(start, end).replace('  load();\n})();', '  window.__taskFixture={paint,load};\n  load();\n})();');
+  const instrumented = code.slice(start, end).replace(/  load\(\);\r?\n\}\)\(\);/, '  window.__taskFixture={paint,load};\n  load();\n})();');
+  assert.ok(instrumented.includes('window.__taskFixture'), 'new-tab fixture hook was not inserted');
   window.eval(instrumented);
   return { window, box, calls, built, checks,
     fallbacks: () => fallbacks, ...window.__taskFixture, close: () => window.close(),
@@ -95,6 +96,13 @@ if (process.argv.includes('--bench')) {
     }
   })().catch(error => { console.error(error); process.exitCode = 1; });
 } else {
+  test('the source fixture can instrument a Windows CRLF checkout', async (t) => {
+    const f = fixture(source.replace(/\r?\n/g, '\r\n'), t);
+    await tick();
+    f.paint([]);
+    assert.equal(f.box.querySelector('.empty b').textContent, 'No open tasks');
+  });
+
   test('real new-tab task renders share two formatters and keep the exact date text across current locale, time zone and DST', async (t) => {
     const f = fixture(source, t);
     await tick();

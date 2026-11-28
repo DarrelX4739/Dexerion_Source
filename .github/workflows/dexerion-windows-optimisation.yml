@@ -14,6 +14,7 @@ on:
       - 'code/build/e2e/downloads-progress.spec.js'
       - 'code/build/e2e/search.spec.js'
       - 'code/build/e2e/cold-accounts.spec.js'
+      - 'code/build/scripts/test-newtab-task-dates.cjs'
 permissions:
   contents: read
 
