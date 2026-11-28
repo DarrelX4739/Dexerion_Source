@@ -21,6 +21,7 @@ const SCENARIOS = {
 };
 const TRIALS = Math.max(3, Number(process.env.DEX_CLOUD_TRIALS) || 5);
 const SAMPLE_MS = Math.max(2500, Number(process.env.DEX_CLOUD_SAMPLE_MS) || 4000);
+const IDLE_SAMPLE_MS = Math.max(SAMPLE_MS, 12000);
 const SETTLE_MS = 3000;
 const CHROME = process.env.DEX_CLOUD_CHROME || '/usr/bin/google-chrome';
 const OUTPUT = process.env.DEX_CLOUD_OUTPUT || 'cloud-comparison.json';
@@ -154,13 +155,13 @@ async function openDexerion(urls) {
   }
 }
 
-async function trial(open, urls, hz) {
+async function trial(open, urls, hz, sampleMs) {
   const session = await open(urls);
   try {
     await sleep(SETTLE_MS);
     const a = readTree(session.pid);
     const start = performance.now();
-    await sleep(SAMPLE_MS);
+    await sleep(sampleMs);
     const b = readTree(session.pid);
     const seconds = (performance.now() - start) / 1000;
     return { ...cpuDelta(a, b, hz, seconds), pssMiB: sumPss(b), processes: b.size, seconds };
@@ -186,7 +187,7 @@ async function main() {
     format: 'cloud-linux-directional-v1', startedAt: new Date().toISOString(),
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     os: os.release(), logicalCores: os.cpus().length, chromeVersion,
-    electron: require('electron/package.json').version, trialCount: TRIALS, sampleMs: SAMPLE_MS,
+    electron: require('electron/package.json').version, trialCount: TRIALS, sampleMs: SAMPLE_MS, idleSampleMs: IDLE_SAMPLE_MS,
     rendering: 'Linux virtual display; both arms request software rendering',
     cpu: 'percent of one logical core, process tree', ram: 'whole-tree proportional set size (MiB)',
     gpu: null, power: null, scenarios: {},
@@ -199,7 +200,8 @@ async function main() {
       for (let i = 0; i < TRIALS; i++) {
         for (const browser of (i % 2 ? ['dexerion', 'chrome'] : ['chrome', 'dexerion'])) {
           try {
-            pair[browser].trials.push(await trial(browser === 'chrome' ? openChrome : openDexerion, pagesFor(base, def), hz));
+            pair[browser].trials.push(await trial(browser === 'chrome' ? openChrome : openDexerion, pagesFor(base, def), hz,
+              name === 'idle' ? IDLE_SAMPLE_MS : SAMPLE_MS));
           } catch (err) { pair[browser].trials.push({ error: String(err.message || err).split('\n')[0] }); }
         }
       }
@@ -214,7 +216,10 @@ async function main() {
       console.log(name + ': ' + JSON.stringify(pair));
       fs.writeFileSync(OUTPUT, JSON.stringify(report, null, 2) + '\n');
     }
-    if (Object.values(report.scenarios).some((s) => s.pctOfChrome.cpu === null || s.pctOfChrome.ram === null)) process.exitCode = 1;
+    // A measured zero reference means a percentage is undefined, not
+    // that the run failed. Missing or unusable samples still fail the job.
+    if (Object.values(report.scenarios).some((s) => ['chrome', 'dexerion'].some((b) =>
+      s[b].cpu.median === null || s[b].ram.median === null))) process.exitCode = 1;
   } finally { server.close(); }
 }
 

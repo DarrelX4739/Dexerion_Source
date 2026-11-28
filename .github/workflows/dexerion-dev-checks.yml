@@ -36,8 +36,16 @@ jobs:
         run: |
           npm ci
           node -p "require('electron')"
-      - name: Check real Electron boot and AI entry points
+      - name: Check real Electron boot, AI and toolbar controls
         run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js
+      - name: Keep failed Electron test evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-test-failures
+          path: code/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Compare whole-browser CPU and RAM against Chrome
         env:
           DEX_CLOUD_TRIALS: '5'

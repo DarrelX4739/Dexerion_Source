@@ -98,10 +98,31 @@ test('a real unpacked extension retains its icon and popup across unrelated shel
         await window.dexerion.invoke('dex:new-tab', 'dexerion://newtab', false);
       });
       expect(await win.evaluate(() => window.__testExtension === document.querySelector('#extbar button'))).toBe(true);
-      const popped = app.waitForEvent('window');
+      // A native popup can blur and close before Playwright gets an
+      // accessibility snapshot on Xvfb. Observe the actual main-process load
+      // instead of guessing which Electron 'window' event belongs to it.
+      await app.evaluate(({ BrowserWindow }) => {
+        const saved = BrowserWindow.prototype.loadURL;
+        globalThis.__testToolbarPopup = null;
+        BrowserWindow.prototype.loadURL = function capture(url, ...args) {
+          const result = saved.call(this, url, ...args);
+          if (/^chrome-extension:\/\/.+\/popup\.html$/.test(url)) {
+            BrowserWindow.prototype.loadURL = saved;
+            globalThis.__testToolbarPopup = { url, state: 'loading' };
+            result.then(() => {
+              globalThis.__testToolbarPopup = { url, state: 'loaded' };
+            }, (err) => {
+              globalThis.__testToolbarPopup = { url, state: String(err && err.message || err) };
+            });
+          }
+          return result;
+        };
+      });
       await button.click();
-      const popup = await popped;
-      await expect(popup.getByRole('heading', { name: 'Toolbar fixture popup' })).toBeVisible();
+      await expect.poll(() => app.evaluate(() => globalThis.__testToolbarPopup)).toMatchObject({
+        url: expect.stringMatching(/^chrome-extension:\/\/[a-p]{32}\/popup\.html$/),
+        state: 'loaded',
+      });
     });
   } finally { fs.rmSync(fixture, { force: true, recursive: true, maxRetries: 3 }); }
 });
