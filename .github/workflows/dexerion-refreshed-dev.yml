@@ -41,7 +41,7 @@ jobs:
           node scripts/test-polish-unit.js
           node scripts/test-scout-mapping.js
           shopt -s nullglob
-          focused=(scripts/test-search-*cache.cjs)
+          focused=(scripts/test-search-*cache.cjs scripts/test-chat-wire-image-budget.cjs scripts/test-provider-reasoning-cap.cjs scripts/test-scout-scoring-parity.cjs)
           if (( ${#focused[@]} )); then node --test "${focused[@]}"; fi
       - name: Exercise actual desktop and AI search on Windows
         if: runner.os == 'Windows'

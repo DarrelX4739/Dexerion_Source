@@ -28,7 +28,7 @@ function findMarker(dir, marker) {
   return false;
 }
 
-test('boots with shared tokens and streams a mock NIM reply', async () => {
+test('boots with shared tokens and streams a mock NIM reply', async ({}, testInfo) => {
   const mock = await startAiMock({ reply: 'Dexerion e2e reply.' });
   const { app, win, profile } = await launchDexerion({ aiBase: mock.url });
   try {
@@ -201,6 +201,54 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     await win.press('#ai-input', 'Enter');
     const card = win.locator('#ai-messages .dxa-card[data-kind="report"]').last();
     await expect(card).toBeVisible({ timeout: 30000 });
+    // A report card may appear before its stream settles. The fixed menu
+    // closes on a real chat scroll, so prepare its trigger before opening and
+    // use its existing keyboard path instead of scrolling a fixed item into view.
+    const chooseCardAction = async name => {
+      const trigger = card.getByRole('button', { name: 'More actions' });
+      const action = card.getByRole('menuitem', { name, exact: true });
+      await expect(win.locator('#ai-send')).not.toHaveClass(/\bis-stop\b/);
+      await trigger.scrollIntoViewIfNeeded();
+      await trigger.focus();
+      await expect(trigger).toBeFocused();
+      const stableScroll = () => win.evaluate(async () => {
+        const thread = document.getElementById('ai-messages');
+        const start = thread.scrollTop;
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+        return Math.abs(thread.scrollTop - start) < 1;
+      });
+      await expect.poll(stableScroll, { timeout: 5000 }).toBe(true);
+      try {
+        await win.keyboard.press('Enter');
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 5000 });
+        await expect(action).toBeVisible({ timeout: 5000 });
+        const items = await card.getByRole('menuitem').count();
+        for (let i = 0; i < items; i++) {
+          if (await action.evaluate(el => el === document.activeElement)) break;
+          await win.keyboard.press('ArrowDown');
+        }
+        await expect(action).toBeFocused();
+        await win.keyboard.press('Enter');
+      } catch (e) {
+        const state = await win.evaluate(() => {
+          const thread = document.getElementById('ai-messages');
+          const card = Array.from(thread.querySelectorAll('.dxa-card[data-kind="report"]')).at(-1);
+          const trigger = card?.querySelector('button[aria-label="More actions"]');
+          const menu = card?.querySelector('[role="menu"]');
+          return { innerWidth, innerHeight, scrollTop:thread.scrollTop,
+            scrollHeight:thread.scrollHeight, expanded:trigger?.getAttribute('aria-expanded'),
+            focused:document.activeElement?.getAttribute('role'), menuHidden:menu?.hidden,
+            menuBox:menu?.getBoundingClientRect().toJSON() };
+        }).catch(() => ({}));
+        await testInfo.attach('report-menu-' + name.toLowerCase().replace(/\s+/g, '-'), {
+          body:JSON.stringify(state), contentType:'application/json',
+        });
+        throw e;
+      }
+    };
+
     // Open lands the report as a full page beside the sidebar: a dedicated
     // overlay WebContentsView over the content area — NOT a new tab, because
     // the tab strip belongs to the person.
@@ -226,8 +274,7 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     expect(await win.evaluate(() => document.querySelectorAll('#tabs .tab').length)).toBe(tabsBefore);
     // …and Design opens the in-panel view with versions and look controls
     // (it lives in the card's ⋯ menu so the primary pair always fits).
-    await card.getByRole('button', { name: 'More actions' }).click();
-    await card.getByRole('menuitem', { name: 'Design', exact: true }).click();
+    await chooseCardAction('Design');
     await expect(win.locator('#ai-report-sheet')).toBeVisible();
     await expect(win.locator('#ai-report-version')).toHaveText('v1');
     await expect(win.locator('#ai-report-body .dxa-report')).toHaveCount(1);
@@ -277,8 +324,7 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     await expect.poll(async () => (await storedReport()).text, { timeout: 15000 }).toBe('The Moon dominates the tide. Edited.');
     expect((await storedReport()).history).toBe(1);
     // Undo edit: the newest snapshot comes back through the shared restore.
-    await card.getByRole('button', { name: 'More actions' }).click();
-    await card.getByRole('menuitem', { name: 'Undo edit', exact: true }).click();
+    await chooseCardAction('Undo edit');
     await expect(card.locator('.dxa-report [data-block-index="1"]')).toHaveText(
       'The Moon dominates the tide.', { timeout: 15000 });
     await expect.poll(async () => (await storedReport()).text, { timeout: 15000 }).toBe('The Moon dominates the tide.');
