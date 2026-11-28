@@ -62,6 +62,7 @@ jobs:
           LIGHT_WORKLOADS: ${{ contains(github.event.head_commit.message, '[edge-light-workloads]') }}
           DISTINCT_HOSTS: ${{ contains(github.event.head_commit.message, '[edge-distinct-sites]') }}
           STATIC_BACKGROUND: ${{ contains(github.event.head_commit.message, '[edge-static-background]') }}
+          TITLE_CONTROL: ${{ contains(github.event.head_commit.message, '[edge-title-control]') }}
           EXTENDED_SAMPLE: ${{ contains(github.event.head_commit.message, '[edge-extended-sample]') }}
         run: |
           if ($env:FOUR_TRIALS -eq 'true') { $env:MEASURE_TRIALS = '4' }
@@ -80,13 +81,14 @@ jobs:
             if ($env:DISTINCT_HOSTS -ne 'true' -or $env:NATIVE_LAUNCH -ne 'true') { throw 'The static background control requires distinct hosts and native launch' }
             $env:MEASURE_STATIC_BACKGROUND = '1'
           }
+          if ($env:TITLE_CONTROL -eq 'true') { $env:MEASURE_TITLE_CONTROL = '1' }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $file = Join-Path $env:MEASURE_OUT_DIR 'measure-protocol-main.json'
           node scripts/grade-edge-target.cjs $file
           if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
-          node -e "const r=require(process.argv[1]); const names=r.config.scenarioOrder; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=3)))))process.exit(1)" $file
+          node -e "const r=require(process.argv[1]); const names=r.config.scenarioOrder; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=(r.config.titleControl ? 4 : 3))))))process.exit(1)" $file
       - name: Keep Windows comparison evidence
         if: always()
         uses: actions/upload-artifact@v4

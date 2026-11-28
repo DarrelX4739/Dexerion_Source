@@ -43,19 +43,20 @@ function foregroundSample(before, after, seconds, animated) {
 
 function workloadUrls(base, definition, distinctLoopbackHosts = false) {
   const background = definition.background ?? 'animated';
+  const fixedTitle = definition.fixedTitle ? '&title=fixed' : '';
   if (background !== 'animated' && background !== 'static') throw new Error('Invalid background fixture');
   if (!distinctLoopbackHosts) return [
-    base + '/' + definition.foreground + '?role=foreground',
-    ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/' + background + '?role=background&tab=' + (i + 1)),
+    base + '/' + definition.foreground + '?role=foreground' + fixedTitle,
+    ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/' + background + '?role=background&tab=' + (i + 1) + fixedTitle),
   ];
   const root = new URL(base);
   if (root.protocol !== 'http:' || root.hostname !== '127.0.0.1' || !root.port ||
       root.pathname !== '/' || root.search || root.hash) throw new Error('Distinct fixture must be local HTTP');
   const origin = (n) => 'http://workload-' + n + '.localhost:' + root.port;
   return [
-    origin(0) + '/' + definition.foreground + '?role=foreground',
+    origin(0) + '/' + definition.foreground + '?role=foreground' + fixedTitle,
     ...Array.from({ length: definition.backgroundTabs }, (_, i) =>
-      origin(i + 1) + '/' + background + '?role=background&tab=' + (i + 1)),
+      origin(i + 1) + '/' + background + '?role=background&tab=' + (i + 1) + fixedTitle),
   ];
 }
 function matchesInventory(tabs, expected) {

@@ -68,6 +68,7 @@ const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '
 const SEED_PROFILE = NATIVE_LAUNCH && !LAUNCH_CONTROL && process.env.MEASURE_SEED_PROFILE === '1';
 const DISTINCT_HOSTS = process.env.MEASURE_DISTINCT_LOOPBACK_HOSTS === '1';
 const STATIC_BACKGROUND = process.env.MEASURE_STATIC_BACKGROUND === '1';
+const TITLE_CONTROL = process.env.MEASURE_TITLE_CONTROL === '1';
 if (DISTINCT_HOSTS && (!NATIVE_LAUNCH || LAUNCH_CONTROL)) {
   throw new Error('Distinct loopback workload requires matched native launches');
 }
@@ -87,12 +88,19 @@ const SCENARIOS = {
   'background-tabs': { foreground: 'static', backgroundTabs: BG_TABS },
   'multitasking': { foreground: 'animated', backgroundTabs: BG_TABS },
 };
-const SCENARIO_ORDER = (process.env.MEASURE_SCENARIOS
+const TITLE_SCENARIOS = ['multitasking', 'multitasking-fixed-title'];
+if (TITLE_CONTROL) SCENARIOS[TITLE_SCENARIOS[1]] = { ...SCENARIOS.multitasking, fixedTitle: true };
+const SCENARIO_ORDER = TITLE_CONTROL ? TITLE_SCENARIOS : (process.env.MEASURE_SCENARIOS
   || 'active-browsing,background-tabs,idle,multitasking')
   .split(',').map((s) => s.trim()).filter((s) => SCENARIOS[s]);
 const BROWSERS = LAUNCH_CONTROL ? ['edge', 'edge-automation', 'dexerion', 'dexerion-automation']
   : (process.env.MEASURE_BROWSERS || 'edge,dexerion')
   .split(',').map((s) => s.trim()).filter((s) => s === 'edge' || s === 'dexerion');
+
+if (TITLE_CONTROL && (!DISTINCT_HOSTS || !SEED_PROFILE || !PACKAGED_BINARY || STATIC_BACKGROUND ||
+    TRIALS !== 4 || BROWSERS.length !== 2 || new Set(BROWSERS).size !== 2)) {
+  throw new Error('Title control requires two packaged native browsers, seeded profiles, distinct animated tabs, and four trials');
+}
 
 // Dexerion under test: the main build tree, or a baseline worktree build dir.
 const DEX_BUILD_DIR = process.env.DEX_BUILD_DIR
@@ -118,6 +126,7 @@ const ANIMATED_HTML = `<!doctype html><meta charset="utf-8"><title>Dexerion meas
 (function () {
   const c = document.getElementById('c'), x = c.getContext('2d');
   let f = 0;
+  const dynamicTitle = new URLSearchParams(location.search).get('title') !== 'fixed';
   function frame() {
     f += 1;
     window.__dexMeasureFrames = f;
@@ -129,7 +138,7 @@ const ANIMATED_HTML = `<!doctype html><meta charset="utf-8"><title>Dexerion meas
       x.arc(480 + Math.cos(a) * 300, 320 + Math.sin(a * 1.7) * 180, 8 + (i % 5) * 3, 0, Math.PI * 2);
       x.fill();
     }
-    if (f % 30 === 0) document.title = 'Measure probe frame ' + f;
+    if (dynamicTitle && f % 30 === 0) document.title = 'Measure probe frame ' + f;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -451,6 +460,7 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
           pid: t.pid, kind: t.tabId === state.active ? 'foreground' : 'background',
         }));
       }, urls) : undefined,
+      foregroundTitle: () => front.title(),
       pageState: () => samplePage(front), close: session.close };
   } catch (err) { await session.close(false); throw err; }
 }
@@ -528,6 +538,14 @@ async function runTrial(browser, scenario, base, trialIdx) {
       SCENARIOS[scenario].foreground === 'animated');
     if (useNative) {
       t.foreground.viewport = { width: beforeForeground.width, height: beforeForeground.height, scale: beforeForeground.scale };
+    }
+
+    if (TITLE_CONTROL) {
+      const title = await session.foregroundTitle();
+      const fixed = SCENARIOS[scenario].fixedTitle === true;
+      const expected = fixed ? title === 'Dexerion measure probe - animated' : /^Measure probe frame [0-9]+$/.test(title);
+      if (!expected) throw new Error('Foreground failed the requested title fixture');
+      t.foreground.titleControl = { fixed, observedTitle: title };
     }
 
     // CPU + RAM across the whole tree.
@@ -670,6 +688,7 @@ function pctOfEdge(dexS, edgeS) {
       workloadOrigins: DISTINCT_HOSTS ? 'one .localhost host per tab' : 'same loopback origin',
       packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
       exploratoryLauncherControl: LAUNCH_CONTROL,
+      titleControl: TITLE_CONTROL ? 'balanced same-host fixed vs dynamic title' : null,
       backgroundFixture: NATIVE_LAUNCH && STATIC_BACKGROUND ? 'static' : 'animated',
       profileMode: SEED_PROFILE ? 'per-browser primed disposable seed, cloned per trial' : 'fresh disposable profile per trial',
       edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
@@ -697,38 +716,57 @@ function pctOfEdge(dexS, edgeS) {
         console.log('Primed a disposable ' + browser + ' profile');
       }
     }
-    for (const scenario of SCENARIO_ORDER) {
-      results.scenarios[scenario] = {};
-      for (const browser of BROWSERS) results.scenarios[scenario][browser] = { trials: [], pending: [] };
-      console.log('=== scenario: ' + scenario + ' ===');
-      const trialOrder = [];
-      // Randomise only the first slot, then alternate to bound order imbalance
-      // to one round while keeping the two arms paired in time.
-      const reverseFirst = Math.random() < 0.5;
+    const initialiseScenario = (scenario) => {
+      const group = { trialOrder: [] };
+      for (const browser of BROWSERS) group[browser] = { trials: [], pending: [] };
+      results.scenarios[scenario] = group;
+    };
+    const collectTrial = async (scenario, browser, i) => {
+      const group = results.scenarios[scenario][browser];
+      const elapsedMin = (Date.now() - startedAt) / 60000;
+      if (elapsedMin > DEADLINE_MIN) {
+        group.pending.push('trial ' + i + ' skipped: ' + round(elapsedMin, 1) + ' min elapsed > deadline ' + DEADLINE_MIN + ' min');
+        return;
+      }
+      console.log('  ' + browser + ' / ' + scenario + ' / trial ' + i + ' (t+' + round(elapsedMin, 1) + ' min)');
+      const t = await runTrial(browser, scenario, base, i);
+      group.trials.push(t);
+      if (!t.valid) {
+        results.invalidTrials.push({ browser, scenario, trial: t.trial, reason: t.invalidReason });
+        console.log('    INVALID: ' + t.invalidReason);
+      } else {
+        console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts, foreground fps ' + (t.foreground.fps === null ? 'n/a' : round(t.foreground.fps, 2)));
+      }
+      if (t.foreground?.viewport) console.log('    ' + t.browserVersion + ' viewport ' + JSON.stringify(t.foreground.viewport));
+      await sleep(2000); // let the browser's processes fully exit
+    };
+    if (TITLE_CONTROL) {
+      const arms = SCENARIO_ORDER.flatMap((scenario) => BROWSERS.map((browser) => ({ scenario, browser })));
       const anchor = Math.floor(Math.random() * 4);
+      results.titleControlOrder = [];
+      SCENARIO_ORDER.forEach(initialiseScenario);
       for (let i = 1; i <= TRIALS; i += 1) {
-        const order = LAUNCH_CONTROL ? fourArmOrder(BROWSERS, i, anchor) : workloadOrder(BROWSERS, i, reverseFirst);
-        trialOrder.push({ trial: i, order });
-        for (const browser of order) {
-          const elapsedMin = (Date.now() - startedAt) / 60000;
-          if (elapsedMin > DEADLINE_MIN) {
-            results.scenarios[scenario][browser].pending.push('trial ' + i + ' skipped: ' + round(elapsedMin, 1) + ' min elapsed > deadline ' + DEADLINE_MIN + ' min');
-            continue;
-          }
-          console.log('  ' + browser + ' / ' + scenario + ' / trial ' + i + ' (t+' + round(elapsedMin, 1) + ' min)');
-          const t = await runTrial(browser, scenario, base, i);
-          results.scenarios[scenario][browser].trials.push(t);
-          if (!t.valid) {
-            results.invalidTrials.push({ browser, scenario, trial: t.trial, reason: t.invalidReason });
-            console.log('    INVALID: ' + t.invalidReason);
-          } else {
-            console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts, foreground fps ' + (t.foreground.fps === null ? 'n/a' : round(t.foreground.fps, 2)));
-          }
-          if (t.foreground?.viewport) console.log('    ' + t.browserVersion + ' viewport ' + JSON.stringify(t.foreground.viewport));
-          await sleep(2000); // let the browser's processes fully exit
+        const order = fourArmOrder(arms, i, anchor);
+        results.titleControlOrder.push({ trial: i, order });
+        for (const scenario of SCENARIO_ORDER) {
+          results.scenarios[scenario].trialOrder.push({ trial: i, order: order.filter((a) => a.scenario === scenario).map((a) => a.browser) });
+        }
+        for (const { scenario, browser } of order) await collectTrial(scenario, browser, i);
+      }
+    }
+    for (const scenario of SCENARIO_ORDER) {
+      console.log('=== scenario: ' + scenario + ' ===');
+      if (!TITLE_CONTROL) {
+        initialiseScenario(scenario);
+        // Randomise the first slot, then alternate to bound order imbalance.
+        const reverseFirst = Math.random() < 0.5;
+        const anchor = Math.floor(Math.random() * 4);
+        for (let i = 1; i <= TRIALS; i += 1) {
+          const order = LAUNCH_CONTROL ? fourArmOrder(BROWSERS, i, anchor) : workloadOrder(BROWSERS, i, reverseFirst);
+          results.scenarios[scenario].trialOrder.push({ trial: i, order });
+          for (const browser of order) await collectTrial(scenario, browser, i);
         }
       }
-      results.scenarios[scenario].trialOrder = trialOrder;
 
       // Floor-swing validation: a trial whose floor deviates >20% from its
       // group's reference floor (median of the others) is contaminated.

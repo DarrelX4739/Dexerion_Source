@@ -171,3 +171,20 @@ test('static background control retains the foreground animation and tab identit
   }
   assert.throws(() => workloadUrls(base, { ...def, background: 'missing' }), /Invalid background fixture/);
 });
+
+test('fixed title keeps workload path, origin, and tab roles and changes only the title query', () => {
+  const base = 'http://127.0.0.1:4678';
+  const def = { foreground: 'animated', backgroundTabs: 8 };
+  for (const distinct of [false, true]) {
+    const control = workloadUrls(base, def, distinct);
+    const fixed = workloadUrls(base, { ...def, fixedTitle: true }, distinct);
+    assert.equal(fixed.length, 9);
+    assert.equal(new Set(fixed).size, 9);
+    for (let i = 0; i < fixed.length; i++) {
+      const u = new URL(fixed[i]);
+      assert.equal(u.searchParams.get('title'), 'fixed');
+      u.searchParams.delete('title');
+      assert.equal(u.href, control[i]);
+    }
+  }
+});
