@@ -284,8 +284,26 @@ function isPartialMarker(tail) {
 function createControlFilter() {
   let held = '';
   let inChannel = false;
-  let channelBuf = '';
+  const closerLength = '<channel|>'.length;
+  let channelTail = '';
+  let pendingThinking = '';
   let thinking = '';
+  const stageThinking = (value, end) => {
+    const keep = Math.min(end, MAX_THINKING - thinking.length - pendingThinking.length);
+    if (keep <= 0) return;
+    const part = value.slice(0, keep);
+    // A short slice of a giant decoded event can retain its backing string.
+    // Copy this capped UTF-16 prefix only for unusually large inputs, without
+    // repairing or trimming surrogate code units the old slice preserved.
+    pendingThinking += value.length > MAX_THINKING * 4
+      ? require('node:buffer').Buffer.from(part, 'utf16le').toString('utf16le')
+      : part;
+  };
+  const finishThinking = () => {
+    thinking += pendingThinking;
+    pendingThinking = '';
+    channelTail = '';
+  };
   const push = (chunk) => {
     const raw = held + String(chunk == null ? '' : chunk);
     held = '';
@@ -293,12 +311,20 @@ function createControlFilter() {
     let input = raw;
     while (input) {
       if (inChannel) {
-        channelBuf += input;
-        const close = channelBuf.search(/<channel\|>/i);
-        if (close < 0) return out; // wait for the closer; nothing leaks
-        thinking = (thinking + channelBuf.slice(0, close)).slice(0, MAX_THINKING);
-        input = channelBuf.slice(close + 10);
-        channelBuf = '';
+        // The only bytes we must re-examine are a suffix short enough
+        // to begin a split closing marker. Until close (or EOF), the
+        // pending prefix is not visible through getThinking().
+        const available = channelTail + input;
+        const close = available.search(/<channel\|>/i);
+        if (close < 0) {
+          const accepted = Math.max(0, available.length - (closerLength - 1));
+          stageThinking(available, accepted);
+          channelTail = available.slice(accepted);
+          return out;
+        }
+        stageThinking(available, close);
+        input = available.slice(close + closerLength);
+        finishThinking();
         inChannel = false;
         continue;
       }
@@ -333,12 +359,11 @@ function createControlFilter() {
     if (inChannel) {
       // A stream that ends mid-channel still owns its content: keep it as
       // thinking so a truncated reply never loses its reasoning or leaks it.
-      thinking = (thinking + channelBuf).slice(0, MAX_THINKING);
-      channelBuf = '';
+      stageThinking(channelTail, channelTail.length);
+      finishThinking();
       inChannel = false;
       return '';
     }
-    channelBuf = '';
     if (!tail) return '';
     const lt = tail.lastIndexOf('<');
     if (lt >= 0 && isPartialMarker(tail.slice(lt))) {

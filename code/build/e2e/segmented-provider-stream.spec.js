@@ -13,7 +13,7 @@ const ANSWER = 'Verified segmented stream: café 🚀 and complete.';
 const REASONING = 'é🌏!,'.repeat(35_000);
 const line = x => Buffer.from('data: ' + JSON.stringify(x) + '\r\n\r\n');
 
-async function fragmentedMock() {
+async function fragmentedMock(mode) {
   const counters = { matchingStreams:0, writes:0, bytes:0 };
   const server = http.createServer(async (req,res) => {
     try {
@@ -53,7 +53,18 @@ async function fragmentedMock() {
       res.flushHeaders();
       // Fragment one JSON event, not merely the spacing between events.
       // This split intentionally bisects UTF-8 characters on the wire.
-      const packet=line({choices:[{delta:{reasoning_content:REASONING}}]});
+      let packet;
+      if (mode === 'template-channel') {
+        const content = text => line({choices:[{delta:{content:text}}]});
+        const events = [content('<|chan'), content('nel|>')];
+        // A long hidden template channel expressed as many provider content
+        // events, with open and close markers split *between* events.
+        for (let at=0;at<REASONING.length;at+=80) {
+          events.push(content(REASONING.slice(at,at+80)));
+        }
+        events.push(content('<chAnn'), content('EL|>'));
+        packet = Buffer.concat(events);
+      } else packet=line({choices:[{delta:{reasoning_content:REASONING}}]});
       for(let i=0;i<packet.length;i+=1021) {
         if (res.destroyed) return;
         const chunk=packet.subarray(i,i+1021);
@@ -77,8 +88,11 @@ async function fragmentedMock() {
     close:()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();})};
 }
 
-test('actual app preserves visible reply and saved reasoning for one large fragmented SSE event',async()=>{
-  const mock=await fragmentedMock();
+for (const [mode, label] of [
+  ['large-event', 'one large fragmented SSE event'],
+  ['template-channel', 'a hidden template channel split over many provider events'],
+]) test('actual app preserves visible reply and saved reasoning for ' + label,async()=>{
+  const mock=await fragmentedMock(mode);
   let launched;
   try {
     launched=await launchDexerion({aiBase:mock.base,attempts:1});
