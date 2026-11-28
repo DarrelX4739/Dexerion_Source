@@ -44,6 +44,58 @@ body.s2 h1,body.s2 .sub,body.s2 .date,body.s2 .qline{opacity:1;transform:none}
   transition:opacity .4s var(--ease),transform .4s var(--ease)}
 body.s3 .enter{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion: reduce){ .mark,h1,.sub,.date,.qline,.enter{transition:none} }
+
+/* First run and daily welcome share one static optical backdrop. The existing
+   stage classes still own entrance timing and input readiness. */
+body {
+  min-height:100%;
+  height:auto;
+  overflow:auto;
+  padding:clamp(18px, 6vh, 58px) clamp(14px, 5vw, 42px);
+  background:radial-gradient(ellipse at 50% 0%, var(--dx-optical-light), transparent 65%), var(--pbg);
+}
+.wrap {
+  position:relative;
+  isolation:isolate;
+  width:min(100%, 630px);
+  max-width:none;
+  padding:clamp(24px, 6vh, 59px) clamp(18px, 7vw, 64px);
+  border:1px solid var(--pborder);
+  border-radius:26px;
+  background:linear-gradient(155deg, var(--pcard), var(--pbg));
+  box-shadow:var(--sh-3);
+}
+.wrap::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  border-radius:inherit;
+  background:var(--dx-optical-grid);
+  background-size:26px 26px;
+  mask-image:radial-gradient(ellipse at 50% 0%, #000 1%, transparent 71%);
+  pointer-events:none;
+}
+.mark {width:66px;height:66px;margin-bottom:24px}
+.mark img {display:block;border-radius:19px;box-shadow:0 0 0 5px var(--dx-optical-light),var(--sh-2)}
+h1 {font-size:clamp(31px, 7vw, 53px);font-weight:650;line-height:1.03;letter-spacing:-.055em;text-wrap:balance}
+.sub {margin:12px auto 0;max-width:38ch;color:var(--pfg-2);line-height:1.5}
+.date {margin:16px 0 24px;font:600 11px/1.5 var(--font-mono);color:var(--pfg-2);letter-spacing:.09em;text-transform:uppercase}
+.qline {padding:19px 16px 0}
+.quote {font-size:clamp(17px, 3vw, 22px);line-height:1.45;text-wrap:balance}
+.author {color:var(--pfg-2)}
+.enter {
+  height:42px;margin-top:28px;padding:0 20px;border-radius:999px;
+  box-shadow:0 0 0 4px var(--dx-optical-light),var(--sh-1);
+}
+.enter::after {content:"";width:7px;height:7px;border-top:1.5px solid;border-right:1.5px solid;transform:rotate(45deg)}
+.enter:focus-visible {outline-offset:4px}
+@media (max-height:535px) {
+  .mark {width:47px;height:47px;margin-bottom:14px}
+  .date {margin:9px 0 12px}
+  .qline {padding-top:12px}
+  .enter {margin-top:18px}
+}
 </style>
 </head><body>
 <div class="wrap">
