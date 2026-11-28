@@ -13,7 +13,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: code/build
@@ -39,10 +39,26 @@ jobs:
           node --test scripts/test-*.cjs ../../.github/packaging/linux-launcher.test.cjs
       - name: Check real Electron boot, AI and toolbar controls
         run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js
+      - name: Check out the pre-optimisation reference at A/B milestones
+        if: contains(github.event.head_commit.message, '[paired-ab]')
+        uses: actions/checkout@v4
+        with:
+          ref: ce1ea874d339ceb639598f859bdfe8f298ef3ba2
+          path: .ab-reference
+          persist-credentials: false
+      - name: Install the reference's own locked dependencies
+        if: contains(github.event.head_commit.message, '[paired-ab]')
+        working-directory: .ab-reference/code/build
+        run: |
+          npm ci
+          node -p "require('electron')"
       - name: Compare whole-browser CPU and RAM against Chrome
         env:
           DEX_CLOUD_TRIALS: '5'
-        run: xvfb-run -a -s '-screen 0 1280x1024x24' node scripts/measure-cloud-linux.cjs
+        run: |
+          ref="$GITHUB_WORKSPACE/.ab-reference/code/build"
+          if [[ -d "$ref/node_modules" ]]; then export DEX_CLOUD_REFERENCE_BUILD="$ref"; fi
+          xvfb-run -a -s '-screen 0 1280x1024x24' node scripts/measure-cloud-linux.cjs
       - name: Keep comparison evidence
         if: always()
         uses: actions/upload-artifact@v4

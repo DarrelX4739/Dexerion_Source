@@ -25,6 +25,7 @@ const IDLE_SAMPLE_MS = Math.max(SAMPLE_MS, 12000);
 const SETTLE_MS = 3000;
 const CHROME = process.env.DEX_CLOUD_CHROME || '/usr/bin/google-chrome';
 const OUTPUT = process.env.DEX_CLOUD_OUTPUT || 'cloud-comparison.json';
+const REFERENCE = process.env.DEX_CLOUD_REFERENCE_BUILD;
 
 const STATIC = '<meta charset="utf-8"><title>Browser comparison</title><h1>Idle comparison page</h1>';
 const ANIMATED = '<meta charset="utf-8"><title>Browser comparison</title><canvas width="640" height="360"></canvas><script>(' + function () {
@@ -125,8 +126,8 @@ async function openChrome(urls) {
   }
 }
 
-async function openDexerion(urls) {
-  const { app, win, profile } = await launchDexerion({ attempts: 1, gpu: 'off' });
+async function openDexerion(urls, launch = launchDexerion) {
+  const { app, win, profile } = await launch({ attempts: 1, gpu: 'off' });
   const close = async () => {
     await app.close().catch(() => {});
     fs.rmSync(profile, { force: true, recursive: true, maxRetries: 3 });
@@ -210,11 +211,28 @@ async function main() {
   if (process.platform !== 'linux' || !process.env.DISPLAY) throw new Error('Run on Linux with a display (for example xvfb-run).');
   const hz = Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim());
   const chromeVersion = execFileSync(CHROME, ['--version'], { encoding: 'utf8' }).trim();
+  const openers = { chrome: openChrome, dexerion: openDexerion };
+  let reference = null;
+  if (REFERENCE) {
+    const build = path.resolve(REFERENCE);
+    const launch = require(path.join(build, 'e2e', 'app.js')).launchDexerion;
+    reference = {
+      commit: execFileSync('git', ['-C', build, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      electron: require(path.join(build, 'node_modules', 'electron', 'package.json')).version,
+    };
+    openers.reference = (urls) => openDexerion(urls, launch);
+  }
+  const orders = reference ? [
+    ['chrome', 'dexerion', 'reference'], ['dexerion', 'reference', 'chrome'],
+    ['reference', 'chrome', 'dexerion'], ['reference', 'dexerion', 'chrome'],
+    ['chrome', 'reference', 'dexerion'], ['dexerion', 'chrome', 'reference'],
+  ] : [['chrome', 'dexerion'], ['dexerion', 'chrome']];
+  const trialCount = reference ? Math.max(6, TRIALS) : TRIALS;
   const report = {
     format: 'cloud-linux-directional-v2', startedAt: new Date().toISOString(),
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     os: os.release(), logicalCores: os.cpus().length, chromeVersion,
-    electron: require('electron/package.json').version, trialCount: TRIALS, sampleMs: SAMPLE_MS, idleSampleMs: IDLE_SAMPLE_MS,
+    electron: require('electron/package.json').version, reference, trialCount, sampleMs: SAMPLE_MS, idleSampleMs: IDLE_SAMPLE_MS,
     rendering: 'Linux virtual display; both arms request software rendering',
     cpu: 'percent of one logical core, process tree', ram: 'whole-tree proportional set size (MiB)',
     gpu: null, power: null, scenarios: {},
@@ -223,30 +241,32 @@ async function main() {
   try {
     const base = 'http://127.0.0.1:' + server.address().port;
     for (const [name, def] of Object.entries(SCENARIOS)) {
-      const pair = report.scenarios[name] = { chrome: { trials: [] }, dexerion: { trials: [] } };
-      for (let i = 0; i < TRIALS; i++) {
-        for (const browser of (i % 2 ? ['dexerion', 'chrome'] : ['chrome', 'dexerion'])) {
+      const pair = report.scenarios[name] = Object.fromEntries(Object.keys(openers).map((b) => [b, { trials: [] }]));
+      for (let i = 0; i < trialCount; i++) {
+        for (const browser of orders[i % orders.length]) {
           try {
-            pair[browser].trials.push(await trial(browser === 'chrome' ? openChrome : openDexerion, pagesFor(base, def), hz,
+            pair[browser].trials.push(await trial(openers[browser], pagesFor(base, def), hz,
               name === 'idle' ? IDLE_SAMPLE_MS : SAMPLE_MS, def.animate));
           } catch (err) { pair[browser].trials.push({ error: String(err.message || err).split('\n')[0] }); }
         }
       }
-      for (const browser of ['chrome', 'dexerion']) {
+      for (const browser of Object.keys(openers)) {
         pair[browser].cpu = summarise(pair[browser].trials, 'pctOfOneCore');
         pair[browser].ram = summarise(pair[browser].trials, 'pssMiB');
         pair[browser].fps = summarise(pair[browser].trials, 'framesPerSecond');
       }
-      pair.pctOfChrome = Object.fromEntries(['cpu', 'ram'].map((key) => {
-        const dex = pair.dexerion[key].median, baseline = pair.chrome[key].median;
+      const ratios = (arm) => Object.fromEntries(['cpu', 'ram'].map((key) => {
+        const dex = pair.dexerion[key].median, baseline = pair[arm][key].median;
         return [key, dex !== null && baseline > 0 ? dex / baseline * 100 : null];
       }));
+      pair.pctOfChrome = ratios('chrome');
+      if (reference) pair.pctOfReference = ratios('reference');
       console.log(name + ': ' + JSON.stringify(pair));
       fs.writeFileSync(OUTPUT, JSON.stringify(report, null, 2) + '\n');
     }
     // A measured zero reference means a percentage is undefined, not
     // that the run failed. Missing or unusable samples still fail the job.
-    if (Object.values(report.scenarios).some((s) => ['chrome', 'dexerion'].some((b) =>
+    if (Object.values(report.scenarios).some((s) => Object.keys(openers).some((b) =>
       s[b].cpu.median === null || s[b].ram.median === null))) process.exitCode = 1;
   } finally { server.close(); }
 }
