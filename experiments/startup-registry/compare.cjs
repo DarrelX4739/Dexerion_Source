@@ -76,6 +76,7 @@ async function nativeHelper(exe, root, plan, mode = 'write') {
 async function checkNativeStops(exe, plan) {
   const root = scratchKey();
   try {
+    await assert.rejects(nativeHelper(exe, root, plan, 'verify-only'), (error) => error.code === 8);
     await assert.rejects(nativeHelper(exe, root, plan, 'stop-test'), (error) => error.code === 7);
     assert.deepEqual(sorted(await readValues(root)), sorted(plan.slice(0, 6)));
   } finally {
@@ -137,7 +138,16 @@ async function run(file, out, nativeExe) {
           assert.deepEqual(sorted(await readValues(root)), sorted(plan));
           const repeatMs = await timed();
           assert.deepEqual(sorted(await readValues(root)), sorted(plan));
-          rows.push({ arm, trial: i + 1, freshMs, repeatMs });
+          // Strict read-only check: all sixteen typed values must already match.
+          // Keep it separate from the three writer timings.
+          const beginVerify = performance.now();
+          await nativeHelper(native, root, plan, 'verify-only');
+          const alreadyCompleteMs = performance.now() - beginVerify;
+          assert.deepEqual(sorted(await readValues(root)), sorted(plan));
+          // A changed value must not permit a cached success.
+          const mismatch = plan.map((x, n) => n === 15 ? { ...x, data: x.data + '-different' } : x);
+          await assert.rejects(nativeHelper(native, root, mismatch, 'verify-only'), (error) => error.code === 8);
+          rows.push({ arm, trial: i + 1, freshMs, repeatMs, alreadyCompleteMs });
         } finally {
           await exec('reg.exe', ['delete', root, '/f'], options);
         }
@@ -147,6 +157,7 @@ async function run(file, out, nativeExe) {
   const summary = Object.fromEntries(arms.map((arm) => [arm,
     Object.fromEntries(['freshMs', 'repeatMs'].map((key) => [key, rows.filter((r) => r.arm === arm)
       .map((r) => r[key]).sort((a, b) => a - b)[4]]))]));
+  summary.alreadyCompleteMedianMs = rows.map((r) => r.alreadyCompleteMs).sort((a, b) => a - b)[13];
   const result = { rows, summary, verifiedStringValues: plan.length,
     scope: 'Synthetic registry paths only; excludes Electron launch and does not test genuine registration failures.' };
   console.log('REGISTRY FIXTURE COST: ' + JSON.stringify(summary));

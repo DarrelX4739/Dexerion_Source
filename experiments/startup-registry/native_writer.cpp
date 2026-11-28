@@ -45,7 +45,7 @@ bool IsScratch(std::wstring_view value) {
 int wmain(int argc, wchar_t* argv[]) {
   if (argc != 3 + static_cast<int>(total) * 3 || !IsScratch(argv[1])) return 2;
   const std::wstring_view mode(argv[2]);
-  if (mode != L"write" && mode != L"stop-test") return 2;
+  if (mode != L"write" && mode != L"stop-test" && mode != L"verify-only") return 2;
   // Validate the fixed command shape before creating anything.
   for (std::size_t i = 0; i < total; ++i) {
     const std::size_t arg = 3 + i * 3;
@@ -59,6 +59,21 @@ int wmain(int argc, wchar_t* argv[]) {
     const std::size_t arg = 3 + i * 3;
     const std::wstring subkey(root + L"\\" + argv[arg]);
     HKEY handle = nullptr;
+    if (mode == L"verify-only") {
+      if (RegOpenKeyExW(HKEY_CURRENT_USER, subkey.c_str(), 0, KEY_QUERY_VALUE, &handle) != ERROR_SUCCESS)
+        return 8;
+      std::array<wchar_t, 2049> value{};
+      DWORD type = REG_NONE;
+      DWORD bytes = static_cast<DWORD>(sizeof(value));
+      const auto found = RegQueryValueExW(handle, argv[arg + 1], nullptr, &type,
+          reinterpret_cast<BYTE*>(value.data()), &bytes);
+      const auto closed = RegCloseKey(handle);
+      const std::size_t chars = std::wcslen(argv[arg + 2]);
+      if (found != ERROR_SUCCESS || closed != ERROR_SUCCESS || type != REG_SZ ||
+          bytes != (chars + 1) * sizeof(wchar_t) || value[chars] != L'\0' ||
+          std::wstring_view(value.data(), chars) != argv[arg + 2]) return 8;
+      continue;
+    }
     const auto made = RegCreateKeyExW(HKEY_CURRENT_USER, subkey.c_str(), 0, nullptr,
         REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &handle, nullptr);
     if (made != ERROR_SUCCESS) return 3;
