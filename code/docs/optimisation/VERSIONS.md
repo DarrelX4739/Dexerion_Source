@@ -155,3 +155,20 @@ alternating batches per arm), the timer update went from 18.73 to 5.25 µs
 and created 75 rather than 270,000 list nodes. This measures local code and
 allocation counts, not app CPU %, working set, or Edge. The tests exercise
 timer/audio state, focus retention, list changes, and exact removal targets.
+
+### Extension toolbar: reconcile buttons and share pending icon calls
+
+Keep toolbar buttons across unrelated tab updates. Continue to reflect the
+ordered, enabled extension list, tooltip/version/error state, real or
+placeholder icons and the same popup IDs. Preserve keyboard focus for
+surviving buttons. Track a single pending icon request per display ID;
+ignore late replies after uninstall, keep cached icons when disabled and
+retry a rejected IPC on the next update. Broken records with identical
+display IDs still get distinct buttons, in the original order.
+
+In a Linux/Node fake-DOM A/B with 12 extensions and 200 extra state pushes
+while icons were pending, the old path created 2,412 buttons and issued
+2,412 icon calls; the new path did 12 of each. With icons resolved already,
+the median of nine alternating 3,000-update batches was 40.99 → 9.18 µs per
+update and the candidate made no button, image, or insertion allocations.
+These are component samples, not whole-app CPU, RAM, GPU, or Edge results.

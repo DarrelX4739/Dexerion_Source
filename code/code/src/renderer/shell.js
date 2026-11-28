@@ -425,29 +425,72 @@ function updateChromeRest(s) {
   if (dacc) dacc.textContent = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
   updateBookmarkStar(act);
   updateBookmarksBar(s);
-  // extensions toolbar — real action icons, cached per session
-  const eb = $('#extbar'); eb.innerHTML = '';
-  window.__extIcons = window.__extIcons || {};
-  const liveIds = new Set(s.extensions.map(x => x.id));
-  for (const k of Object.keys(window.__extIcons)) if (!liveIds.has(k)) delete window.__extIcons[k];
-  for (const x of s.extensions.filter(x => x.enabled)) {
-    const btn = document.createElement('button');
-    btn.title = `${x.name} ${x.version || ''}${x.loadError ? ' — error: ' + x.loadError : ''}`;
-    if (x.loadError) btn.classList.add('exterr');
-    btn.onclick = () => window.dexerion.invoke('dex:ext-popup', x.id);
-    eb.appendChild(btn);
-    const cached = window.__extIcons && window.__extIcons[x.id];
-    if (cached) { setExtBtnIcon(btn, cached); }
-    else {
-      btn._icon = null; setIcon(btn, 'ext');
-      window.dexerion.invoke('dex:ext-icon', x.id).then(src => {
-        window.__extIcons = window.__extIcons || {};
-        window.__extIcons[x.id] = src || 'fallback';
-        setExtBtnIcon(btn, window.__extIcons[x.id]);
-      }).catch(() => {});
-    }
-  }
+  updateExtensionsToolbar(s.extensions);
   reportChrome();
+}
+
+// Reconcile the toolbar by extension ID and occurrence. Unrelated state
+// pushes need neither new controls nor repeat pending icon requests.
+const toolbarExtensions = new Map();
+function updateExtensionsToolbar(extensions) {
+  if (!extensions.length && !toolbarExtensions.size) return;
+  const bar = $('#extbar');
+  if (!bar) return;
+  const installed = new Map();
+  for (const { id, enabled } of extensions) {
+    installed.set(id, (installed.get(id) || 0) + (enabled ? 1 : 0));
+  }
+
+  // Remove old buttons before reordering survivors. Keep icons when an
+  // extension is disabled. Broken records can share an empty display ID;
+  // preserve their separate buttons and original ordering.
+  for (const [id, entry] of toolbarExtensions) {
+    const visible = installed.get(id);
+    while (entry.buttons.length > (visible || 0)) entry.buttons.pop().remove();
+    if (visible === undefined) toolbarExtensions.delete(id);
+    else entry.nextSlot = 0;
+  }
+
+  let next = bar.firstElementChild;
+  for (const { id, name, version, loadError, enabled } of extensions) {
+    if (!enabled) continue;
+    let entry = toolbarExtensions.get(id);
+    if (!entry) {
+      entry = { buttons: [], nextSlot: 0, icon: null, pending: false };
+      toolbarExtensions.set(id, entry);
+    }
+    const slot = entry.nextSlot++;
+    let btn = entry.buttons[slot];
+    if (!btn) {
+      btn = entry.buttons[slot] = document.createElement('button');
+      btn.onclick = () => window.dexerion.invoke('dex:ext-popup', id);
+      setExtBtnIcon(btn, entry.icon);
+    }
+    const title = `${name} ${version || ''}${loadError ? ' — error: ' + loadError : ''}`;
+    if (btn.title !== title) btn.title = title;
+    const hasError = Boolean(loadError);
+    if (Boolean(btn._extError) !== hasError) {
+      btn._extError = hasError;
+      btn.classList.toggle('exterr', hasError);
+    }
+    if (btn !== next) {
+      const focused = document.activeElement === btn;
+      bar.insertBefore(btn, next);
+      if (focused && document.activeElement !== btn) btn.focus({ preventScroll: true });
+    }
+    next = btn.nextElementSibling;
+
+    if (entry.icon || entry.pending) continue;
+    entry.pending = true;
+    window.dexerion.invoke('dex:ext-icon', id).then(src => {
+      // A late reply for a removed extension must not affect a reinstall of
+      // the same ID. A merely disabled extension can keep the cached icon.
+      if (toolbarExtensions.get(id) !== entry) return;
+      entry.pending = false;
+      entry.icon = src || 'fallback';
+      for (const button of entry.buttons) setExtBtnIcon(button, entry.icon);
+    }).catch(() => { entry.pending = false; }); // retry on the next update
+  }
 }
 
 // Keep existing links when their visible labels and URLs have not changed.
