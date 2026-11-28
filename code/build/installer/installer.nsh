@@ -5,11 +5,11 @@
 ; (electron-builder does not include one by default).
 
 !macro customHeader
-  !define MUI_WELCOMEPAGE_TITLE "Welcome to Dexerion"
-  !define MUI_WELCOMEPAGE_TEXT "Set up Dexerion for this Windows account. Setup does not need administrator rights and keeps your existing Dexerion profile.$\r$\n$\r$\nClick Next to continue."
-  !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose where to install Dexerion. Keep the folder below or browse to a different location."
+  !define MUI_WELCOMEPAGE_TITLE "Welcome"
+  !define MUI_WELCOMEPAGE_TEXT "This wizard will install Dexerion on this Windows account. No administrator rights are needed, and your existing profile data is kept.$\r$\n$\r$\nClick Next to continue."
+  !define MUI_DIRECTORYPAGE_TEXT_TOP "Dexerion will be installed in the folder below. Keep the default, or choose another folder."
   !define MUI_FINISHPAGE_TITLE "Dexerion is ready"
-  !define MUI_FINISHPAGE_TEXT "Installation is complete. You can launch Dexerion now or open it later from the Start menu.$\r$\n$\r$\nClick Finish to close Setup."
+  !define MUI_FINISHPAGE_TEXT "Dexerion has been installed on this computer.$\r$\n$\r$\nClick Finish to close Setup."
   !define MUI_FINISHPAGE_RUN_TEXT "Launch Dexerion"
   !define MUI_BUTTONTEXT_NEXT "Next"
   !define MUI_BUTTONTEXT_INSTALL "Install Dexerion"

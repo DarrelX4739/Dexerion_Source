@@ -248,13 +248,3 @@
 [data-theme="dark"] {
   --dx-input-placeholder: #8a8a8a;
 }
-
-/* Optical treatments shared by the default chrome and built-in pages.
-   These are static paint, with no timers, blur, or moving background. */
-:root {
-  --dx-optical-light: color-mix(in srgb, var(--dx-accent) 12%, transparent);
-  --dx-optical-rule: color-mix(in srgb, var(--dx-text) 7%, transparent);
-  --dx-optical-grid: linear-gradient(var(--dx-optical-rule) 1px, transparent 1px),
-                     linear-gradient(90deg, var(--dx-optical-rule) 1px, transparent 1px);
-  --dx-panel-radius: 16px;
-}
