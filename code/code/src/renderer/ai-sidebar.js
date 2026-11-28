@@ -535,7 +535,10 @@
         id: message.id, ts: message.ts, reactions: message.reactions, pinned: message.pinned,
         edited: message.edited, editedAt: message.editedAt, replyTo: message.replyTo,
         mentions: message.mentions, forwardedFrom: message.forwardedFrom, myReactions: message.myReactions,
-      }));
+      }, false));
+    // One measurement at the end of the synchronous redraw. Reading
+    // scrollHeight after every append forces layout for each message.
+    scrollToBottom();
     // A revision can add a new version while the report view is open.
     const sheet = $('#ai-report-sheet');
     if (sheet && !sheet.hidden) refreshReportItems();
@@ -584,7 +587,7 @@
     });
   }
 
-  function addMessage(role, value, includeLabel, images, context, steps, extra) {
+  function addMessage(role, value, includeLabel, images, context, steps, extra, autoScroll = true) {
     const message = document.createElement('div');
     message.className = 'ai-message ' + (role === 'user' ? 'user' : 'model');
     const id = extra && extra.id ? String(extra.id) : ('msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7));
@@ -1041,7 +1044,7 @@
     }
 
     messages.appendChild(message);
-    messages.scrollTop = messages.scrollHeight;
+    if (autoScroll) scrollToBottom();
     return bubble;
   }
 

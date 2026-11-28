@@ -38,7 +38,7 @@ jobs:
           npm test
           node --test ../../.github/packaging/linux-launcher.test.cjs
       - name: Check real Electron boot, AI and toolbar controls
-        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js e2e/cold-accounts.spec.js
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js e2e/cold-accounts.spec.js e2e/chat-batch-scroll.spec.js
       - name: Check out the pre-optimisation reference at A/B milestones
         if: contains(github.event.head_commit.message, '[paired-ab]')
         uses: actions/checkout@v4

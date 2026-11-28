@@ -255,3 +255,14 @@ In 500 identical JSDOM chrome updates, 2,000 observed target mutations and
 500 unfocused input setters fell to zero. Alternating mixed fixtures were
 about 7% faster for this component only. This does not establish a
 whole-browser foreground CPU change.
+
+### Reopen long saved conversations with a single scroll update
+
+The synchronous batch still renders the last 200 messages in the same order,
+but measures the final scroll height and scrolls to the bottom once after the
+append loop. Ordinary one-message streaming still scrolls at its original
+point. The local old-source negative control measures 200 layout reads and
+scroll writes, versus one of each with the change. In a seven-pair JSDOM
+fixture, the 200-message redraw went from 108.30 to 98.36 ms; that fixture
+does not run Chromium layout. A real Electron test checks the History
+entry, the same last 200 rows, and the actual final scroll position.
