@@ -105,3 +105,11 @@ body.html-fs #gedit[data-group-rail] { display:none; }
 }
 #gedit[data-group-rail] .grow button.danger { background:transparent; }
 #gedit[data-group-rail] .grow button.danger:hover { background:var(--hover); border-color:var(--hair2); }
+
+/* Same grid rhythm as the Appearance picker, on the existing rail side of
+   the native page. Preserve the measured panel footprint. */
+#gedit[data-group-rail] .gr-color-toggle {gap:8px}
+#gedit[data-group-rail] .gr-color .gswb.on::before {
+  outline:1px solid currentColor;outline-offset:2px;
+}
+#gedit[data-group-rail] .gr-color .gswb:focus-visible {outline-offset:-2px}

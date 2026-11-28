@@ -77,3 +77,7 @@
 }
 #settings-accent-palette-panel input[type="color"]::-webkit-color-swatch-wrapper { padding:0; }
 #settings-accent-palette-panel input[type="color"]::-webkit-color-swatch { border:0; border-radius:3px; }
+
+.dx-palette .dx-palette-trigger {gap:8px;border-radius:8px}
+.dx-palette-panel {border-radius:12px}
+.dx-palette-panel .dx-palette-custom {margin-block-start:10px;padding-block-start:10px}
