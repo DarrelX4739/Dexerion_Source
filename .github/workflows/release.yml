@@ -12,7 +12,7 @@ permissions:
 # Only the packaging helpers are imported. Application source is always the
 # exact main commit being built. No releases, tags, or pushes are made here.
 env:
-  INSTALLER_TOOLING_SHA: 35b4bcc0c44e4fa5fc43c0962556bb28161824d2
+  INSTALLER_TOOLING_SHA: 321711f143e8e5389ed79c71ad1c30cdb7afa70f
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
@@ -103,7 +103,7 @@ jobs:
   linux:
     name: Linux x64 · ${{ matrix.commit }}
     needs: plan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -130,7 +130,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2t64 xvfb xauth
+          sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2 xvfb xauth
       - name: Install locked dependencies
         working-directory: app/code/build
         run: npm ci --include=dev
@@ -180,9 +180,10 @@ jobs:
             --output "$setup"
           chmod +x "$setup"
           "$setup" --verify
+          unshare --user --map-root-user --pid --fork true
           xvfb-run -a "$setup" --smoke-test
           (cd "$out"; sha256sum Dexerion-Setup-Linux-x64.run > Dexerion-Setup-Linux-x64.run.sha256)
-          node -e 'console.log(JSON.stringify({source:process.env.SOURCE_SHA,installerTooling:process.env.INSTALLER_TOOLING_SHA,runner:"ubuntu-24.04",platform:"linux",arch:"x64",githubRun:process.env.GITHUB_RUN_ID},null,2))' > "$out/build-provenance.json"
+          node -e 'console.log(JSON.stringify({source:process.env.SOURCE_SHA,installerTooling:process.env.INSTALLER_TOOLING_SHA,runner:"ubuntu-22.04",platform:"linux",arch:"x64",githubRun:process.env.GITHUB_RUN_ID},null,2))' > "$out/build-provenance.json"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: dexerion-linux-x64-${{ matrix.commit }}
