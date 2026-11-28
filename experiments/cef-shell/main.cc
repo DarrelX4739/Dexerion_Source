@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include "include/base/cef_compiler_specific.h"
@@ -58,40 +59,48 @@ struct Options {
   fs::path proof;
 };
 
+bool Status(const fs::path& path, fs::file_status& result) {
+  std::error_code error;
+  result = fs::symlink_status(path, error);
+  return !error || error == std::errc::no_such_file_or_directory;
+}
+
 bool ParseOptions(CefRefPtr<CefCommandLine> arguments, Options& options) {
   if (!arguments->HasSwitch("spike-profile-dir")) return false;
-  try {
-    options.profile = fs::u8path(arguments->GetSwitchValue("spike-profile-dir").ToString()).lexically_normal();
-    if (!options.profile.is_absolute() ||
-        options.profile == options.profile.root_path() ||
-        fs::is_symlink(fs::symlink_status(options.profile))) return false;
-    if (fs::exists(options.profile) &&
-        (!fs::is_directory(options.profile) ||
-         (!fs::is_empty(options.profile) && !fs::is_regular_file(options.profile / kProfileMarker)))) return false;
-    if (arguments->HasSwitch("url"))
-      options.url = arguments->GetSwitchValue("url");
-    if (!WebAddress(options.url)) return false;
-    if (arguments->HasSwitch("smoke-title")) {
-      options.expected_title = arguments->GetSwitchValue("smoke-title");
-      if (options.expected_title.empty() || !arguments->HasSwitch("smoke-proof")) return false;
-      // Proof files can only be written inside the dedicated profile.
-      const std::string proof = arguments->GetSwitchValue("smoke-proof").ToString();
-      if (proof != "smoke-result.txt") return false;
-      options.proof = options.profile / proof;
-      if (fs::exists(options.proof) || fs::is_symlink(fs::symlink_status(options.proof))) return false;
-    }
-    fs::create_directories(options.profile);
-    const auto marker = options.profile / kProfileMarker;
-    if (fs::is_symlink(fs::symlink_status(marker))) return false;
-    if (!fs::exists(marker)) {
-      std::ofstream out(marker);
-      out << "Dexerion CEF experiment profile, not an Electron profile.\n";
-      if (!out) return false;
-    }
-    return true;
-  } catch (const fs::filesystem_error&) {
-    return false;
+  options.profile = fs::u8path(arguments->GetSwitchValue("spike-profile-dir").ToString()).lexically_normal();
+  if (!options.profile.is_absolute() || options.profile == options.profile.root_path()) return false;
+  fs::file_status directory;
+  if (!Status(options.profile, directory) || fs::is_symlink(directory)) return false;
+  const auto marker = options.profile / kProfileMarker;
+  fs::file_status mark;
+  if (!Status(marker, mark) || fs::is_symlink(mark)) return false;
+  std::error_code error;
+  if (fs::exists(directory)) {
+    if (!fs::is_directory(directory)) return false;
+    const bool empty = fs::is_empty(options.profile, error);
+    if (error || (!empty && !fs::is_regular_file(mark))) return false;
   }
+  if (arguments->HasSwitch("url"))
+    options.url = arguments->GetSwitchValue("url");
+  if (!WebAddress(options.url)) return false;
+  if (arguments->HasSwitch("smoke-title")) {
+    options.expected_title = arguments->GetSwitchValue("smoke-title");
+    if (options.expected_title.empty() || !arguments->HasSwitch("smoke-proof")) return false;
+    // Proof files can only be written inside the dedicated profile.
+    const std::string proof = arguments->GetSwitchValue("smoke-proof").ToString();
+    if (proof != "smoke-result.txt") return false;
+    options.proof = options.profile / proof;
+    fs::file_status file;
+    if (!Status(options.proof, file) || fs::exists(file)) return false;
+  }
+  fs::create_directories(options.profile, error);
+  if (error) return false;
+  if (!fs::exists(mark)) {
+    std::ofstream out(marker);
+    out << "Dexerion CEF experiment profile, not an Electron profile.\n";
+    if (!out) return false;
+  }
+  return true;
 }
 
 class Client final : public CefClient,

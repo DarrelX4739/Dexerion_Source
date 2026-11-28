@@ -11,6 +11,10 @@ import urllib.request
 
 DIST = "https://cef-builds.spotifycdn.com/"
 VERSION = "156.0.14+g4fa4ab5+chromium-156.0.8078.48"
+SHA256 = {
+    "linux64": "4191ac920a91a052eba04afb6ed830d47aed46a3e246c434a2f062c23588dc8a",
+    "windows64": "99f8a6dffd47417e0caee7845a98c549b41f1d4246cd715dec843ca4b699ee57",
+}
 
 
 def main():
@@ -40,7 +44,8 @@ def main():
         sha1 = hashlib.file_digest(source, "sha1").hexdigest()
         source.seek(0)
         sha256 = hashlib.file_digest(source, "sha256").hexdigest()
-    if sha1 != expected["sha1"].lower() or archive.stat().st_size != expected["size"]:
+    if (sha1 != expected["sha1"].lower() or sha256 != SHA256[platform] or
+            archive.stat().st_size != expected["size"]):
         raise SystemExit("archive failed upstream integrity check")
     with tarfile.open(archive) as tar:
         tar.extractall(folder, filter="data")
@@ -49,7 +54,7 @@ def main():
     if len(found) != 1 or not (found[0] / "cmake" / "FindCEF.cmake").is_file():
         raise SystemExit("Unexpected CEF SDK layout")
     print(f"CEF archive SHA256: {sha256}", file=sys.stderr)
-    print(found[0])
+    print(found[0].as_posix())
 
 
 if __name__ == "__main__":
