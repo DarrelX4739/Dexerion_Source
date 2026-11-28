@@ -10,6 +10,7 @@ test('launches each binary with no automation flags that change isolation or thr
   const profile = path.join(os.tmpdir(), 'isolated profile');
   const common = ['--user-data-dir=' + profile, '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'];
   assert.deepEqual(browserArgs('dexerion', profile), ['.', ...common]);
+  assert.deepEqual(browserArgs('dexerion', profile, { packaged: true }), common);
   assert.deepEqual(browserArgs('edge', profile), [...common, '--no-first-run', '--no-default-browser-check', 'about:blank']);
   assert.throws(() => browserArgs('unknown', profile), /Unknown browser/);
 });

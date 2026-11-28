@@ -34,6 +34,7 @@
 //   MEASURE_DEADLINE_MIN   wall-clock budget in minutes (default 45); trials
 //                          that would start past it are recorded as pending
 //   MEASURE_LAUNCH_CONTROL  1 adds legacy automation arms as controls
+//   DEX_NATIVE_PACKAGED_APP  path to an unpacked Dexerion executable, optional
 //   MEASURE_NATIVE_LAUNCH  1 launches both binaries without automation flags
 //   MEASURE_SKIP_POWER     1 omits RAPL on virtual hosts; never guesses power
 //   DEX_BUILD_DIR          launch Dexerion from another build tree (used to
@@ -63,6 +64,7 @@ const CORES = os.cpus().length;
 const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
 const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
+const PACKAGED_BINARY = process.env.DEX_NATIVE_PACKAGED_APP ? path.resolve(process.env.DEX_NATIVE_PACKAGED_APP) : null;
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
 const E = path.join(__dirname, 'measure-env.ps1');
@@ -345,11 +347,12 @@ async function prepareNative(browser, base, scenario) {
   const urls = workloadUrls(base, SCENARIOS[scenario]);
   const dex = browser === 'dexerion';
   const executable = dex
-    ? require(require.resolve('electron', { paths: [DEX_BUILD_DIR] }))
+    ? PACKAGED_BINARY || require(require.resolve('electron', { paths: [DEX_BUILD_DIR] }))
     : edgeExecutable();
   const session = await openNative(browser, {
-    chromium, executable, cwd: dex ? DEX_BUILD_DIR : undefined,
-    env: dex ? { ...process.env, DEX_AI_TEST: '1' } : process.env,
+    chromium, executable, cwd: dex && !PACKAGED_BINARY ? DEX_BUILD_DIR : undefined,
+    packaged: dex && Boolean(PACKAGED_BINARY),
+    env: dex && !PACKAGED_BINARY ? { ...process.env, DEX_AI_TEST: '1' } : process.env,
   });
   const list = () => pagesIn(session.browser);
   try {
@@ -583,9 +586,10 @@ function pctOfEdge(dexS, edgeS) {
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
       nativeLaunch: NATIVE_LAUNCH,
+      packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
       exploratoryLauncherControl: LAUNCH_CONTROL,
       edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
-      dexerionLaunch: NATIVE_LAUNCH ? 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP' : 'Playwright Electron loader, isolated data dir, GPU adaptive',
+      dexerionLaunch: NATIVE_LAUNCH ? (PACKAGED_BINARY ? 'direct unpacked Dexerion binary, isolated data dir, loopback ephemeral CDP' : 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP') : 'Playwright Electron loader, isolated data dir, GPU adaptive',
     },
     env: envRecord(),
     scenarios: {},

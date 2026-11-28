@@ -41,6 +41,16 @@ jobs:
           node -p "require('electron')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-gpu-aggregate.cjs
+      - name: Build an unpacked app for the packaged comparison
+        if: contains(github.event.head_commit.message, '[packaged-edge]')
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npx --no-install electron-builder --win dir --x64 --config electron-builder.json --config.directories.output=packaged-edge-dist --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $app = Join-Path $PWD 'packaged-edge-dist/win-unpacked/Dexerion.exe'
+          if (-not (Test-Path $app)) { throw 'Unpacked Dexerion browser not found' }
+          "DEX_NATIVE_PACKAGED_APP=$app" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Measure Edge and Dexerion on the same virtual Windows host
         env:
           LAUNCH_CONTROL: ${{ contains(github.event.head_commit.message, '[launch-control]') }}

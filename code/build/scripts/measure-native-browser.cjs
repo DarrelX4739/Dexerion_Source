@@ -10,13 +10,13 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { setTimeout: sleep } = require('node:timers/promises');
 
-function browserArgs(kind, profile) {
+function browserArgs(kind, profile, { packaged = false } = {}) {
   const args = [
     '--user-data-dir=' + profile,
     '--remote-debugging-address=127.0.0.1',
     '--remote-debugging-port=0',
   ];
-  if (kind === 'dexerion') return ['.', ...args];
+  if (kind === 'dexerion') return packaged ? args : ['.', ...args];
   if (kind === 'edge') return [...args, '--no-first-run', '--no-default-browser-check', 'about:blank'];
   throw new TypeError('Unknown browser: ' + kind);
 }
@@ -47,7 +47,7 @@ async function waitFor(fn, label, time = 20000) {
   throw new Error(label + ' not ready');
 }
 
-async function openNative(kind, { chromium, executable, cwd, env = process.env }) {
+async function openNative(kind, { chromium, executable, cwd, packaged = false, env = process.env }) {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-native-' + kind + '-'));
   let child, browser, devtools, launchError, stderr = '';
   const close = async () => {
@@ -67,7 +67,7 @@ async function openNative(kind, { chromium, executable, cwd, env = process.env }
     try { fs.rmSync(profileDir, { force: true, recursive: true, maxRetries: 5, retryDelay: 300 }); } catch {}
   };
   try {
-    child = spawn(executable, browserArgs(kind, profileDir), { cwd, env, stdio: ['ignore', 'ignore', 'pipe'] });
+    child = spawn(executable, browserArgs(kind, profileDir, { packaged }), { cwd, env, stdio: ['ignore', 'ignore', 'pipe'] });
     child.on('error', (error) => { launchError = error; });
     child.stderr.on('data', (data) => { stderr = (stderr + String(data)).slice(-400); });
     const port = await waitFor(() => {
