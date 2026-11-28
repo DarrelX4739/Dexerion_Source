@@ -2257,14 +2257,21 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 
 /* Default chrome geometry. Leave theme paint, rails, measured chrome heights,
    popover anchors and the order of controls to the existing implementation. */
-:where(:root:not([data-skin])) #toolbar {gap:4px}
+:where(:root:not([data-skin])) #toolbar {gap:3px}
 :where(:root:not([data-skin])) #toolbar button {border-radius:8px}
+:where(:root:not([data-skin])) #toolbar #lock {margin-inline-start:4px}
 :where(:root:not([data-skin])) #omni-wrap {margin-inline:8px}
 :where(:root:not([data-skin])) #omnibox {border-radius:12px;padding-inline:13px}
+:where(:root:not([data-skin])) #bookmark-btn {margin-inline-end:6px}
+/* Only an empty extension slot is omitted from flex spacing; any real
+   extension button has its original dimensions and position in the order. */
+:where(:root:not([data-skin])) #extbar:empty {display:none}
 :where(:root:not([data-skin])) #bookmarkbar a {border-radius:7px;line-height:16px}
 @media (max-width:720px) {
   :where(:root:not([data-skin])) #toolbar {gap:2px;padding-inline:8px}
+  :where(:root:not([data-skin])) #toolbar #lock {margin-inline-start:0}
   :where(:root:not([data-skin])) #omni-wrap {margin-inline:4px}
+  :where(:root:not([data-skin])) #bookmark-btn {margin-inline-end:0}
 }
 
 /* One quiet, aligned rhythm for tabs, group labels and the new-tab control.
@@ -2274,23 +2281,41 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   height:34px;gap:8px;padding-inline:9px 4px;border-radius:8px;
 }
 :where(:root:not([data-skin])) body.vertical #tabstrip.rail-collapsed .tab {padding-inline:0}
-:where(:root:not([data-skin])) body.vertical .tab.active::after {top:8px;bottom:8px}
+:where(:root:not([data-skin])) body.vertical .tab.active::after {top:7px;bottom:7px;left:1px}
+:where(:root:not([data-skin])) body.vertical #tabstrip.rail-open .tab.active .t {font-weight:600}
+/* Indent the contents, not the tab itself: the full row remains clickable
+   and its existing drag zones still use its untouched outer width. */
+:where(:root:not([data-skin])) body.vertical #tabstrip.rail-open .tab.grouped {
+  padding-inline-start:16px;gap:6px;
+}
+:where(:root:not([data-skin])) body.vertical #tabstrip.rail-open .tab.grouped:has(+ :is(.tab:not(.grouped), .gchip, #newtab-btn)) {
+  margin-block-end:3px;
+}
 :where(:root:not([data-skin])) .tab .x {width:24px;height:24px;padding:0;border-radius:6px}
 :where(:root:not([data-skin])) .tab .x:focus-visible {opacity:1;outline-offset:-2px}
 :where(:root:not([data-skin])) body.vertical .gchip {
   height:28px;margin-block:4px 1px;padding-inline:9px 6px;border-radius:8px;
 }
 :where(:root:not([data-skin])) body.vertical #tabstrip.rail-collapsed .gchip {padding-inline:4px}
-:where(:root:not([data-skin])) .gchip .gnm {min-width:0;max-width:none}
-:where(:root:not([data-skin])) .gchip .gct {margin-inline-start:auto;flex:none;font-variant-numeric:tabular-nums}
+:where(:root:not([data-skin])) .gchip .gnm {min-width:0;max-width:none;font-weight:550}
+:where(:root:not([data-skin])) .gchip .gstate {flex:none;text-align:center}
+:where(:root:not([data-skin])) .gchip .gct {
+  margin-inline-start:auto;flex:none;min-width:18px;text-align:center;font-variant-numeric:tabular-nums;
+}
+:where(:root:not([data-skin])) .gchip:focus-visible:not(.drop) {outline-offset:-2px}
 :where(:root:not([data-skin])) body.vertical #newtab-btn {
   height:32px;margin-block:3px 0;border-radius:8px;
 }
 
 /* Related controls share an edge and radius scale instead of new decoration. */
 :where(:root:not([data-skin])) #dmenu {border-radius:12px}
-:where(:root:not([data-skin])) .mitem {border-radius:7px}
+:where(:root:not([data-skin])) .mitem {border-radius:7px;padding-inline:10px;gap:10px}
+:where(:root:not([data-skin])) .mlabel {
+  padding:7px 10px 4px;font-weight:600;letter-spacing:.12em;
+}
+:where(:root:not([data-skin])) .mfoot {padding-inline:10px}
 :where(:root:not([data-skin])) #gedit {border-radius:12px}
 :where(:root:not([data-skin])) .grow button {min-height:30px;border-radius:7px}
 :where(:root:not([data-skin])) .rt-btns button {border-radius:7px}
 :where(:root:not([data-skin])) .tk-row {border-radius:7px}
+:where(:root:not([data-skin])) :is(#rm-start,#tm-open) {border-radius:11px}
