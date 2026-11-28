@@ -1,0 +1,52 @@
+name: Dexerion refreshed dev checks
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-refreshed-dev.yml'
+      - 'code/**'
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 22
+    defaults:
+      run:
+        working-directory: code/build
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '55000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked runtime
+        run: npm ci
+      - name: Run code checks and unit tests
+        shell: bash
+        run: |
+          set -e
+          npm test
+          node scripts/verify-all.js
+      - name: Exercise actual desktop and AI search on Windows
+        if: runner.os == 'Windows'
+        run: npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js
+      - name: Exercise actual desktop and AI search on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: refreshed-dev-failure-${{ matrix.os }}
+          path: code/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
