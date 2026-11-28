@@ -1,0 +1,58 @@
+name: Dexerion Windows owned WorkingSetPrivate sampler preflight
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-owned-working-set-preflight.yml'
+      - 'code/build/scripts/OwnedWorkingSetInventory.cs'
+      - 'code/build/scripts/probe-owned-working-set.ps1'
+      - 'code/build/scripts/owned-working-set-preflight.cjs'
+      - 'code/build/scripts/test-owned-working-set-preflight.cjs'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 7
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Check sampler guard contracts in the locked setup
+        shell: pwsh
+        run: |
+          npm ci --include=dev
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-owned-working-set-preflight.cjs scripts/test-measure-native-browser.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build the unchanged packed app only for short stock preflight
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'dex-owned-ws-short'
+          node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$package" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Qualify acquisition on separate short stock fixtures, not a benchmark
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'dex-owned-ws-short/win-unpacked/Dexerion.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'dex-owned-working-set-preflight.json'
+          node scripts/owned-working-set-preflight.cjs $exe $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-owned-working-set-preflight
+          path: ${{ runner.temp }}/dex-owned-working-set-preflight.json
+          if-no-files-found: ignore
+          retention-days: 7
