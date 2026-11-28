@@ -2351,3 +2351,14 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   #tabs .tab {animation:none;transition:none}
   #tabs .gchip .gstate {transition:none}
 }
+
+/* Let commands lead, keep shortcuts aligned, and keep very narrow menus
+   within the viewport. No menu items or quick actions change. */
+:where(:root:not([data-skin])) #dmenu {max-width:calc(100vw - 24px)}
+:where(:root:not([data-skin])) #dmenu .mitem :is(.tx,kbd) {min-width:0}
+:where(:root:not([data-skin])) #dmenu .mitem kbd {
+  flex:none;background:transparent;border-color:transparent;padding-inline:3px;
+}
+:where(:root:not([data-skin])) #dmenu .mitem:focus-visible {outline-offset:-2px}
+:where(:root:not([data-skin])) .rt-time {font-weight:350;letter-spacing:-.04em}
+:where(:root:not([data-skin])) .rt-blockhead {font-weight:600;letter-spacing:.1em}
