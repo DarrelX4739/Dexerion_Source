@@ -1,0 +1,127 @@
+/* Match the branded Windows Setup tokens and geometry in Setup.xaml. */
+:root {
+  color-scheme: dark;
+  --ground: #101010;
+  --ink: #f3f3f3;
+  --muted: #aeaeae;
+  --line: #343434;
+  --panel: #171717;
+  --hover: #242424;
+  --focused: #666;
+  --accent: #1f6f6b;
+  --on-accent: #fff;
+  font: 14px/1.39 "Segoe UI", "Noto Sans", "Open Sans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  display: grid;
+  grid-template-rows: 49px minmax(0, 1fr) 73px;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+header, footer { align-items: center; display: flex; background: var(--panel); }
+header { -webkit-app-region: drag; padding: 0 9px 0 20px; }
+.brand-logo { height: 28px; width: 28px; margin-right: 10px; object-fit: contain; }
+.brand-name { font-weight: 600; font-size: 13px; }
+.title { color: var(--muted); margin-left: 16px; font-size: 12px; }
+.preview { color: var(--muted); margin-left: 18px; font-size: 11px; }
+.window-actions { display: flex; margin-left: auto; -webkit-app-region: no-drag; }
+.window-actions button { width: 32px; height: 30px; padding: 0; justify-content: center; }
+.window-actions #minimize { color: var(--muted); }
+footer { padding: 0 38px 0 35px; gap: 12px; }
+footer #back { margin-left: auto; }
+footer #back[hidden] + #primary { margin-left: auto; }
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 12px;
+  line-height: 1;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button:hover { background: var(--hover); }
+button:focus-visible { outline: none; background: var(--focused); }
+button:active { opacity: .72; }
+button:disabled { opacity: .43; cursor: default; }
+.quiet { color: var(--muted); }
+svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.4px; stroke-linecap: round; stroke-linejoin: round; }
+#primary {
+  min-width: 134px;
+  height: 42px;
+  padding: 0 5px 0 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  justify-content: space-between;
+  gap: 13px;
+}
+#primary:hover { opacity: .9; }
+#primary:active { opacity: .75; }
+#action-label { flex: 1; }
+.action-glyph { display: grid; place-items: center; height: 28px; width: 30px; border-radius: 3px; }
+#primary:focus-visible .action-glyph { background: var(--on-accent); color: var(--accent); }
+#page { overflow: auto; margin: 25px 28px 10px 38px; padding-right: 10px; scrollbar-color: var(--focused) transparent; scrollbar-width: thin; }
+#page:focus { outline: none; }
+body[data-stage="welcome"] #page { padding-top: 86px; }
+body[data-stage="installing"] #page, body[data-stage="ready"] #page { padding-top: 41px; }
+.lockup { display: flex; align-items: center; gap: 27px; }
+.hero-logo { width: 124px; height: 124px; object-fit: contain; }
+h1 { margin: 0 0 5px; font-size: 34px; font-weight: 600; line-height: 1.25; }
+.lockup h1 { font-size: 43px; }
+.description { color: var(--muted); max-width: 470px; margin: 0 0 19px; }
+.lockup .description { max-width: 390px; }
+.scope { margin: 0 0 17px; }
+.choice { position: relative; display: flex; align-items: center; width: fit-content; min-height: 40px; padding: 0 8px; border-radius: 4px; cursor: pointer; }
+.choice:hover { background: var(--panel); }
+.choice:has(input:focus-visible) { background: var(--focused); }
+.choice:has(input:disabled) { opacity: .43; cursor: default; }
+.choice input { position: absolute; opacity: 0; width: 18px; height: 18px; margin: 0; }
+.indicator { display: grid; place-content: center; margin: 0 12px 0 1px; width: 18px; height: 18px; border: 1px solid var(--muted); border-radius: 3px; }
+input[type="radio"] + .indicator { border-radius: 50%; }
+input:checked + .indicator { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+input[type="radio"]:checked + .indicator::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--on-accent); }
+input:not(:checked) + .indicator svg { visibility: hidden; }
+.path-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 9px; }
+.path-slot { display: flex; align-items: center; gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; margin-bottom: 7px; padding-right: 1px; }
+.path-slot input { min-width: 0; flex: 1; height: 40px; padding: 0 12px; font: inherit; background: transparent; color: var(--ink); border-radius: 3px; border: 0; }
+.path-slot input:focus-visible { outline: none; background: var(--focused); }
+.path-slot button, .browse-bar button { background: var(--hover); }
+.path-slot button:focus-visible, .browse-bar button:focus-visible { background: var(--focused); }
+.status { font-size: 13px; margin: 0 0 9px; color: var(--muted); }
+.browse-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.browse-bar button { margin-left: auto; height: 34px; }
+.current-folder { overflow-wrap: anywhere; font-weight: 600; font-size: 13px; }
+.folders { height: 164px; background: var(--panel); overflow: auto; padding: 4px; scrollbar-color: var(--focused) transparent; scrollbar-width: thin; }
+.folders button { display: flex; justify-content: flex-start; width: 100%; text-align: left; }
+.folders button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.empty { margin: 9px; }
+.dots { display: flex; gap: 5px; margin-top: 24px; }
+.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .dots span { animation: pulse .64s ease-in-out infinite alternate; }
+  .dots span:nth-child(2) { animation-delay: .12s; }
+  .dots span:nth-child(3) { animation-delay: .24s; }
+  @keyframes pulse { to { opacity: .28; } }
+}
+@media (max-width: 545px) {
+  #page { margin: 20px 16px 10px 20px; }
+  footer { padding-inline: 10px; gap: 4px; }
+  .lockup { gap: 14px; }
+  .hero-logo { width: 80px; height: 80px; }
+  .lockup h1 { font-size: 32px; }
+}
+@media (max-height: 440px) {
+  body[data-stage="welcome"] #page, body[data-stage="installing"] #page, body[data-stage="ready"] #page { padding-top: 18px; }
+}

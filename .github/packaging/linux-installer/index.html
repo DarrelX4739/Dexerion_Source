@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dexerion Setup</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="view.js"></script>
+</head>
+<body>
+  <header>
+    <img class="brand-logo" src="logo.png" alt="">
+    <span class="brand-name">Dexerion</span>
+    <span class="title">Setup</span>
+    <span class="preview" id="preview" hidden>Preview only</span>
+    <div class="window-actions">
+      <button id="minimize" aria-label="Minimize Setup"><svg aria-hidden="true" viewBox="0 0 12 12"><path d="M1 8h10"/></svg></button>
+      <button id="close" aria-label="Close Setup"><svg aria-hidden="true" viewBox="0 0 12 12"><path d="m2 2 8 8m0-8-8 8"/></svg></button>
+    </div>
+  </header>
+  <main id="page" aria-labelledby="heading"></main>
+  <footer>
+    <button id="cancel" class="quiet">Cancel</button>
+    <button id="back"><svg aria-hidden="true" class="quiet" viewBox="0 0 12 12"><path d="M11 6H1m4-4L1 6l4 4"/></svg>Back</button>
+    <button id="primary">
+      <span id="action-label"></span>
+      <span class="action-glyph"><svg aria-hidden="true" viewBox="0 0 12 12"><path id="action-icon"/></svg></span>
+    </button>
+  </footer>
+</body>
+</html>
