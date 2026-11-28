@@ -162,11 +162,6 @@ internal sealed class Wizard
         lockup.Children.Add(mark);
 
         var intro = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        intro.Children.Add(new Border
-        {
-            Width = 26, Height = 2, Background = BrushFor("Accent"),
-            HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 12)
-        });
         Lead("Install Dexerion",
             preview ? "Walk through Setup without installing Dexerion or changing this PC."
             : "Set up the Dexerion desktop browser. Your existing browser profile stays in place.", 43, intro);
@@ -251,14 +246,14 @@ internal sealed class Wizard
         var scopeRow = new StackPanel { Margin = new Thickness(0, 0, 0, 17) };
         RadioButton user = Choice("Just _me", !allUsers), machine = Choice("_Everyone on this PC", allUsers);
         machine.IsEnabled = engine.CanInstallForAll;
-        scopeRow.Children.Add(new Border { Height = 1, Background = BrushFor("Line") });
         scopeRow.Children.Add(user);
         scopeRow.Children.Add(machine);
         pages.Children.Add(scopeRow);
 
         var targetRow = new DockPanel();
         var browse = SmallButton("_Browse", "FolderGlyph");
-        var browseSlot = new Border { BorderBrush = BrushFor("Line"), BorderThickness = new Thickness(1, 0, 0, 0), Child = browse };
+        browse.Background = BrushFor("Hover");
+        var browseSlot = new Border { Margin = new Thickness(3, 1, 1, 1), Child = browse };
         DockPanel.SetDock(browseSlot, Dock.Right);
         targetRow.Children.Add(browseSlot);
         location = new TextBox { Text = path, Style = (Style)window.FindResource("TextEntry") };
@@ -357,8 +352,8 @@ internal sealed class Wizard
             targets = new string[0];
             failure = "Setup could not list this folder.";
         }
-        folders = new ListBox { Height = 164, BorderThickness = new Thickness(0, 1, 0, 1), Background = BrushFor("Ground"),
-            BorderBrush = BrushFor("Line"), Foreground = BrushFor("Ink") };
+        folders = new ListBox { Height = 164, BorderThickness = new Thickness(0), Background = BrushFor("Panel"),
+            Foreground = BrushFor("Ink") };
         AutomationProperties.SetName(folders, "Folders");
         foreach (var target in targets)
         {
