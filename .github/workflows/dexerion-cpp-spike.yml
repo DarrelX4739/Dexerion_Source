@@ -54,6 +54,25 @@ jobs:
         working-directory: code/build
         run: npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js e2e/newtab-tasks.spec.js
 
+      - name: Run the carried-forward full Electron suite under Linux
+        if: runner.os == 'Linux' && contains(github.event.head_commit.message, '[full]')
+        working-directory: code/build
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends openbox x11-utils
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash -ec '
+            openbox --sm-disable >/tmp/dex-cef-openbox.log 2>&1 &
+            wm=$!
+            trap "kill $wm 2>/dev/null || true" EXIT
+            for i in {1..40}; do
+              xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id" && break
+              sleep .25
+            done
+            xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"
+            npm run test:e2e
+          '
+
   native-cef:
     if: github.ref == 'refs/heads/cpp-native-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[cef]'))
     strategy:
@@ -84,7 +103,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libx11-dev
+          sudo apt-get install -y --no-install-recommends libx11-dev openbox x11-utils
       - name: Configure and build native CEF under Linux
         if: runner.os == 'Linux'
         run: |
@@ -111,6 +130,51 @@ jobs:
           app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
           test -n "$app"
           python experiments/cef-shell/smoke.py "$app"
+
+
+      - uses: actions/setup-node@v4
+        if: contains(github.event.head_commit.message, '[footprint]')
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install the locked Electron comparison arm and pinned sampler
+        if: contains(github.event.head_commit.message, '[footprint]')
+        run: |
+          npm ci --prefix code/build
+          python -m pip install --only-binary=:all: psutil==7.2.2 'python-xlib==0.33; sys_platform == "linux"'
+      - name: Measure separate disposable one-page launch trees
+        if: contains(github.event.head_commit.message, '[footprint]')
+        run: |
+          electron="$(cd code/build && node -p "require('electron')" )"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
+            python experiments/cef-shell/compare_footprint.py --cef "$app" --electron "$electron" --output footprint.json
+          else
+            app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe -print -quit)"
+            helper="$(dirname "$electron")/chrome-sandbox"
+            test -f "$helper"
+            sudo chown root:root "$helper"
+            sudo chmod 4755 "$helper"
+            xvfb-run -a -s '-screen 0 1440x1024x24' bash -ec '
+              openbox --sm-disable >/tmp/dex-cef-footprint-wm.log 2>&1 &
+              wm=$!
+              trap "kill $wm 2>/dev/null || true" EXIT
+              for i in {1..40}; do
+                xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id" && break
+                sleep .25
+              done
+              xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"
+              python experiments/cef-shell/compare_footprint.py --cef "$1" --electron "$2" --output footprint.json
+            ' bash "$app" "$electron"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && contains(github.event.head_commit.message, '[footprint]')
+        with:
+          name: cef-prototype-footprint-${{ matrix.sdk }}
+          path: footprint.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   native-core:
     env:
