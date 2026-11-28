@@ -440,6 +440,29 @@ body.ai .daylight{display:none}
   .daylight{position:static;width:min(620px,92vw);margin:0 auto;text-align:center}
   .daylight .quote,.daylight .author{display:none}
 }
+
+/* A static horizon frames the existing start page; never paint over chat. */
+body:not(.ai) {
+  padding-top:clamp(28px, 10vh, 108px);
+  background:radial-gradient(ellipse 44rem 22rem at 50% 0%, var(--dx-optical-light), transparent),
+             var(--pbg);
+}
+.mark .crest {border-radius:23px;box-shadow:0 0 0 6px var(--dx-optical-light),var(--sh-2)}
+[data-theme="light"] .mark .crest {box-shadow:0 0 0 6px var(--dx-optical-light),var(--sh-2)}
+.mark h1 {font-size:clamp(32px, 6vw, 58px);letter-spacing:-.065em;text-transform:none;font-weight:660;line-height:1.03}
+.mark .sub {color:var(--pfg-2)}
+#q {border-radius:15px;background:var(--pcard)}
+#q::placeholder {color:var(--pfg-2)}
+.cmd .go {color:var(--pfg-2);border-radius:7px}
+.acts #ai-btn {border-radius:999px}
+.sect h2, .sect .n {color:var(--pfg-2)}
+#starred .tile, .tk-todo {min-width:0;border-radius:12px;background:var(--pcard)}
+#starred .tile:hover, .tk-todo:hover {background:var(--phover)}
+#starred .empty {border-color:var(--pborder-2);border-radius:15px;color:var(--pfg-2)}
+@media (max-width:430px) {
+  .mark .crest {width:59px;height:59px}
+  #starred {grid-template-columns:minmax(0,1fr)}
+}
 </style>
 </head><body>
 
