@@ -1,0 +1,45 @@
+name: Dexerion Windows CPU counter calibration
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-windows-shell-cpu-calibration.yml'
+      - 'code/build/scripts/diagnose-windows-shell-cpu.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  calibrate:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 8
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '30000'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked runtime
+        run: npm ci
+      - name: Compare operating-system counters on verified foreground renderer
+        shell: pwsh
+        run: |
+          node scripts/diagnose-windows-shell-cpu.cjs --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/diagnose-windows-shell-cpu.cjs (Join-Path $env:RUNNER_TEMP 'dex-shell-cpu-calibration.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-windows-shell-cpu-calibration
+          path: ${{ runner.temp }}/dex-shell-cpu-calibration.json
+          if-no-files-found: ignore
+          retention-days: 7
