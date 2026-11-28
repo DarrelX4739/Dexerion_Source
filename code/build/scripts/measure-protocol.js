@@ -365,16 +365,43 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
     if (dex) {
       const shell = await waitFor(() => list().find((p) => isShellUrl(p.url())), 'native Dexerion shell');
       const getState = () => shell.evaluate(() => window.dexerion?.invoke('dex:get-state'));
-      const boot = await waitFor(async () => (await getState())?.active, 'native Dexerion active tab');
+      const initial = await waitFor(async () => {
+        const state = await getState();
+        return state?.active && state.tabs?.some((t) => t.id === state.active && !t.loading) && state;
+      }, 'native Dexerion boot tab');
+      const boot = initial.active;
+      const seededTrial = !prime && seedProfiles.has(browser);
+      if (seededTrial) {
+        // Retain preferences, caches, and data but apply the workload to
+        // exactly one tab. Any additional restored tabs belong to this
+        // benchmark's disposable seed and are closed using the normal UI IPC.
+        await shell.evaluate(async (id) => {
+          const bridge = window.dexerion;
+          const state = await bridge.invoke('dex:get-state');
+          for (const tab of state.tabs) if (tab.id !== id) await bridge.invoke('dex:close-tab', tab.id);
+          await bridge.invoke('dex:activate-tab', id);
+        }, boot);
+      }
       await shell.evaluate(({ id, url }) => window.dexerion.invoke('dex:navigate', id, url), { id: boot, url: urls[0] });
       for (const url of urls.slice(1)) {
         await shell.evaluate((u) => window.dexerion.invoke('dex:new-tab', u, true), url);
       }
-      await waitFor(async () => {
-        const st = await getState();
-        return st?.active === boot && !st.tabs.some((t) => t.loading) &&
-          matchesInventory(st.tabs.map((t) => t.url), urls);
-      }, 'native Dexerion tab inventory');
+      let lastInventory;
+      try {
+        await waitFor(async () => {
+          const st = await getState();
+          lastInventory = st && {
+            n: st.tabs.length,
+            activeMatches: st.active === boot,
+            loading: st.tabs.filter((t) => t.loading).length,
+            fixtureTabs: st.tabs.filter((t) => urls.includes(t.url)).length,
+          };
+          return st?.active === boot && !st.tabs.some((t) => t.loading) &&
+            matchesInventory(st.tabs.map((t) => t.url), urls);
+        }, 'native Dexerion tab inventory');
+      } catch (error) {
+        throw new Error(error.message + ': ' + JSON.stringify(lastInventory));
+      }
       front = await waitFor(() => list().find((p) => p.url() === urls[0]), 'native Dexerion foreground page');
     } else {
       const context = session.browser.contexts()[0];

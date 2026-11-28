@@ -53,12 +53,14 @@ jobs:
           "DEX_NATIVE_PACKAGED_APP=$app" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Measure Edge and Dexerion on the same virtual Windows host
         env:
+          FOUR_TRIALS: ${{ contains(github.event.head_commit.message, '[four-trials]') }}
           SEED_PROFILE: ${{ contains(github.event.head_commit.message, '[seeded-profile]') }}
           LAUNCH_CONTROL: ${{ contains(github.event.head_commit.message, '[launch-control]') }}
           NATIVE_SOAK: ${{ contains(github.event.head_commit.message, '[native-soak]') }}
           NATIVE_LAUNCH: ${{ contains(github.event.head_commit.message, '[native-launch]') }}
           FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
         run: |
+          if ($env:FOUR_TRIALS -eq 'true') { $env:MEASURE_TRIALS = '4' }
           if ($env:SEED_PROFILE -eq 'true') { $env:MEASURE_SEED_PROFILE = '1' }
           if ($env:LAUNCH_CONTROL -eq 'true') { $env:MEASURE_LAUNCH_CONTROL = '1' }
           if ($env:NATIVE_SOAK -eq 'true') { $env:MEASURE_SETTLE_MS = '22000' }
