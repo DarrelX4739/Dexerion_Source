@@ -1,0 +1,74 @@
+name: Dexerion packaged Windows shell memory A-B
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-packaged-shell-memory-ab.yml'
+      - 'code/build/scripts/measure-packaged-lucide-startup.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  paired:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 18
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked Electron builder and runtime
+        run: npm ci --include=dev
+      - name: Build both local unpacked controls, no signing or publishing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $electron = node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dist = Split-Path -Parent $electron
+          $shell = (Resolve-Path '../code/src/renderer/shell.html').Path
+          $expected = git rev-parse 'HEAD:code/code/src/renderer/shell.html'
+          if ($LASTEXITCODE -ne 0 -or $expected -ne 'fb76ff6ef1b64e57f345cc8c5a56618ebe81b0d0') { throw 'Re-audit the shell before a newer build is tested' }
+          $before = [IO.File]::ReadAllBytes($shell)
+          $text = [Text.Encoding]::UTF8.GetString($before)
+          $subset = '../../assets/vendor/lucide-shell.js'
+          $full = '../../assets/vendor/lucide.min.js'
+          if ($text.Split($subset,[StringSplitOptions]::None).Count -ne 2 -or $text.Contains($full)) { throw 'Only one production shell import expected' }
+          function Make-Package([string]$arm) {
+            $out = Join-Path $env:RUNNER_TEMP ('dex-shell-memory-' + $arm)
+            node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.electronDist=$dist" "--config.directories.output=$out" --publish never
+            if ($LASTEXITCODE -ne 0) { throw "Build failed for $arm" }
+          }
+          try {
+            Make-Package 'subset'
+            [IO.File]::WriteAllBytes($shell,[Text.Encoding]::UTF8.GetBytes($text.Replace($subset,$full)))
+            Make-Package 'stock'
+          } finally { [IO.File]::WriteAllBytes($shell,$before) }
+          git diff --exit-code -- ../code/src/renderer/shell.html
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Audit installed files and observe five real native shell pairs
+        shell: pwsh
+        run: |
+          $stock = Join-Path $env:RUNNER_TEMP 'dex-shell-memory-stock/win-unpacked/Dexerion.exe'
+          $subset = Join-Path $env:RUNNER_TEMP 'dex-shell-memory-subset/win-unpacked/Dexerion.exe'
+          node scripts/measure-packaged-lucide-startup.cjs $stock $subset (Join-Path $env:RUNNER_TEMP 'dex-packaged-shell-memory.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-packaged-windows-shell-memory-ab
+          path: ${{ runner.temp }}/dex-packaged-shell-memory.json
+          if-no-files-found: ignore
+          retention-days: 7
