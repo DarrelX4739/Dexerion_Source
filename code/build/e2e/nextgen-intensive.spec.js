@@ -1039,6 +1039,7 @@ for (let round = 1; round <= ROUNDS; round += 1) {
   const r = round;
   test('intensive round ' + pad(r, 2) + ': 1000 asserted scenarios', async () => {
     const roundCode = 'R' + pad(r, 2);
+    const trace = (phase) => { if (process.env.DEX_TRACE_INTENSIVE_AREAS === '1') console.log(roundCode + ' ' + phase); };
     const mock = await startAiMock({ reply: chatReply(r) });
     mock.replyFor = (body) => {
       const messages = Array.isArray(body.messages) ? body.messages : [];
@@ -1048,7 +1049,9 @@ for (let round = 1; round <= ROUNDS; round += 1) {
       if (/report artifact/i.test(ask)) return reportReply(r);
       return chatReply(r);
     };
+    trace('launching Electron');
     const { app, win, profile } = await launchDexerion({ aiBase: mock.url });
+    trace('Electron started');
     const pageErrors = [];
     win.on('pageerror', (err) => pageErrors.push(String(err && err.message || err)));
     let total = 0;
@@ -1064,7 +1067,9 @@ for (let round = 1; round <= ROUNDS; round += 1) {
 
       const ctx = { round: r, roundCode, app, win, mock, profile, seeded };
       for (let i = 0; i < AREAS_PER_ROUND; i += 1) {
+        trace('starting area ' + AREA_CODES[i]);
         total += await runArea(ctx, AREA_CODES[i], AREA_FNS[i]);
+        trace('finished area ' + AREA_CODES[i]);
       }
       if (total !== SCENARIOS_PER_ROUND) {
         throw new Error(roundCode + ': expected ' + SCENARIOS_PER_ROUND + ' scenarios, got ' + total);
@@ -1073,8 +1078,11 @@ for (let round = 1; round <= ROUNDS; round += 1) {
       console.log('INTENSIVE E2E ROUND ' + pad(r, 2) + ': ' + total + '/' + SCENARIOS_PER_ROUND + ' PASS');
       expect(TOTAL_SCENARIOS).toBe(20000);
     } finally {
+      trace('closing Electron');
       await app.close().catch(() => {});
+      trace('closing local mock');
       await mock.close();
+      trace('round cleanup complete');
     }
   });
 }
