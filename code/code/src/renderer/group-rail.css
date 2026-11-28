@@ -1,0 +1,107 @@
+/* The live native page begins at the reported rail edge. Keep this panel and
+   all of its controls on the shell side of that edge, including during resize. */
+body.vertical.group-rail-ui #gedit {
+  left:var(--group-rail-left, 8px) !important;
+  top:var(--group-rail-top, 8px) !important;
+  width:var(--group-rail-width, 188px);
+  max-width:calc(var(--rail-w, 48px) - 16px);
+  max-height:calc(100vh - 16px);
+  overflow:auto;
+  padding:9px;
+  background:var(--bg2);
+  border-radius:12px;
+  backdrop-filter:none;
+  box-shadow:0 4px 12px #0002;
+  animation:none;
+}
+body.vertical.group-rail-ui #gedit:not([data-rail-ready]) { visibility:hidden; }
+body.vertical #tabstrip.group-editor-open { transition:none; }
+body.html-fs #gedit[data-group-rail] { display:none; }
+
+#gedit[data-group-rail] input {
+  height:32px;
+  margin-bottom:7px;
+  padding:0 8px;
+}
+
+#gedit .gr-color { margin-bottom:7px; }
+#gedit .gr-color-toggle {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  width:100%;
+  min-height:32px;
+  text-align:start;
+  padding:4px 7px;
+  border:1px solid var(--hair2);
+  border-radius:8px;
+  background:transparent;
+  color:var(--fg);
+  cursor:pointer;
+  font-size:11px;
+  font-weight:600;
+}
+#gedit .gr-color-toggle:hover, #gedit .gr-color-toggle[aria-expanded="true"] { background:var(--hover); }
+#gedit .gr-current {
+  width:10px;
+  height:10px;
+  flex:none;
+  border-radius:50%;
+  background:var(--gc);
+  box-shadow:0 0 0 1px var(--hair2);
+}
+#gedit .gr-chevron {
+  margin-inline-start:auto;
+  margin-inline-end:2px;
+  width:6px;
+  height:6px;
+  flex:none;
+  border:solid currentColor;
+  border-width:0 1px 1px 0;
+  transform:rotate(45deg);
+}
+#gedit .gr-color-toggle[aria-expanded="true"] .gr-chevron { transform:rotate(225deg); }
+
+#gedit .gr-color .gsw {
+  display:grid;
+  grid-template-columns:repeat(5, minmax(0, 1fr));
+  gap:2px;
+  margin:0;
+  padding-top:5px;
+}
+#gedit .gr-color .gsw[hidden] { display:none; }
+#gedit .gr-color .gswb {
+  display:grid;
+  place-items:center;
+  border:1px solid transparent;
+  border-radius:7px;
+  background:transparent !important;
+  width:100%;
+  height:26px;
+  transform:none;
+}
+#gedit .gr-color .gswb::before {
+  content:"";
+  width:12px;
+  height:12px;
+  border-radius:50%;
+  background:var(--gr-swatch);
+  box-shadow:0 0 0 1px var(--hair2);
+}
+#gedit .gr-color .gswb:hover { background:var(--hover) !important; }
+#gedit .gr-color .gswb.on { border-color:var(--fg); }
+#gedit[data-group-rail] :is(input, button):focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:-2px;
+}
+#gedit[data-group-rail] .grow { gap:5px; }
+#gedit[data-group-rail] .grow button {
+  min-height:32px;
+  border-radius:8px;
+  padding:3px;
+  color:var(--fg);
+  font-size:11px;
+  font-weight:600;
+}
+#gedit[data-group-rail] .grow button.danger { background:transparent; }
+#gedit[data-group-rail] .grow button.danger:hover { background:var(--hover); border-color:var(--hair2); }
