@@ -662,6 +662,42 @@ body.vertical #dmenu { top:56px; }
 }
 :root:not([data-skin]) #dmenu .mfoot,
 :root:not([data-skin]) #dmenu .about-link { color: var(--fg2); }
+
+/* Dark chrome: the address is the main surface. Adjacent controls retain
+   their dimensions, order, anchors and state colours. */
+:root[data-theme="dark"]:not([data-skin]) #omnibox {
+  background: var(--hover);
+  border-color: var(--hair2);
+}
+:root[data-theme="dark"]:not([data-skin]) #omnibox:focus {
+  outline-offset: -2px;
+  border-color: var(--hair2);
+}
+:root[data-theme="dark"]:not([data-skin]) #account-av {
+  background: var(--hover);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--hair2);
+}
+:root[data-theme="dark"]:not([data-skin]) #bookmarkbar { background: var(--bg2); }
+
+/* The command menu uses available height before it needs to scroll.
+   Keep the existing menu items, click path and presentation above the page. */
+:root[data-theme="dark"]:not([data-skin]) body.vertical #dmenu {
+  width: min(300px, calc(100vw - 24px));
+  max-height: calc(100dvh - 68px);
+  scroll-padding-block: 6px;
+  scrollbar-width: thin;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.34);
+}
+:root[data-theme="dark"]:not([data-skin]) #dmenu .mitem .tx {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+:root[data-theme="dark"]:not([data-skin]) #dmenu kbd {
+  flex: none;
+  white-space: nowrap;
+}
+
 :root:not([data-skin]) #gedit input { background: var(--bg); color: var(--fg); }
 :root:not([data-skin]) #gedit .gswb,
 :root:not([data-skin]) #ai-sidebar .ai-paper-dot { border-radius: 4px; }
