@@ -67,6 +67,7 @@ const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
 const SEED_PROFILE = NATIVE_LAUNCH && !LAUNCH_CONTROL && process.env.MEASURE_SEED_PROFILE === '1';
 const DISTINCT_HOSTS = process.env.MEASURE_DISTINCT_LOOPBACK_HOSTS === '1';
+const STATIC_BACKGROUND = process.env.MEASURE_STATIC_BACKGROUND === '1';
 if (DISTINCT_HOSTS && (!NATIVE_LAUNCH || LAUNCH_CONTROL)) {
   throw new Error('Distinct loopback workload requires matched native launches');
 }
@@ -351,7 +352,8 @@ async function prepareDexerion(base, scenario) {
 // A separate mode for hosted comparisons without Playwright's launch
 // switches. Use Playwright only as a local controller over native DevTools.
 async function prepareNative(browser, base, scenario, { prime = false } = {}) {
-  const urls = workloadUrls(base, SCENARIOS[scenario], DISTINCT_HOSTS);
+  const definition = SCENARIOS[scenario];
+  const urls = workloadUrls(base, STATIC_BACKGROUND ? { ...definition, background: 'static' } : definition, DISTINCT_HOSTS);
   const dex = browser === 'dexerion';
   const executable = dex
     ? PACKAGED_BINARY || require(require.resolve('electron', { paths: [DEX_BUILD_DIR] }))
@@ -668,6 +670,7 @@ function pctOfEdge(dexS, edgeS) {
       workloadOrigins: DISTINCT_HOSTS ? 'one .localhost host per tab' : 'same loopback origin',
       packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
       exploratoryLauncherControl: LAUNCH_CONTROL,
+      backgroundFixture: NATIVE_LAUNCH && STATIC_BACKGROUND ? 'static' : 'animated',
       profileMode: SEED_PROFILE ? 'per-browser primed disposable seed, cloned per trial' : 'fresh disposable profile per trial',
       edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
       dexerionLaunch: NATIVE_LAUNCH ? (PACKAGED_BINARY ? 'direct unpacked Dexerion binary, isolated data dir, loopback ephemeral CDP' : 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP') : 'Playwright Electron loader, isolated data dir, GPU adaptive',

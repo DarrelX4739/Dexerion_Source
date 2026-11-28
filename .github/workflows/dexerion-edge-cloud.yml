@@ -61,6 +61,7 @@ jobs:
           FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
           LIGHT_WORKLOADS: ${{ contains(github.event.head_commit.message, '[edge-light-workloads]') }}
           DISTINCT_HOSTS: ${{ contains(github.event.head_commit.message, '[edge-distinct-sites]') }}
+          STATIC_BACKGROUND: ${{ contains(github.event.head_commit.message, '[edge-static-background]') }}
           EXTENDED_SAMPLE: ${{ contains(github.event.head_commit.message, '[edge-extended-sample]') }}
         run: |
           if ($env:FOUR_TRIALS -eq 'true') { $env:MEASURE_TRIALS = '4' }
@@ -74,6 +75,10 @@ jobs:
           if ($env:DISTINCT_HOSTS -eq 'true') {
             $env:MEASURE_SCENARIOS = 'background-tabs,multitasking'
             $env:MEASURE_DISTINCT_LOOPBACK_HOSTS = '1'
+          }
+          if ($env:STATIC_BACKGROUND -eq 'true') {
+            if ($env:DISTINCT_HOSTS -ne 'true' -or $env:NATIVE_LAUNCH -ne 'true') { throw 'The static background control requires distinct hosts and native launch' }
+            $env:MEASURE_STATIC_BACKGROUND = '1'
           }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js

@@ -151,3 +151,23 @@ test('distinct-site control keeps identical local content/roles but never shares
     shared.map((url) => new URL(url).pathname + new URL(url).search));
   assert.throws(() => workloadUrls('https://not-our-fixture.test:4678', def, true), /local HTTP/);
 });
+
+test('static background control retains the foreground animation and tab identity', () => {
+  const base = 'http://127.0.0.1:4678';
+  const def = { foreground: 'animated', backgroundTabs: 3 };
+  for (const distinct of [false, true]) {
+    const original = workloadUrls(base, def, distinct);
+    const candidate = workloadUrls(base, { ...def, background: 'static' }, distinct);
+    assert.equal(candidate.length, 4);
+    assert.equal(candidate[0], original[0]);
+    for (let i = 1; i < candidate.length; i++) {
+      const a = new URL(original[i]);
+      const b = new URL(candidate[i]);
+      assert.equal(b.origin, a.origin);
+      assert.equal(b.search, '?role=background&tab=' + i);
+      assert.equal(b.pathname, '/static');
+      assert.equal(a.pathname, '/animated');
+    }
+  }
+  assert.throws(() => workloadUrls(base, { ...def, background: 'missing' }), /Invalid background fixture/);
+});

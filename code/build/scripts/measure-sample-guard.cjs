@@ -42,9 +42,11 @@ function foregroundSample(before, after, seconds, animated) {
 }
 
 function workloadUrls(base, definition, distinctLoopbackHosts = false) {
+  const background = definition.background ?? 'animated';
+  if (background !== 'animated' && background !== 'static') throw new Error('Invalid background fixture');
   if (!distinctLoopbackHosts) return [
     base + '/' + definition.foreground + '?role=foreground',
-    ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/animated?role=background&tab=' + (i + 1)),
+    ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/' + background + '?role=background&tab=' + (i + 1)),
   ];
   const root = new URL(base);
   if (root.protocol !== 'http:' || root.hostname !== '127.0.0.1' || !root.port ||
@@ -53,7 +55,7 @@ function workloadUrls(base, definition, distinctLoopbackHosts = false) {
   return [
     origin(0) + '/' + definition.foreground + '?role=foreground',
     ...Array.from({ length: definition.backgroundTabs }, (_, i) =>
-      origin(i + 1) + '/animated?role=background&tab=' + (i + 1)),
+      origin(i + 1) + '/' + background + '?role=background&tab=' + (i + 1)),
   ];
 }
 function matchesInventory(tabs, expected) {
