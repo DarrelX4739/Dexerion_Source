@@ -1,0 +1,79 @@
+name: Dexerion package footprint experiment
+on:
+  push:
+    branches: [cpp-native-spike]
+    paths:
+      - '.github/workflows/dexerion-package-footprint.yml'
+      - 'experiments/packaging-footprint/**'
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    timeout-minutes: 22
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      DEX_PACKAGED_ENGINE: 'locked'
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    defaults:
+      run:
+        shell: bash
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Verify original code, install only the pinned dependencies
+        run: |
+          test "$(git rev-parse HEAD:code)" = '9180619b50ea9f3da77c00f38648293e6a3422e7'
+          npm ci
+      - name: Build and smoke-test original and temporary dependency-only variant
+        run: |
+          cp package.json package.original.json
+          cp package-lock.json package-lock.original.json
+          script="../../experiments/packaging-footprint/verify.cjs"
+          trap 'mv -f package.original.json package.json; mv -f package-lock.original.json package-lock.json' EXIT
+          for arm in original candidate; do
+            if [[ "$arm" == candidate ]]; then
+              node "$script" rewrite package.json
+              npm install --package-lock-only --ignore-scripts --offline --no-audit
+              node "$script" lock package-lock.original.json package-lock.json
+            fi
+            ARM="$arm" node <<'NODE'
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const c = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
+            c.directories.output = 'package-footprint-' + process.env.ARM;
+            if (process.platform === 'linux') {
+              c.linux = { executableName: 'dexerion', icon: '../code/assets/logo.png' };
+              c.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');
+            }
+            fs.writeFileSync('electron-builder.footprint.json', JSON.stringify(c));
+          NODE
+            if [[ "$RUNNER_OS" == Windows ]]; then
+              npx --no-install electron-builder --win dir --x64 --config electron-builder.footprint.json --publish never
+              DEX_PACKAGED_APP="package-footprint-$arm/win-unpacked/Dexerion.exe" npm run test:e2e -- e2e/packaged-smoke.spec.js
+            else
+              npx --no-install electron-builder --linux dir --x64 --config electron-builder.footprint.json --publish never
+              DEX_PACKAGED_APP="package-footprint-$arm/linux-unpacked/dexerion" xvfb-run -a npm run test:e2e -- e2e/packaged-smoke.spec.js
+            fi
+          done
+          if [[ "$RUNNER_OS" == Windows ]]; then dir=win-unpacked; else dir=linux-unpacked; fi
+          node "$script" archives "package-footprint-original/$dir/resources/app.asar" "package-footprint-candidate/$dir/resources/app.asar"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-package-footprint-${{ matrix.os }}
+          path: code/build/package-footprint.json
+          if-no-files-found: ignore
+          retention-days: 7
