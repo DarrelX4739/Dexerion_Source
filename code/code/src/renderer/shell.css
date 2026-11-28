@@ -2283,3 +2283,18 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :root:not([data-skin]) .tab .x:focus-visible {opacity:1}
 :root:not([data-skin]) #newtab-btn {border-radius:8px;color:var(--fg2)}
 :root:not([data-skin]) #newtab-btn:hover {color:var(--fg);border-color:var(--hair2)}
+
+/* The group's chosen colour is paired with the existing collapse indicator. */
+:root:not([data-skin]) .gchip {
+  background:color-mix(in srgb,var(--gc,#8a8c99) 15%,var(--surface));
+  border-color:color-mix(in srgb,var(--gc,#8a8c99) 48%,var(--hair));
+  border-radius:8px;color:var(--fg);font-weight:620;
+}
+:root:not([data-skin]) .gchip:hover,
+:root:not([data-skin]) .gchip.collapsed {background:color-mix(in srgb,var(--gc,#8a8c99) 23%,var(--surface))}
+:root:not([data-skin]) .gchip .gct {background:var(--surface);color:var(--fg2);font-variant-numeric:tabular-nums}
+:root:not([data-skin]) .gchip .gstate {color:var(--fg2)}
+:root:not([data-skin]) .gchip .gdot {box-shadow:0 0 0 2px var(--surface)}
+:root:not([data-skin]) #gedit {border-radius:var(--dx-panel-radius);background:var(--surface)}
+:root:not([data-skin]) .gswb.on {outline:1px solid var(--accent);outline-offset:1px}
+:root:not([data-skin]) .gswb:focus-visible {outline-offset:2px}
