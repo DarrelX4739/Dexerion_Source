@@ -511,3 +511,17 @@ button { font-family: inherit; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Built-in libraries and settings share a clearer hierarchy without restyling
+   page-specific states, switches, actions, or navigation. */
+.dx-page {padding-inline:clamp(16px, 4vw, 38px)}
+.dx-head {padding-bottom:18px;border-bottom:1px solid var(--pborder)}
+.dx-head .eyebrow {color:var(--pfg-2);font-weight:650}
+.dx-head h1 {font-size:clamp(26px, 6vw, 42px);line-height:1.12;font-weight:650;letter-spacing:-.05em}
+.dx-head p {color:var(--pfg-2);line-height:1.55}
+.dx-card, .dx-list {border-radius:var(--dx-panel-radius)}
+.dx-card-head h3, .dx-section h2 {color:var(--pfg-2);letter-spacing:.11em}
+.dx-row .tx small, .dx-item .main small, .dx-empty span {color:var(--pfg-2)}
+.dx-item:hover {background:color-mix(in srgb,var(--accent) 5%,var(--phover))}
+.dx-search input {border-radius:10px}
+.dx-empty {background:radial-gradient(ellipse at top,var(--dx-optical-light),transparent 69%)}

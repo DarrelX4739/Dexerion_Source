@@ -2312,3 +2312,12 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :root:not([data-skin]) .rt-grid label,
 :root:not([data-skin]) .tk-main small:not(.overdue) {color:var(--fg2)}
 :root:not([data-skin]) .tk-row {border-radius:8px}
+
+/* Accent follows the user's theme. No change to input or panel geometry. */
+:root:not([data-skin]) #ai-sidebar .ai-taskbar {background:var(--surface);border-bottom-color:var(--hair2)}
+:root:not([data-skin]) #ai-sidebar .ai-taskbar-title {font-weight:650}
+:root:not([data-skin]) #ai-sidebar .ai-composer {border-color:var(--hair2);box-shadow:var(--sh1)}
+:root:not([data-skin]) #ai-sidebar .ai-composer:focus-within {border-color:var(--accent);box-shadow:0 0 0 3px var(--dx-optical-light)}
+:root:not([data-skin]) #ai-sidebar .ai-empty-mark {box-shadow:0 0 0 4px var(--dx-optical-light),var(--sh1)}
+:root:not([data-skin]) #ai-sidebar .ai-empty-title {font-weight:650;letter-spacing:-.035em}
+:root:not([data-skin]) #ai-sidebar .ai-empty-hint {color:var(--fg2)}
