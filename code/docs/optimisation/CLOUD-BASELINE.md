@@ -22,3 +22,20 @@ a claim about all sites, hardware GPU use, power, or Microsoft Edge. They do not
 isolate the effect of any single patch. Target remaining in this runner:
 foreground CPU. Idle CPU is too close to the counter floor to infer a
 reliable percentage from this run.
+
+## Same-host reference A/B
+
+[Run 46092264614](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46092264614)
+compared `a06b2cd`, pre-batch `ce1ea87`, and Chrome on one Linux host, with
+six balanced launch-order permutations per workload. The active-browsing
+medians were 60.08 / 59.96 / 59.96 fps respectively and approximately
+6.75% of one core in all three. Multitasking remained near 60 fps in all
+arms, with CPU medians 7.49 / 7.99 / 41.20% of one core respectively.
+Dexerion's process-tree PSS was about 1.35–3.83 MiB lower than the earlier
+Dexerion build across the four workloads and 26.3–30.5% lower than Chrome.
+The A/B is pre-dormant-account optimisation and does not measure that patch.
+
+No broad foreground CPU win was demonstrated. Background CPU was low and
+the idle Chrome CPU changed substantially across runners, so idle percent
+reduction is not treated as a stable result. Hardware GPU and power
+remain unmeasured in this Linux comparison.

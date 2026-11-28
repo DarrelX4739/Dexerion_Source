@@ -209,8 +209,12 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     expect(await win.evaluate(() => document.querySelectorAll('#tabs .tab').length)).toBe(tabsBefore);
     // …and Design opens the in-panel view with versions and look controls
     // (it lives in the card's ⋯ menu so the primary pair always fits).
-    await card.getByRole('button', { name: 'More actions' }).click();
-    await card.getByRole('menuitem', { name: 'Design', exact: true }).click();
+    const reportMore = card.getByRole('button', { name: 'More actions' });
+    const designItem = card.getByRole('menuitem', { name: 'Design', exact: true });
+    await reportMore.click();
+    await expect(reportMore).toHaveAttribute('aria-expanded', 'true');
+    await expect(designItem).toBeVisible();
+    await designItem.click();
     await expect(win.locator('#ai-report-sheet')).toBeVisible();
     await expect(win.locator('#ai-report-version')).toHaveText('v1');
     await expect(win.locator('#ai-report-body .dxa-report')).toHaveCount(1);
