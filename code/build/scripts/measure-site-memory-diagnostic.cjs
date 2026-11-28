@@ -12,15 +12,17 @@ const { setTimeout:sleep }=require('node:timers/promises');
 const { chromium }=require('@playwright/test');
 const {openNative,edgeExecutable,pagesIn,isShellUrl,waitFor}=require('./measure-native-browser.cjs');
 const {matchesInventory,verifiedNativeTree}=require('./measure-sample-guard.cjs');
-const {verifiedFramePid,verifiedSiteRows,readHeapUsage,readAllocatorDump,describeAllocatorRecords,CATEGORIES}=require('./read-site-memory-diagnostic.cjs');
+const {verifiedFramePid,verifiedSiteRows,readHeapUsage,readAllocatorDump,describeAllocatorRecords,readExternalScriptSourceDump,CATEGORIES}=require('./read-site-memory-diagnostic.cjs');
 
-const PAIRS=3;
+const BASELINE_PAIRS=3;
+const SCRIPT_PAIRS=2;
 const SHA=process.env.GITHUB_SHA;
 const origin=(n,port)=>'http://site-memory-'+n+'.localhost:'+port;
 const order=Array.from({length:9},(_,i)=>i);
 const known=new Set(order);
 const frameCategory='disabled-by-default-devtools.timeline';
 const memCategory='disabled-by-default-memory-infra';
+const codeStatsCategory='disabled-by-default-memory-infra.v8.code_stats';
 const mib=n=>Number.isFinite(n)?n/1048576:null;
 const digest=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 function fixedPage(i){
@@ -71,7 +73,8 @@ async function attributedSnapshot(session,kind){
 function during(p,ms,label){
   return Promise.race([p,sleep(ms,null,{ref:false}).then(()=>{throw new Error(label+' timed out');})]);
 }
-async function trace(cdp,category,task){
+async function trace(cdp,category,task,{scriptSource=false}={}){
+  assert(!scriptSource||category===memCategory);
   let resolve, total=0, consumed=0;
   const events=[];
   const stopped=new Promise(r=>resolve=r);
@@ -80,7 +83,8 @@ async function trace(cdp,category,task){
     if(total>80000)return;
     for(const e of value) {
       if(e.name==='TracingStartedInBrowser'||e.ph==='v'&&e.args?.dumps) {
-        consumed+=JSON.stringify(e).length;
+        const record=JSON.stringify(e);
+        consumed+=scriptSource?Buffer.byteLength(record):record.length;
         if(consumed<=16*1024*1024)events.push(e);
       }
     }
@@ -90,14 +94,18 @@ async function trace(cdp,category,task){
   cdp.on('Tracing.tracingComplete',onFinish);
   try{
     await cdp.send('Tracing.start',{
-      transferMode:'ReportEvents',traceConfig:{recordMode:'recordUntilFull',includedCategories:[category],
-        excludedCategories:['*'],...(category===memCategory?{memoryDumpConfig:{triggers:[]}}:{})}
+      transferMode:'ReportEvents',traceConfig:{recordMode:'recordUntilFull',includedCategories:scriptSource?[memCategory,codeStatsCategory]:[category],
+        excludedCategories:['*'],...(category===memCategory?{memoryDumpConfig:{triggers:[]}}:{}),
+        ...(scriptSource?{traceBufferSizeInKb:32768}:{})}
     });
     let action;
     try{action=await task();}
     finally{
       await cdp.send('Tracing.end');
       const finish=await during(stopped,13000,'trace drain');
+      // The strict optional mode records only a complete, explicitly no-loss
+      // JSON event export. Missing status is not treated as zero lost events.
+      if(scriptSource)assert(finish.dataLossOccurred===false,'code-stat trace loss occurred or status unavailable');
       assert(!finish.dataLossOccurred&&total<=80000&&consumed<=16*1024*1024,'trace incomplete/too large');
     }
     return {action,events};
@@ -118,7 +126,7 @@ async function identify(cdp,url){
     !(frameTree.childFrames?.length),'wrong page document or isolate');
   return {frame:frameTree.frame,isolate};
 }
-async function probeArm(kind,exe,urls){
+async function probeArm(kind,exe,urls,scriptSourceOnly){
   const dex=kind==='dexerion';
   const session=await openNative(kind,{chromium,executable:exe,packaged:dex,cwd:path.dirname(exe)});
   try{
@@ -195,7 +203,7 @@ async function probeArm(kind,exe,urls){
       }));
     }
     let allocator=null,allocatorError=null,allocatorRecords=null;
-    try{
+    if(!scriptSourceOnly)try{
       const dump=await trace(session.devtools,memCategory,()=>during(session.devtools.send(
         'Tracing.requestMemoryDump',{deterministic:false,levelOfDetail:'detailed'}),18000,'native allocator dump'));
       const pids=mapped.map(x=>x.pid);
@@ -218,6 +226,32 @@ async function probeArm(kind,exe,urls){
     assert(f3.visible&&f3.fits&&f3.origin===f2.origin&&f3.dpr===f2.dpr);
     const renderer=verifiedSiteRows(mapped,a,b);
     const browserVersion=(await session.devtools.send('Browser.getVersion')).product;
+    if(scriptSourceOnly){
+      // Classify source only after the pre-existing foreground, PID,
+      // CDP and both private resident probes have completely finished. This
+      // code-stat scan takes a V8 safepoint: never publish any resulting
+      // timings or working sets as a baseline. Do not request new GC.
+      let sourceProbe=null,sourceProbeError=null;
+      try{
+        const {categories}=await session.devtools.send('Tracing.getCategories');
+        assert([memCategory,codeStatsCategory].every(x=>categories.includes(x)),'requested V8 code-stat trace category unavailable');
+        const dump=await trace(session.devtools,memCategory,()=>during(session.devtools.send(
+          'Tracing.requestMemoryDump',{deterministic:false,levelOfDetail:'detailed'}),18000,'V8 code-stat dump'),{scriptSource:true});
+        assert(await inventory(),'site inventory changed during code-stat trace');
+        for(const [i,page] of pages.entries())await usingPage(page,async cdp=>{
+          const {frame,isolate}=await identify(cdp,urls[i]);const previous=mapped[i];
+          assert(frame.id===previous.frameId&&frame.loaderId===previous.loaderId&&isolate===previous.isolate,
+            'code-stat renderer document or isolate changed');
+        });
+        // Check process birth/role again, but do not emit or compare working sets.
+        verifiedSiteRows(mapped,b,await attributedSnapshot(session,kind));
+        sourceProbe=readExternalScriptSourceDump(dump.events,dump.action,mapped.map(x=>x.pid));
+      }catch(e){
+        sourceProbeError=String(e?.message||e).split('\n')[0].slice(0,180);
+      }
+      return {browserVersion,workloadTabs:9,fps,viewport:[f2.width,f2.height,f2.dpr],sourceProbe,sourceProbeError,
+        rows:heap.map((row,tab)=>({tab,cdpExternalBackingBeforeProbeBytes:row.arrayBufferAndStringBackingBytes}))};
+    }
     const rows=renderer.map((r,i)=>({tab:i,privateResidentBeforeBytes:r.privateResidentBeforeBytes,
       privateResidentAfterBytes:r.privateResidentAfterBytes,...heap[i],
       allocator:allocator?.rows[i]?.categories??null,allocatorRoots:allocator?.rows[i]?.dumpRootNames??null}));
@@ -249,7 +283,10 @@ function summarize(pairs){
 async function main(){
   assert(process.platform==='win32'&&process.env.GITHUB_ACTIONS==='true'&&
     process.env.GITHUB_REF==='refs/heads/dev-V'&&/^[a-f0-9]{40}$/.test(SHA||''),'hosted Windows dev-V only');
-  const [dex,out]=process.argv.slice(2);
+  const [dex,out,...args]=process.argv.slice(2);
+  const scriptSourceOnly=args.length===1&&args[0]==='--script-source-only';
+  assert(!args.length||scriptSourceOnly,'unknown diagnostic arguments');
+  const pairsRequested=scriptSourceOnly?SCRIPT_PAIRS:BASELINE_PAIRS;
   assert(dex&&out&&path.isAbsolute(dex)&&path.isAbsolute(out)&&path.basename(dex).toLowerCase()==='dexerion.exe');
   const archive=path.join(path.dirname(dex),'resources','app.asar');
   const executables={edge:edgeExecutable(),dexerion:dex};
@@ -266,11 +303,11 @@ async function main(){
     const started=once(server,'listening');server.listen(0,'127.0.0.1');await started;
     port=server.address().port;
     const urls=order.map(i=>origin(i,port)+'/work');
-    for(let i=0;i<PAIRS;i++){
+    for(let i=0;i<pairsRequested;i++){
       const row={};
       try{
         for(const arm of (i%2?['dexerion','edge']:['edge','dexerion'])) {
-          row[arm]=await probeArm(arm,executables[arm],urls);
+          row[arm]=await probeArm(arm,executables[arm],urls,scriptSourceOnly);
         }
         assert(row.edge.viewport[2]===row.dexerion.viewport[2]&&
           Math.abs(row.edge.fps-row.dexerion.fps)<=Math.max(3,row.edge.fps*0.05),'browser foreground work parity mismatch');
@@ -284,11 +321,21 @@ async function main(){
   }finally{
     server.closeAllConnections();if(server.listening)await new Promise(resolve=>server.close(resolve));
     const versions=['edge','dexerion'].map(k=>new Set(stash.pairs.map(p=>p[k].browserVersion)).size);
-    stash.complete=stash.pairs.length===PAIRS&&versions.every(x=>x===1);
-    stash.summary=stash.complete?summarize(stash.pairs):null;
-    stash.scope='Owned 9 fixture renderer OS private working sets beside separately measured JS/GC/backing and optional Chromium allocator counters. No subtraction/addition across these counter domains, and no app-, real-site-, power-, causal or universal conclusion.';
+    stash.complete=stash.pairs.length===pairsRequested&&versions.every(x=>x===1);
+    if(scriptSourceOnly){
+      stash.mode='V8 external script source attribution only';
+      stash.sourceEvidenceComplete=stash.complete&&stash.pairs.every(p=>['edge','dexerion'].every(arm=>
+        p[arm].sourceProbe?.rows.length===9&&p[arm].sourceProbe.rows.every(r=>r.status==='observed')&&
+        p[arm].rows.every(r=>Number.isSafeInteger(r.cdpExternalBackingBeforeProbeBytes))));
+      stash.scope='Separate post-sample trace; byte classification for main isolates in positively identified fixture renderers only. Not private resident memory, ownership, savings, or a performance baseline. No new GC requested. Unsupported or incomplete evidence is not zero.';
+    }else{
+      stash.summary=stash.complete?summarize(stash.pairs):null;
+      stash.scope='Owned 9 fixture renderer OS private working sets beside separately measured JS/GC/backing and optional Chromium allocator counters. No subtraction/addition across these counter domains, and no app-, real-site-, power-, causal or universal conclusion.';
+    }
     fs.writeFileSync(out,JSON.stringify(stash,null,2)+'\n',{flag:'wx'});
-    console.log('Site memory parity pairs:',stash.pairs.length,
+    if(scriptSourceOnly)console.log('Source-attribution workload parity pairs:',stash.pairs.length,
+      'complete code-stat evidence:',stash.sourceEvidenceComplete);
+    else console.log('Site memory parity pairs:',stash.pairs.length,
       'with full allocator dumps:',stash.pairs.filter(p=>['edge','dexerion'].every(a=>p[a].rows.every(r=>r.allocator))).length);
   }
   if(!stash.complete)process.exitCode=1;

@@ -35,6 +35,8 @@ function verifiedSiteRows(mappings,snapshotA,snapshotB){
     return {...mapping,privateResidentBeforeBytes:p.privateWsBytes,privateResidentAfterBytes:q.privateWsBytes};
   });
 }
+const SCRIPT_NODE='v8/main/code_stats';
+const SCRIPT_ATTRIBUTE='external_script_source_size';
 const CATEGORIES=['v8','blink_gc','partition_alloc','malloc','skia','cc','web_cache'];
 function hexBytes(n){
   if(typeof n!=='string'||!/^(?:0x)?[0-9a-f]{1,16}$/i.test(n))return null;
@@ -98,4 +100,33 @@ function readAllocatorDump(events,dump,pids) {
   }
   return {format:idsMatch?'GUID exact':'single Perfetto export id',rows};
 }
-module.exports={verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes,CATEGORIES};
+// Attribution only: no worker, utility, root total, inferred zero, or fuzzy
+// key matching. The browser can export a different single Perfetto ID than
+// the CDP request returns, so use the same one-explicit-dump provenance rule.
+// A totals-only companion or an identical export at the same timestamp is OK.
+function readExternalScriptSourceDump(events,dump,pids) {
+  assert(dump?.success===true&&normId(dump.dumpGuid)!==null,'no successful explicit code-stat dump');
+  assert(pids.length===9&&new Set(pids).size===9&&pids.every(p=>Number.isSafeInteger(p)&&p>0),
+    'code-stat dump requires exact nine verified renderer PIDs');
+  const tagged=allocatorEvents(events);
+  assert(tagged.every(e=>e.id==null||e.id2?.global==null||normId(e.id)===normId(e.id2.global)),
+    'conflicting code-stat snapshot ids');
+  const ids=new Set(tagged.map(e=>normId(e.id??e.id2?.global)));
+  assert(ids.size===1&&!ids.has(null),'no unique code-stat snapshot');
+  const format=ids.has(normId(dump.dumpGuid))?'GUID exact':'single Perfetto export id';
+  const rows=pids.map((pid,tab)=>{
+    const records=tagged.filter(e=>e.pid===pid&&Object.keys(e.args.dumps.allocators??{}).length);
+    const result=(status,externalScriptSourceBytes=null)=>({tab,status,externalScriptSourceBytes});
+    if(!records.length)return result('no populated renderer record');
+    const first=records[0],nodes=first.args.dumps.allocators;
+    if(!Number.isFinite(first.ts)||records.some(e=>e.ts!==first.ts||e.args.dumps.level_of_detail!=='detailed'||
+      !isDeepStrictEqual(e.args.dumps.allocators,nodes)))return result('ambiguous or not detailed');
+    const attrs=Object.hasOwn(nodes,SCRIPT_NODE)?nodes[SCRIPT_NODE]?.attrs:null;
+    if(!attrs||!Object.hasOwn(attrs,SCRIPT_ATTRIBUTE))return result('exact scalar not exported');
+    const attr=attrs[SCRIPT_ATTRIBUTE];
+    const bytes=attr?.type==='scalar'&&attr.units==='bytes'?hexBytes(attr.value):null;
+    return bytes===null?result('invalid byte scalar'):result('observed',bytes);
+  });
+  return {format,rows};
+}
+module.exports={verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes,readExternalScriptSourceDump,CATEGORIES};

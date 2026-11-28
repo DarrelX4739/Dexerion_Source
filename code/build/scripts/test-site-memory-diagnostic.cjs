@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes}=require('./read-site-memory-diagnostic.cjs');
+const {verifiedFramePid,readHeapUsage,verifiedSiteRows,readAllocatorDump,describeAllocatorRecords,hexBytes,readExternalScriptSourceDump}=require('./read-site-memory-diagnostic.cjs');
 test('frame metadata needs the exact verified top frame/URL, not trace emitter PID',()=>{
   const frame={id:'aaaa',url:'http://fixture-1.localhost:123/work'};
   const event={name:'TracingStartedInBrowser',pid:123,args:{data:{frames:[
@@ -72,4 +72,65 @@ test('reports bounded structural metadata without admitting ambiguous dump recor
   ]},{tab:1,recordCount:0,records:[]}]);
   assert.throws(()=>readAllocatorDump([e1,e2],request,[1027]),/no unique/);
   assert.equal(describeAllocatorRecords(Array(10).fill(e1),request,[1027])[0].records.length,8);
+});
+
+
+const PIDS=Array.from({length:9},(_,i)=>1123+i);
+const SCRIPT_PATH='v8/main/code_stats',SCRIPT_ATTR='external_script_source_size';
+const REQUEST={success:true,dumpGuid:'0xab'};
+const BYTES={type:'scalar',units:'bytes',value:'0x426000'};
+function codeDump({pid=PIDS[0],id='0x19',ts=14200,detail='detailed',
+  allocators={[SCRIPT_PATH]:{attrs:{[SCRIPT_ATTR]:BYTES}}},...overrides}={}) {
+  return {pid,id,ts,ph:'v',cat:'disabled-by-default-memory-infra',
+    args:{dumps:{level_of_detail:detail,allocators}},...overrides};
+}
+test('script attribution accepts one explicit detailed export, including real scalar zero and exact Perfetto companions',()=>{
+  const e=codeDump(),zero=codeDump({pid:PIDS[1],allocators:{[SCRIPT_PATH]:{attrs:{
+    [SCRIPT_ATTR]:{...BYTES,value:'0'}}}}});
+  const totals=codeDump({allocators:{}});
+  const r=readExternalScriptSourceDump([e,totals,zero,structuredClone(e)],REQUEST,PIDS);
+  assert.equal(r.format,'single Perfetto export id');
+  assert.deepEqual(r.rows.slice(0,3),[
+    {tab:0,status:'observed',externalScriptSourceBytes:0x426000},
+    {tab:1,status:'observed',externalScriptSourceBytes:0},
+    {tab:2,status:'no populated renderer record',externalScriptSourceBytes:null},
+  ]);
+  assert(!JSON.stringify(r).includes(String(PIDS[0])));
+  assert.equal(readExternalScriptSourceDump([codeDump({id:'ab'})],REQUEST,PIDS).format,'GUID exact');
+  assert.equal(readExternalScriptSourceDump([codeDump({id:null,id2:{global:'AB'}})],REQUEST,PIDS).format,'GUID exact');
+});
+test('script attribution never substitutes worker labels, near matches, heaps or untyped values',()=>{
+  for(const key of ['v8/workers/code_stats/isolate_0x1234','v8/main/code_stats/other','v8','V8/main/code_stats']){
+    const a=codeDump({allocators:{[key]:{attrs:{[SCRIPT_ATTR]:BYTES}}}});
+    assert.deepEqual(readExternalScriptSourceDump([a],REQUEST,PIDS).rows[0],
+      {tab:0,status:'exact scalar not exported',externalScriptSourceBytes:null});
+  }
+  for(const attrs of [
+    {[SCRIPT_ATTR]:{...BYTES,units:'objects'}},{[SCRIPT_ATTR]:{...BYTES,type:'string'}},
+    {[SCRIPT_ATTR]:{...BYTES,value:1}}, {[SCRIPT_ATTR]:{...BYTES,value:'ffffffffffffffff'}},
+    {[SCRIPT_ATTR]:{...BYTES,value:'-1'}}, {[SCRIPT_ATTR]:null},
+  ]){
+    const a=codeDump({allocators:{[SCRIPT_PATH]:{attrs}}});
+    assert.deepEqual(readExternalScriptSourceDump([a],REQUEST,PIDS).rows[0],
+      {tab:0,status:'invalid byte scalar',externalScriptSourceBytes:null});
+  }
+  const wrong=codeDump({allocators:{[SCRIPT_PATH]:{attrs:{code_and_metadata_size:BYTES}}}});
+  assert.equal(readExternalScriptSourceDump([wrong],REQUEST,PIDS).rows[0].status,'exact scalar not exported');
+});
+test('script attribution rejects incomplete identity, duplicate IDs, conflicts, and non-detailed provenance',()=>{
+  const e=codeDump(),different=codeDump({allocators:{[SCRIPT_PATH]:{attrs:{
+    [SCRIPT_ATTR]:{...BYTES,value:'2'}}}}});
+  for(const other of [different,codeDump({ts:e.ts+1}),codeDump({detail:'light'})]){
+    const result=readExternalScriptSourceDump([e,other,codeDump({pid:PIDS[1]})],REQUEST,PIDS);
+    assert.deepEqual(result.rows[0],{tab:0,status:'ambiguous or not detailed',externalScriptSourceBytes:null});
+    assert.equal(result.rows[1].status,'observed');
+  }
+  assert.equal(readExternalScriptSourceDump([codeDump({detail:'light'})],REQUEST,PIDS).rows[0].status,'ambiguous or not detailed');
+  assert.equal(readExternalScriptSourceDump([codeDump({ts:null})],REQUEST,PIDS).rows[0].status,'ambiguous or not detailed');
+  assert.equal(readExternalScriptSourceDump([codeDump({pid:32132})],REQUEST,PIDS).rows[0].status,'no populated renderer record');
+  assert.throws(()=>readExternalScriptSourceDump([e,codeDump({pid:3223,id:'0x20'})],REQUEST,PIDS),/unique/);
+  assert.throws(()=>readExternalScriptSourceDump([codeDump({id2:{global:'0xeb'}})],REQUEST,PIDS),/conflicting/);
+  assert.throws(()=>readExternalScriptSourceDump([codeDump({cat:'v8'})],REQUEST,PIDS),/unique/);
+  assert.throws(()=>readExternalScriptSourceDump([e],{...REQUEST,success:false},PIDS),/successful/);
+  assert.throws(()=>readExternalScriptSourceDump([e],REQUEST,[...PIDS.slice(1),PIDS[1]]),/verified renderer PIDs/);
 });

@@ -13,7 +13,7 @@ jobs:
   inspect:
     if: github.ref == 'refs/heads/dev-V'
     runs-on: windows-latest
-    timeout-minutes: 16
+    timeout-minutes: 15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     defaults:
@@ -41,17 +41,17 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'dex-site-memory'
           node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$out" --publish never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Inspect private resident and JS heap on matched actual renderer processes
+      - name: Inspect V8 external script source after workload and identity checks
         shell: pwsh
         run: |
           $exe = Join-Path $env:RUNNER_TEMP 'dex-site-memory/win-unpacked/Dexerion.exe'
-          $out = Join-Path $env:RUNNER_TEMP 'dex-site-renderer-heap.json'
-          node scripts/measure-site-memory-diagnostic.cjs $exe $out
+          $out = Join-Path $env:RUNNER_TEMP 'dex-site-script-source.json'
+          node scripts/measure-site-memory-diagnostic.cjs $exe $out --script-source-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dexerion-site-renderer-memory-diagnostic
-          path: ${{ runner.temp }}/dex-site-renderer-heap.json
+          name: dexerion-site-script-source-diagnostic
+          path: ${{ runner.temp }}/dex-site-script-source.json
           if-no-files-found: ignore
           retention-days: 7
