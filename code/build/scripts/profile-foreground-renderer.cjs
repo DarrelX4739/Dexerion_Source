@@ -23,7 +23,7 @@ function processSnapshot(profile) {
   }
 }
 
-async function collect(app, fixtureUrl, profile) {
+async function collect(app, win, fixtureUrl, profile) {
   // Capture resident memory before attaching the JavaScript profiler.
   const processMemory = processSnapshot(profile);
   const metrics = await app.evaluate(async ({ app, BrowserWindow, webContents }, exactUrl) => {
@@ -35,24 +35,41 @@ async function collect(app, fixtureUrl, profile) {
       targets.push(['page', page]);
     }
     const appMemory = new Map(app.getAppMetrics().map((p) => [p.pid, p.memory]));
-    return Promise.all(targets.map(async ([name, wc]) => {
-      const p = wc.getOSProcessId();
-      const debuggerApi = wc.debugger;
-      debuggerApi.attach('1.3');
-      try {
-        const heap = await debuggerApi.sendCommand('Runtime.getHeapUsage');
-        const dom = await debuggerApi.sendCommand('Memory.getDOMCounters');
-        return { name, pid: p, engineMemory: appMemory.get(p), heap, dom };
-      } finally { debuggerApi.detach(); }
-    }));
+    return targets.map(([name, wc]) => {
+      const pid = wc.getOSProcessId();
+      return { name, pid, engineMemory: appMemory.get(pid) };
+    });
   }, fixtureUrl);
-  return metrics.map((m) => {
+  return Promise.all(metrics.map(async (m) => {
     const process = processMemory.get(m.pid);
-    return { ...m, osMemory: process ? {
+    const context = app.context();
+    const page = m.name === 'shell' ? win : context.pages().find((p) => p.url() === fixtureUrl);
+    let heap = null, dom = null, profileMethod = null;
+    if (page) {
+      try {
+        const session = await context.newCDPSession(page);
+        try {
+          heap = await session.send('Runtime.getHeapUsage');
+          dom = await session.send('Memory.getDOMCounters');
+          profileMethod = 'CDP Runtime/Memory';
+        } finally { await session.detach().catch(() => {}); }
+      } catch {}
+      if (!heap) {
+        const approx = await page.evaluate(() => ({
+          usedSize: performance.memory?.usedJSHeapSize ?? null,
+          totalSize: performance.memory?.totalJSHeapSize ?? null,
+          nodes: document.querySelectorAll('*').length,
+        }));
+        heap = { usedSize: approx.usedSize, totalSize: approx.totalSize };
+        dom = { visibleDOMElementCount: approx.nodes };
+        profileMethod = 'approximate performance.memory';
+      }
+    }
+    return { ...m, heap, dom, profileMethod, osMemory: process ? {
       wsBytes: process.wsBytes ?? null, privateBytes: process.privateBytes ?? null,
       privateWsBytes: process.privateWsBytes ?? null,
     } : null };
-  });
+  }));
 }
 
 async function collectTrial() {
@@ -72,7 +89,7 @@ async function collectTrial() {
       return st.tabs.length === 1 && st.tabs[0].url === url && !st.tabs[0].loading;
     }, url);
     await sleep(6000);
-    return await collect(app, url, profile);
+    return await collect(app, win, url, profile);
   } finally {
     if (launch) {
       await launch.app.close().catch(() => {});
