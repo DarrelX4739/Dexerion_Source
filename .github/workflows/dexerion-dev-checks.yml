@@ -72,9 +72,26 @@ jobs:
             code/build/cloud-cold-account-comparison.json
           if-no-files-found: ignore
           retention-days: 7
-      - name: Run full Electron regression suite at milestones
+      - name: Install the window manager required by fullscreen tests
+        id: desktop
         if: ${{ !cancelled() && steps.electron.outcome == 'success' && contains(github.event.head_commit.message, '[full-regression]') }}
-        run: xvfb-run -a npm run test:e2e
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends openbox x11-utils
+      - name: Run full Electron regression suite at milestones
+        if: ${{ !cancelled() && steps.electron.outcome == 'success' && steps.desktop.outcome == 'success' }}
+        run: |
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash -e -c '
+            openbox --sm-disable >/tmp/dex-openbox.log 2>&1 &
+            wm=$!
+            trap "kill $wm 2>/dev/null || true" EXIT
+            for i in {1..40}; do
+              if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"; then break; fi
+              sleep 0.25
+            done
+            xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"
+            npm run test:e2e
+          '
       - name: Keep failed Electron test evidence
         if: failure()
         uses: actions/upload-artifact@v4
