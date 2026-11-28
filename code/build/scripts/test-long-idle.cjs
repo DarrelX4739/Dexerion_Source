@@ -1,7 +1,8 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,wakeEvidence,describeParity}=require('./read-long-idle.cjs');
+const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,describeParity}=require('./read-long-idle.cjs');
+const {verify}=require('./owned-working-set-preflight.cjs');
 const base=Date.parse('2026-11-28T15:00:00Z');
 const profile='C:\\temp\\dex-long-idle-stock';
 const birth=i=>new Date(base+i).toISOString();
@@ -15,39 +16,64 @@ function read(rows,aim,delay=400){
   return readOwnedSnapshot({capturedAt:birth(aim+delay),count:rows.length,processes:rows},
     101,rows[0].name,profile,base+aim,base+aim+5000);
 }
-test('accepts two complete time-matched quiet private-resident observations; never reports CPU/counters not asked for',()=>{
-  const edge=memoryArm(CHECKPOINTS.map(a=>read(makeArm('msedge.exe'),a)),base);
-  const dex=memoryArm(CHECKPOINTS.map(a=>read(makeArm('dexerion.exe',250000000),a)),base);
+const rootBirth='134100000000000000';
+function qualified(aim,total=400000000,root=rootBirth){
+  const request=base+aim,lo=(aim+10000)*10000+1471933;
+  const raw={acquisition:{beforeInventoryUtcMs:request+4,beforeUtcMs:request+20,
+    afterUtcMs:request+120,afterInventoryUtcMs:request+128,
+    lowQpc:String(lo),highQpc:String(lo+1000000),qpcFreq:'10000000'},
+    rows:[{pid:101,ppid:20,birth:root,privateWorkingSetBytes:total-50000000,
+      providerQpc:String(lo+700000),providerFreq:'10000000'},
+    {pid:102,ppid:101,birth:'134100000000000099',privateWorkingSetBytes:50000000,
+      providerQpc:String(lo+700000),providerFreq:'10000000'}]};
+  return {...verify(raw,101,request,request+180),requestedAt:request,receivedAt:request+180};
+}
+const warm=qualified(-500);
+const normal=(total=400000000)=>CHECKPOINTS.map(a=>qualified(a,total));
+test('uses the qualified real provider intervals and preserves both elapsed checkpoints',()=>{
+  const edge=memoryArm(normal(),base,warm);
+  const dex=memoryArm(normal(350000000),base,warm);
   const results=memoryPair(edge,dex);
   assert.deepEqual(results[1],{plannedElapsedMs:286000,edgePrivateResidentBytes:400000000,
-    dexerionPrivateResidentBytes:350000000,dexerionMinusEdgeBytes:-50000000});
+    dexerionPrivateResidentBytes:350000000,edgeProviderWindowElapsedMs:[286088,286092],
+    dexerionProviderWindowElapsedMs:[286088,286092],dexerionMinusEdgeBytes:-50000000});
   assert(!JSON.stringify(results).includes('cpu'));
   assert(!JSON.stringify(results).includes(profile));
 });
-test('rejects polluted/unknown ancestry, duplicate PID, policy overrides and changed browser generations',()=>{
+test('cleanup inspection preserves prior exact native ancestry and PID/creation matches',()=>{
   const rows=makeArm('msedge.exe');
   assert.throws(()=>read([...rows,rows[1]],CHECKPOINTS[0]),/duplicate/);
   assert.throws(()=>read([rows[0],{...rows[1],startedUtc:birth(10)}],CHECKPOINTS[0]),/ancestry/);
   assert.throws(()=>read([rows[0],{...rows[1],startedUtc:null}],CHECKPOINTS[0]),/ancestry/);
   assert.throws(()=>read([{...rows[0],cmdline:rows[0].cmdline+' --no-sandbox'},rows[1]],CHECKPOINTS[0]),/Verified browser launch/);
   assert.throws(()=>read([rows[0],{...rows[1],cmdline:rows[1].cmdline+' --disable-web-security'}],CHECKPOINTS[0]),/unexpected policy/);
-  assert.throws(()=>memoryArm([read(rows,CHECKPOINTS[0]),
-    read([{...rows[0],startedUtc:birth(18)},rows[1]],CHECKPOINTS[1])],base),/generation changed/);
+  const id=101,known=new Map([[id,[BigInt(base+21)*10000n+116444736000000000n]]]);
+  assert(possibleNativeGeneration({pid:id,startedUtc:birth(22)},known));
+  assert(possibleNativeGeneration({pid:id,startedUtc:null},known));
+  assert(!possibleNativeGeneration({pid:id,startedUtc:birth(24)},known));
+  assert(!possibleNativeGeneration({pid:102,startedUtc:birth(21)},known));
 });
-test('does not interpret missing private counters, racing endpoints or unmatched checkpoints as a favorable delta',()=>{
-  const rows=makeArm('msedge.exe');
-  const incomplete=[rows[0],{...rows[1],privateWsBytes:null}];
-  const missingSnapshot=read(incomplete,CHECKPOINTS[0]);
-  assert.equal(missingSnapshot.privateBytes,null);
-  const arm=memoryArm(CHECKPOINTS.map(a=>read(rows,a)),base);
-  const missing=memoryArm([missingSnapshot,read(rows,CHECKPOINTS[1])],base);
-  assert.equal(memoryPair(arm,missing)[0].dexerionMinusEdgeBytes,null);
-  assert.equal(memoryPair(arm,missing)[1].dexerionMinusEdgeBytes,0);
-  assert.throws(()=>memoryPair(arm.slice(0,1),missing),/no silent dropping/);
-  assert.throws(()=>memoryPair(arm,[{...arm[0],sampledElapsedMs:arm[0].sampledElapsedMs+4100},arm[1]]),/matched within/);
-  assert.throws(()=>memoryArm([read(rows,CHECKPOINTS[0]-1),read(rows,CHECKPOINTS[1])],base),/raced/);
-  assert.throws(()=>memoryArm([read(rows,CHECKPOINTS[0]+3000),read(rows,CHECKPOINTS[1])],base),/raced/);
-  assert.throws(()=>memoryArm([read(rows,CHECKPOINTS[0]),{...read(rows,CHECKPOINTS[1]),end:base+300001}],base),/over time/);
+test('requires a completed prewarm before t0, fresh matching QPC, sound phases and exact generations',()=>{
+  assert.throws(()=>memoryArm(normal(),base,null),/warmup/);
+  assert.throws(()=>memoryArm(normal(),base,{...warm,providerMaxUtcMs:base+1}),/warmup/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]),qualified(CHECKPOINTS[1],400000000,'134100000000000001')],base,warm),/generation changed/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]),{...qualified(CHECKPOINTS[1]),clockFrequency:999n}],base,warm),/clock mismatch/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]),{...qualified(CHECKPOINTS[1]),minProviderQpc:warm.minProviderQpc}],base,warm),/stale provider tick/);
+  const reused=qualified(CHECKPOINTS[0]);reused.scopeOfGenerations.get(102).birth+=1n;
+  assert.throws(()=>memoryArm([reused,qualified(CHECKPOINTS[1])],base,warm),/PID reused/);
+});
+test('missing counters, matched wall-clock but poor provider time, and extra timing slack do not become evidence',()=>{
+  const good=memoryArm(normal(),base,warm);
+  assert.throws(()=>memoryArm([{...normal()[0],privateResidentBytes:null},normal()[1]],base,warm),/invalid measured/);
+  const partial=[{...good[0],privateResidentBytes:null},good[1]];
+  assert.equal(memoryPair(good,partial)[0].dexerionMinusEdgeBytes,null);
+  assert.equal(memoryPair(good,partial)[1].dexerionMinusEdgeBytes,0);
+  assert.throws(()=>memoryPair(good.slice(0,1),partial),/no silent dropping/);
+  assert.throws(()=>memoryPair(good,[{...good[0],providerWindowElapsedMs:undefined},good[1]]),/provider windows/);
+  assert.throws(()=>memoryPair(good,[{...good[0],providerWindowElapsedMs:[274088,274092]},good[1]]),/provider windows/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]-1),normal()[1]],base,warm),/raced/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]+2500),normal()[1]],base,warm),/raced/);
+  assert.throws(()=>memoryArm([normal()[0],{...normal()[1],receivedAt:base+300001}],base,warm),/over time/);
 });
 test('reports live document, actual reload, and persistent/unsaved state separately',()=>{
   const original={token:'first-token',origin:base+120},again={token:'second-token',origin:base+385000};
@@ -61,6 +87,10 @@ test('reports live document, actual reload, and persistent/unsaved state separat
   assert.match(describeParity(keep,reload),/do not represent equivalent behavior/);
   assert.match(describeParity(keep,keep),/no general/);
   assert.match(describeParity(keep,null),/not determined/);
+  assert.equal(wakeComparison(keep,keep).classification,'same-live-fixture-contract');
+  assert.equal(wakeComparison(reload,reload).classification,'same-limited-fixture-outcome');
+  assert.deepEqual(wakeComparison(keep,reload).differences,['document','navigationRequests','unsavedFixtureText']);
+  assert.equal(wakeComparison(keep,{...keep,confirmedVisible:false}).classification,'unresolved');
   assert.throws(()=>wakeEvidence(original,{...again,...visible},[original],'marker',true),/bona fide/);
   assert.throws(()=>wakeEvidence(original,{...original,...visible,visible:false},[original],'marker',true),/visibility/);
   assert.throws(()=>wakeEvidence(original,{...again,...visible},[original,again,again],'marker',true),/one bona fide/);

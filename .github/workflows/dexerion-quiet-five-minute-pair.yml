@@ -33,7 +33,7 @@ jobs:
         run: |
           npm ci --include=dev
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/test-long-idle.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-sample-guard.cjs
+          node --test scripts/test-long-idle.cjs scripts/test-owned-working-set-preflight.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-sample-guard.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build the exact Windows product without publishing
         shell: pwsh

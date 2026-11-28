@@ -9,8 +9,9 @@ const {randomBytes,createHash}=require('node:crypto');
 const {fileURLToPath}=require('node:url');
 const {spawn,execFileSync}=require('node:child_process');
 const {setTimeout:wait}=require('node:timers/promises');
+const {performance}=require('node:perf_hooks');
 const {browserArgs,debugPort,edgeExecutable,isShellUrl,waitFor}=require('./measure-native-browser.cjs');
-const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,wakeEvidence,describeParity}=require('./read-long-idle.cjs');
+const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison}=require('./read-long-idle.cjs');
 
 const ORDER=['edge','dexerion'],SLOTS=Array.from({length:9},(_,i)=>i),WAKE_SLOT=4;
 const SHA=process.env.GITHUB_SHA;
@@ -98,14 +99,14 @@ async function endpoint(profile){
   }),5500,'browser CDP open');
   return new BrowserCdp(ws);
 }
-function inventory(includePrivate){
+function cleanupInventory(){
   const at=Date.now(),raw=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-File',
-    path.join(__dirname,'measure-tree-snapshot.ps1'),...(includePrivate?['-IncludePrivateWorkingSet']:[])],
+    path.join(__dirname,'measure-tree-snapshot.ps1')],
   {timeout:11500,encoding:'utf8',windowsHide:true,maxBuffer:20*1024*1024}).trim());
   return {raw,at,end:Date.now()};
 }
 async function nativeLaunch(kind,executable) {
-  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'dex-long-idle-'+kind+'-'));
+  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'dex-native-'+kind+'-'));
   const child=spawn(executable,browserArgs(kind,profile,{packaged:kind==='dexerion'}),
     {cwd:path.dirname(executable),env:process.env,stdio:['ignore','ignore','ignore']});
   let error=null;
@@ -135,15 +136,15 @@ async function nativeLaunch(kind,executable) {
       if(!running())throw new Error(kind+' exited before isolated endpoint');
       return debugPort(profile);
     },kind+' isolated DevTools listener',38000);
-    return {kind,root:child.pid,profile,running,close};
+    return {kind,root:child.pid,profile,processId:child.pid,profileDir:profile,running,close};
   }catch(e){await close(null);throw e;}
 }
-async function ownedCleanup(identities,profile){
+async function ownedCleanup(identities,nativeGenerations,profile){
   const old=new Set(identities.map(([pid,birth])=>pid+';'+birth));
   await waitFor(()=>{
-    const {raw}=inventory(false);
+    const {raw}=cleanupInventory();
     const p=profile.toLowerCase();
-    return !raw.processes.some(r=>old.has(r.pid+';'+r.startedUtc)||
+    return !raw.processes.some(r=>old.has(r.pid+';'+r.startedUtc)||possibleNativeGeneration(r,nativeGenerations)||
       typeof r.cmdline==='string'&&r.cmdline.toLowerCase().includes(p));
   },'first disposable browser and its measured children fully exited',12500);
 }
@@ -270,7 +271,15 @@ function stockEdgeSelect(root){
   assert.equal(output.trim(),'selected','could not dispatch native stock Edge Ctrl+5');
 }
 async function runArm(kind,executable,asar,fixture) {
-  let launched,cdp,observedIds=[],stamp;
+  let launched,cdp,collector,observedIds=[],stamp;
+  const nativeGenerations=new Map();
+  const remember=s=>{
+    for(const [pid,p] of s.scopeOfGenerations){
+      if(!nativeGenerations.has(pid))nativeGenerations.set(pid,[]);
+      const rows=nativeGenerations.get(pid);
+      if(!rows.includes(p.birth))rows.push(p.birth);
+    }
+  };
   const result={kind,memory:null,wake:null,missing:null};
   const {urls}=fixture,records=fixture.reset();
   const covered=()=>records.loads.every((list,i)=>list.length===1&&list[0].document&&
@@ -343,18 +352,35 @@ async function runArm(kind,executable,asar,fixture) {
     }
     const firstWake=records.loads[WAKE_SLOT][0].document;
     await cdp.close();cdp=null;
-    const quietAt=Date.now();
+    collector=await require('./owned-working-set-preflight.cjs').Collector.launch(kind,launched);
+    // Prewarm once, with DevTools already disconnected and before either
+    // arm's quiet clock. The untimed sample supplies positive generation
+    // and clock identity only. No warmup resident value is recorded.
+    const warm=await collector.sample(launched.root);
+    remember(warm);
+    result.warmupTimingOnly=warm.qualification;
+    // The collector's validated UTC projection allows up to 2 ms rounding.
+    // Start strictly after even the upper endpoint of the warm acquisition.
+    await wait(Math.max(0,Math.ceil(warm.providerMaxUtcMs-Date.now())));
+    const quietAt=Date.now(),quietMonotonic=performance.now();
     const snapshots=[];
     for(const checkpoint of CHECKPOINTS){
       await wait(Math.max(0,quietAt+checkpoint-Date.now()));
       assert(launched.running(),'stock process exited during quiet window');
-      const g=inventory(true);
-      const sample=readOwnedSnapshot(g.raw,launched.root,browserNames[kind],launched.profile,g.at,g.end);
-      snapshots.push(sample);observedIds.push(...sample.identities);
+      const requestedAt=Date.now();
+      assert(Math.abs((requestedAt-quietAt)-(performance.now()-quietMonotonic))<=60,
+        'host wall clock stepped relative to monotonic quiet timer');
+      const sample=await collector.sample(launched.root);
+      const receivedAt=Date.now();
+      assert(Math.abs((receivedAt-quietAt)-(performance.now()-quietMonotonic))<=60,
+        'host wall clock stepped across provider sample');
+      snapshots.push({...sample,requestedAt,receivedAt});
+      remember(sample);
     }
-    stamp=memoryArm(snapshots,quietAt);
-    // No inspection or navigation above, other than Windows OS reads. Only
-    // after both samples do we open a new empty browser-level socket.
+    stamp=memoryArm(snapshots,quietAt,warm);
+    await collector.close();collector=null;
+    // No browser inspection/navigation before both qualified snapshots.
+    // The slower broad Windows inventory is now used only for cleanup.
     cdp=await endpoint(launched.profile);
     const settledFront=await pageProof(cdp,front,0);
     assert(settledFront?.visible===true&&settledFront.origin===initialFront.origin&&settledFront.token===initialFront.token&&
@@ -410,12 +436,16 @@ async function runArm(kind,executable,asar,fixture) {
       }
       result.wake=wakeEvidence(firstWake,woke,sequence,sentinel(WAKE_SLOT),observedCookie);
     }catch(e){result.wakeMissing=reason(e);}
-    const g=inventory(false);
+    const g=cleanupInventory();
     observedIds.push(...readOwnedSnapshot(g.raw,launched.root,browserNames[kind],launched.profile,g.at,g.end).identities);
   }catch(e){result.missing=reason(e);}
   finally{
+    if(collector){
+      try{await collector.close();}
+      catch(e){result.cleanupMissing=reason(e);}
+    }
     if(launched){
-      try{await launched.close(cdp);await ownedCleanup(observedIds,launched.profile);}
+      try{await launched.close(cdp);await ownedCleanup(observedIds,nativeGenerations,launched.profile);}
       catch(e){result.cleanupMissing=reason(e);}
     }
   }
@@ -431,7 +461,7 @@ async function main(){
   const files={dexerion:dex,edge:edgeExecutable()};
   const report={sourceSha:SHA,order:ORDER,workload:{visibleTabs:1,backgroundTabs:8,distinctFixtureOrigins:8,selectedTabPosition:5,staticReadingOnly:true},
     dexExeSha256:digest(dex),dexAsarSha256:digest(asar),edgeExeSha256:digest(files.edge),arms:{},
-    scope:'ONE serial same-host exploratory pair. Whole owned Windows tree private resident only during quiet; short-lived inactive observer disconnected. Wake fidelity measured after both samples and reported separately. Desk host/browser order, site and engine dependence remain. No CPU/GPU/power, performance target or feature parity conclusion.'};
+    scope:'ONE serial same-host exploratory pair. Whole owned Windows tree private resident only during quiet, timestamped by Windows PerfProc QPC after one prewarm outside the window; browser observer disconnected. Wake fidelity measured after both samples and reported separately. Desk host/browser order, site and engine dependence remain. No CPU/GPU/power, performance target or feature parity conclusion.'};
   const f=await listenFixture();
   try{
     for(const kind of ORDER){
@@ -442,13 +472,19 @@ async function main(){
     }
     const {edge,dexerion}=report.arms;
     report.idleMemory=null;
+    report.wakeComparison=wakeComparison(edge?.wake,dexerion?.wake);
+    report.fidelityContrast=report.wakeComparison.summary;
     if(edge?.memory&&dexerion?.memory&&edge.viewport[2]===dexerion.viewport[2]&&
       !edge.missing&&!dexerion.missing&&!edge.cleanupMissing&&!dexerion.cleanupMissing){
-      try{report.idleMemory=memoryPair(edge.memory,dexerion.memory);}
-      catch(e){report.pairedMemoryMissing=reason(e);}
+      if(report.wakeComparison.classification==='unresolved'){
+        report.pairedMemoryMissing='wake evidence unresolved; raw per-arm samples only, no paired inference';
+      }else{
+        try{report.idleMemory=memoryPair(edge.memory,dexerion.memory);}
+        catch(e){report.pairedMemoryMissing=reason(e);}
+      }
     }
-    report.fidelityContrast=describeParity(edge?.wake,dexerion?.wake);
-    report.complete=Boolean(report.idleMemory?.every(s=>s.dexerionMinusEdgeBytes!==null)&&edge?.wake&&dexerion?.wake);
+    report.complete=Boolean(report.idleMemory?.every(s=>s.dexerionMinusEdgeBytes!==null)&&
+      report.wakeComparison.classification!=='unresolved');
   }finally{
     f.server.closeAllConnections();await new Promise(r=>f.server.close(r));
     fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n',{flag:'wx'});
