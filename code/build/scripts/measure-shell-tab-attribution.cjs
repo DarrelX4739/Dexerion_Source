@@ -137,11 +137,27 @@ function summarizeFrames(before, after, arm) {
   return mapped;
 }
 
-function summarizeSnapshots(a, b, browserPid, profile, labels) {
-  const root = (p) => /^electron\.exe$/i.test(p.name) && typeof p.cmdline === 'string'
-    && p.cmdline.toLowerCase().includes(profile.toLowerCase());
-  const ta = verifiedNativeTree(a.processes, browserPid, root);
-  const tb = verifiedNativeTree(b.processes, browserPid, root);
+function summarizeSnapshots(a, b, identity, labels) {
+  const root = (p) => {
+    const created = Date.parse(p.startedUtc);
+    return typeof p.name === 'string' && p.name.toLowerCase() === identity.imageName.toLowerCase()
+      && typeof p.cmdline === 'string' && !/--type=/.test(p.cmdline)
+      && Number.isFinite(created) && created >= identity.earliestMs && created <= identity.latestMs;
+  };
+  const owned = (snapshot, at) => {
+    const candidate = snapshot.processes.find(p => p.pid === identity.pid);
+    if (!candidate || !root(candidate)) {
+      const start = Date.parse(candidate?.startedUtc);
+      throw new Error(`Cannot confirm actual Electron main process at ${at}: ` + JSON.stringify({
+        present: Boolean(candidate), imageMatch: candidate?.name?.toLowerCase() === identity.imageName.toLowerCase(),
+        readableCommand: typeof candidate?.cmdline === 'string', processKind: candidate?.cmdline?.match(/--type=([\w-]+)/)?.[1] || 'unspecified',
+        launchTimeMatch: Number.isFinite(start) && start >= identity.earliestMs && start <= identity.latestMs,
+      }));
+    }
+    return verifiedNativeTree(snapshot.processes, identity.pid, root);
+  };
+  const ta = owned(a, 'sample A');
+  const tb = owned(b, 'sample B');
   const byPid = (ps, id) => ps.find((p) => p.pid === id);
   const chromiumRole = (p) => String(p.cmdline || '').match(/--type=([\w-]+)/)?.[1] || 'browser';
   for (const [pid, label] of labels) {
@@ -149,6 +165,7 @@ function summarizeSnapshots(a, b, browserPid, profile, labels) {
     assert(start && finish && start.startedUtc === finish.startedUtc && chromiumRole(finish) === 'renderer', `identity did not reconcile for ${label}`);
     assert(Number.isFinite(finish.privateWsBytes) && finish.privateWsBytes >= 0, `missing private resident counter for ${label}`);
   }
+  assert.equal(byPid(ta.rows, identity.pid).startedUtc, byPid(tb.rows, identity.pid).startedUtc, 'browser PID generation changed');
   const role = p => labels.get(p.pid) || (chromiumRole(p) === 'renderer' ? 'unmapped-renderer' : chromiumRole(p));
   const stable = stableCpuByRole(ta.rows, tb.rows, role);
   const windowSec = (Date.parse(b.capturedAt) - Date.parse(a.capturedAt)) / 1000;
@@ -175,8 +192,15 @@ function summarizeSnapshots(a, b, browserPid, profile, labels) {
 async function runTrial(origin, arm) {
   const { launchDexerion } = require('../e2e/app');
   const urls = Array.from({length: BACKGROUNDS + 1}, (_, i) => `http://role-attribution-${i}.localhost:${origin}/page/${i}`);
+  const earliestMs = Date.now() - 2000;
   const { app, win, profile } = await launchDexerion({ attempts: 1, gpu: 'adaptive' });
   try {
+    const main = await app.evaluate(({ app }) => ({ pid: process.pid, executable: process.execPath, userData: app.getPath('userData') }));
+    const latestMs = Date.now() + 2000;
+    const [reported, disposable] = await Promise.all([fs.realpath(main.userData), fs.realpath(profile)]);
+    assert.equal(reported.toLowerCase(), disposable.toLowerCase(), 'actual Electron must own this disposable profile');
+    assert(Number.isInteger(main.pid) && main.pid > 0 && path.isAbsolute(main.executable), 'actual Electron main identity required');
+    const identity = { pid: main.pid, imageName: path.basename(main.executable), earliestMs, latestMs };
     const getState = () => win.evaluate(() => window.dexerion.invoke('dex:get-state'));
     let initial;
     for (let i=0; i<60; i++) {
@@ -217,7 +241,8 @@ async function runTrial(origin, arm) {
     const latest = await getState();
     assert(latest.active === boot && matchesInventory(latest.tabs.map(t=>t.url), urls), 'active tab or inventory changed');
     return { arm, focusedAtBounds: [first.shellFocused, last.shellFocused],
-      ...summarizeSnapshots(a, b, app.process().pid, profile, labels), frames: summarizeFrames(frameA, frameB, arm) };
+      launcherSharesActualPid: app.process().pid === identity.pid,
+      ...summarizeSnapshots(a, b, identity, labels), frames: summarizeFrames(frameA, frameB, arm) };
   } finally {
     try { await app.close(); } finally {
       await fs.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
@@ -259,10 +284,12 @@ async function main() {
     ].map(p => ({...p, startedUtc, cpu100ns:0, privateWsBytes: 1048576}));
     const cpuA = {capturedAt:'2026-11-28T00:01:00.000Z',processes:ps};
     const cpuB = {capturedAt:'2026-11-28T00:01:10.000Z',processes:ps.map(p=>({...p,cpu100ns:1000000}))};
-    const summary = summarizeSnapshots(cpuA,cpuB,pid,profile,labels).attribution;
+    const identity = { pid, imageName:'electron.exe',earliestMs:Date.parse(startedUtc)-1000,latestMs:Date.parse(startedUtc)+1000 };
+    const summary = summarizeSnapshots(cpuA,cpuB,identity,labels).attribution;
     assert.deepEqual(summary['shell-renderer'], {processes:1,privateResidentMiB:1,stableProcesses:1,cpuPctOfOneCore:1});
     assert.deepEqual(summary['unmapped-renderer'], summary['shell-renderer']);
-    assert.throws(() => summarizeSnapshots(cpuA,{...cpuB,processes:cpuB.processes.map(p => p.pid === 20 ? {...p,privateWsBytes:null} : p)},pid,profile,labels));
+    assert.throws(() => summarizeSnapshots(cpuA,{...cpuB,processes:cpuB.processes.map(p => p.pid === 20 ? {...p,privateWsBytes:null} : p)},identity,labels));
+    assert.throws(() => summarizeSnapshots(cpuA,cpuB,{...identity,imageName:'unrelated.exe'},labels), /imageMatch/);
     console.log('shell/tab attribution diagnostics self-test passed');
     return;
   }
