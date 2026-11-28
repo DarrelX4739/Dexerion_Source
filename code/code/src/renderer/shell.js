@@ -729,11 +729,15 @@ function displayUrl(u) {
 
 // Local mirror of the bookmarked URLs, so the star can be painted synchronously
 // (no IPC on the render path) and flips the instant it is clicked.
-function bookmarkSet() {
-  const set = new Set();
+function isBookmarked(url) {
   const roots = S && S.bookmarks && S.bookmarks.roots;
-  if (roots) for (const k of Object.keys(roots)) for (const b of (roots[k] || [])) set.add(b.url);
-  return set;
+  let marked = false;
+  if (roots) for (const k of Object.keys(roots)) for (const b of (roots[k] || [])) {
+    const saved = b.url;
+    // Match Set.has's SameValueZero equality and visit the same entries.
+    if (saved === url || (saved !== saved && url !== url)) marked = true;
+  }
+  return marked;
 }
 function updateBookmarkStar(act) {
   const btn = $('#bookmark-btn');
@@ -744,7 +748,7 @@ function updateBookmarkStar(act) {
     return;
   }
   btn.classList.remove('disabled');
-  const marked = bookmarkSet().has(url);
+  const marked = isBookmarked(url);
   setIcon(btn, marked ? 'starOn' : 'star');
   btn.classList.toggle('bookmarked', marked);
   btn.title = marked ? 'Remove this bookmark' : 'Bookmark this page';
@@ -855,7 +859,7 @@ function toggleBookmark() {
   if (!/^https?:\/\//i.test(act.url)) return;
   const url = act.url;
   const btn = $('#bookmark-btn');
-  const nowMarked = !(bookmarkSet().has(url) || btn.classList.contains('bookmarked'));
+  const nowMarked = !(isBookmarked(url) || btn.classList.contains('bookmarked'));
   // Flip the star immediately; persist in the background. Nothing on the click
   // path awaits, so there is no perceptible delay.
   setIcon(btn, nowMarked ? 'starOn' : 'star');
