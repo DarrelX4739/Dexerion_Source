@@ -255,6 +255,58 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .dx-item:hover .actions, .dx-item:focus-within .actions { opacity: 1; }
 @media (hover: none) { .dx-item .actions { opacity: 1; } }
 
+/* Only the three Library pages. Keep the lists and their original actions;
+   a simple rule separates rows, and narrow rows give the title its own line. */
+html[data-theme="dark"] :is(
+  .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+  .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+  .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+) {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+html[data-theme="dark"] :is(
+  .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+  .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+  .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+) > .dx-list {
+  background: transparent;
+  border-inline: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+@media (max-width: 540px) {
+  html[data-theme="dark"] :is(
+    .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+    .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+    .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+  ) > .dx-list > .dx-item {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 4px 10px;
+    align-items: start;
+    padding-inline: 8px;
+  }
+  html[data-theme="dark"] :is(
+    .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+    .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+    .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+  ) > .dx-list > .dx-item > :is(.actions, .dl-actions) {
+    grid-column: 2;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin-inline-start: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    opacity: 1;
+  }
+  html[data-theme="dark"] .dx-page:has(.dx-head #folder):has(> #list.dx-list) > .dx-list > .dl-row > .st {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 /* ---------- empty state ---------- */
 .dx-empty {
   text-align: center;
