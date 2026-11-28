@@ -541,12 +541,14 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .d
   padding-bottom: 10px;
   border-bottom: 1px solid var(--dx-launch-line);
 }
-html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .clock {
-  font: 650 1rem/1.25 var(--font-mono);
-  letter-spacing: -.035em;
-}
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .date { color: var(--pfg-2); }
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .qline { flex-basis: 100%; }
+/* The old corner hid the day’s quote on narrow windows. It now has its
+   own line in the launch column, so keep the existing text visible. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight :is(.quote, .author):not(:empty) {
+  display: block;
+  overflow-wrap: break-word;
+}
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .quote {
   border: 0;
   padding: 0;
@@ -572,10 +574,6 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mar
   background: none;
 }
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark h1 {
-  font-size: clamp(26px, 5.4vw, 40px);
-  line-height: 1.04;
-  letter-spacing: -.037em;
-  text-transform: none;
   margin: 0;
 }
 html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .sub {
