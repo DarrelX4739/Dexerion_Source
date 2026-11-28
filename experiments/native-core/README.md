@@ -15,7 +15,8 @@ Requires a C++17 compiler; tests additionally use Node and the existing JS sourc
 ```sh
 cmake -S experiments/native-core -B build/native-core -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native-core --config Release
-ctest --test-dir build/native-core -C Release --output-on-failure
+cd build/native-core
+ctest -C Release --output-on-failure
 ```
 
 On Linux without CMake:
@@ -67,3 +68,9 @@ xvfb-run -a node experiments/native-core/tests/electron_power_shadow.cjs build/n
 On Windows, use `node experiments/native-core/tests/electron_power_shadow.cjs build/native-core/Release/dex_ap_replay.exe`. An available Linux window manager permits additional minimized-state coverage. This test is **not** part of the ordinary CTest suite. The default suite tests its observer protections and verifies that a deliberately wrong native comparison fails, not that a GUI was launched.
 
 The child is the unchanged source Electron application launched by its existing Playwright throwaway-profile harness with Adaptive GPU. A test-only observation hook in the trusted main process captures only normalized numeric/Boolean power measurements, tiers and the pure JS function's returned plan while real window operations run. It verifies the exact newly generated test profile, refuses packaged or non-test applications, and never records URLs or user content. Each observed real call returns the original JS result to the browser; the external C++ executable only receives and replays the trace **after the hook is removed**. Zero observed plans is a failure. A passing log reports exact matched decisions and observed tiers; it is a host-data contract check, not an end-to-end performance benchmark. The throwaway profile is deleted when the browser closes.
+
+## Fourth kernel: Tasks reminder decisions and ordering
+
+`dex_task_reminders` consumes normalized Tasks records (including JavaScript-compatible UTF-16 IDs and already-resolved positive epoch times). It decides due/pre notices and next reminder time, selects the active/idle heartbeat interval, sorts open/completed tasks, and chooses the top three open rows. Duplicate IDs keep their first normalized record even if it is done. The rail peek retains at most three ordered candidate indices rather than making another full sorted index list. Missing and explicitly zero heartbeat windows follow their distinct existing JS behavior.
+
+The existing `tasks.js` is the oracle for lists including overdue/threshold cases, fractional and legacy heartbeat budgets, duplicate IDs, and supplementary characters (UTF-8 byte order would be wrong). This does **not** port raw record normalization, ID generation, local-date/time or DST parsing, account isolation/storage, titles/notes, notification delivery, scheduling or persistence. It returns data only, never registers an OS alarm, and never reads a real task. CMake targets: `dex_tr_unit`, `dex_tr_replay`; test oracle: `tests/task_reminders_parity.cjs`.

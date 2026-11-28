@@ -28,6 +28,7 @@ endfunction()
 add_policy(memory_saver ms)
 add_policy(adaptive_power ap)
 add_policy(focus_timer ft)
+add_policy(task_reminders tr)
 if(BUILD_TESTING)
   add_test(NAME electron_shadow_observer_contract COMMAND "${DEX_NODE_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/electron_power_shadow_unit.cjs" $<TARGET_FILE:dex_ap_replay>)

@@ -1,4 +1,5 @@
 #include "dexerion/adaptive_power.hpp"
+#include "dexerion/js_number.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -67,12 +68,14 @@ RuntimePlan runtime_plan(const Signals& s, std::optional<Tier> previous, double 
   const double base_idle = b.idle_sleep_ms == 0 ? 180000 : b.idle_sleep_ms;
   constexpr double max_sweep = 300000;
   // Mirror Math.round(n) for finite normalized budgets (ties toward +infinity).
-  const double deep_ceiling = std::floor(b.sweep_deep_idle_ms + 0.5);
-  double sweep = std::clamp(base_sweep * multiplier, 15000.0, max_sweep);
+  const double deep_ceiling = detail::js_round(b.sweep_deep_idle_ms);
+  const double scaled_sweep = base_sweep * multiplier;
+  // JS clamp returns its lower bound for a non-finite intermediate.
+  double sweep = std::isfinite(scaled_sweep) ? std::clamp(scaled_sweep, 15000.0, max_sweep) : 15000.0;
   if (deep_idle && deep_ceiling > max_sweep) sweep = std::max(sweep, deep_ceiling);
   double idle = suspended || s.on_battery ? std::min(base_idle, 90000.0) : base_idle;
   if (s.free_mem_mb > 0 && s.free_mem_mb < 1024) idle = std::min(idle, 60000.0);
-  return {tier, std::floor(sweep + 0.5), deep_idle, std::floor(idle + 0.5),
+  return {tier, detail::js_round(sweep), deep_idle, detail::js_round(idle),
           true, true, true, !suspended};
 }
 

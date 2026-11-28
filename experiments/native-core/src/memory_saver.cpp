@@ -1,4 +1,5 @@
 #include "dexerion/memory_saver.hpp"
+#include "dexerion/js_number.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,7 +16,7 @@ int clamp_cap_mb(double value) noexcept {
 }
 
 double hog_floor_mb(double cap_mb) noexcept {
-  return std::max(300.0, std::floor(cap_mb * 0.25 + 0.5));
+  return std::max(300.0, detail::js_round(cap_mb * 0.25));
 }
 
 bool should_notice_hog(double active_mb, double cap_mb, double over_mb) noexcept {
@@ -36,8 +37,8 @@ SweepPlan plan_sweep(const std::vector<TabSnapshot>& tabs, const SweepInput& inp
 
   using Group = std::vector<std::size_t>;
   std::vector<Group> groups;
-  std::unordered_map<std::int32_t, std::size_t> by_pid;
-  std::map<std::pair<std::int32_t, std::string_view>, std::size_t> without_pid;
+  std::unordered_map<std::uint32_t, std::size_t> by_pid;
+  std::map<std::pair<std::int64_t, std::string_view>, std::size_t> without_pid;
   for (std::size_t i = 0; i < tabs.size(); ++i) {
     const auto& t = tabs[i];
     if (!eligible(t, input.now_ms, input.floor_ms)) continue;

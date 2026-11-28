@@ -10,10 +10,10 @@ namespace dexerion::memory_saver {
 // Typed input boundary: the browser supplies normalized finite metrics and a
 // single timestamp per sweep. No Electron handles, clocks or mutable tab state.
 struct TabSnapshot {
-  std::int32_t window_id{};
+  std::int64_t window_id{};
   std::string tab_id;
   std::string url;
-  std::int32_t pid{};  // 0 means "no process ID", not a shared process.
+  std::uint32_t pid{};  // 0 means "no process ID", not a shared process.
   double memory_mb{};
   double last_active_ms{};
   bool active{}, loading{}, lazy{}, sleeping{}, has_view{}, audible{};

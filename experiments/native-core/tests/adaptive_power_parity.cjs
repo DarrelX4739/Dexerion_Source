@@ -40,6 +40,9 @@ function fixture(label, signals = {}, options = {}, contract = {}) {
   cases.push({ label, s, previous: o.previous, state, b, expected, line });
 }
 fixture('idle default', {}, {}, { gpuTier: 'minimal', sweepIntervalMs: 60000, sampleMetrics: true });
+fixture('finite budget with overflow when scaled', { locked: true },
+  { sweep: Number.MAX_VALUE }, { sweepIntervalMs: 15000 });
+fixture('representable budget just below half', {}, { sleep: 0.49999999999999994 }, { idleSleepMs: 0 });
 fixture('immediate upgrade', { webgl: true }, { previous: 'minimal', since: now }, { gpuTier: 'accelerated' });
 for (const name of ['locked', 'minimized']) fixture('suspend ' + name, { [name]: true, webgl: true },
   { previous: 'accelerated', since: now }, { gpuTier: 'suspended', sampleMetrics: false });

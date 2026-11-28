@@ -51,6 +51,10 @@ add('shared PID across windows is credited once', [
   tab(0, { pid: 7, memMB: 300 }), tab(1, { pid: 7, winId: 2, lastActive: 1, memMB: 200 }),
   tab(2, { pid: 9, memMB: 150 }),
 ], { totalMB: 1800 }, [1, 0, 2]);
+add('full Windows PID range does not alias unknown renderers', [
+  tab(0, { pid: 4294967295, winId: 2147483648, memMB: 350 }),
+  tab(1, { pid: 2147483648, memMB: 150 }), tab(2, { pid: 4294967295, memMB: 350 }),
+], {}, [0, 2, 1]);
 add('stable group order uses first eligible, not oldest insertion', [
   tab(0, { pid: 7 }), tab(1, { pid: 9, lastActive: 10 }),
   tab(2, { pid: 7, lastActive: 10 }), tab(3, { pid: 9, lastActive: 10 }),
