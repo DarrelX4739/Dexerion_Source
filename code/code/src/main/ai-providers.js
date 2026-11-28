@@ -705,11 +705,15 @@ function readSse(res, onJson, onFirstByte) {
         bytes += value && value.byteLength ? value.byteLength : 0;
         if (bytes > MAX_STREAM_BYTES) throw new Error('The provider response was too large to process.');
         if (value && value.byteLength && onFirstByte) { try { onFirstByte(); } catch {} onFirstByte = null; }
-        buf += dec.decode(value, { stream: true });
-        let idx;
-        while ((idx = buf.indexOf('\n')) >= 0) {
-          const line = buf.slice(0, idx).trim();
-          buf = buf.slice(idx + 1);
+        const chunk = dec.decode(value, { stream: true });
+        // Search only newly decoded characters. An unfinished event can
+        // span many small reads; searching the accumulated rope each time
+        // causes repeated copies and scans of its already checked prefix.
+        let start = 0, idx;
+        while ((idx = chunk.indexOf('\n', start)) >= 0) {
+          const line = (buf + chunk.slice(start, idx)).trim();
+          buf = '';
+          start = idx + 1;
           if (!line.startsWith('data:')) continue;
           const payload = line.slice(5).trim();
           if (!payload || payload === '[DONE]') continue;
@@ -717,6 +721,7 @@ function readSse(res, onJson, onFirstByte) {
           try { json = JSON.parse(payload); } catch { continue; }
           onJson(json);
         }
+        if (start < chunk.length) buf += chunk.slice(start);
       }
       // A stream can end on a final line without a trailing newline; dropping
       // it loses the last content delta or the finish_reason/usage chunk.
