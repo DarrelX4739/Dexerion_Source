@@ -424,19 +424,7 @@ function updateChromeRest(s) {
   const dacc = $('#dmenu-acc');
   if (dacc) dacc.textContent = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
   updateBookmarkStar(act);
-  // bookmarks bar — hidden when the setting is off or the bar is empty, so an
-  // empty bar never leaves a dead strip under the toolbar.
-  const bar = $('#bookmarkbar');
-  const barItems = (s.bookmarks && s.bookmarks.roots && s.bookmarks.roots.bar) || [];
-  bar.style.display = (s.bookmarksBar && barItems.length) ? 'flex' : 'none';
-  bar.innerHTML = '';
-  // No cap: every bookmark on the bar (it scrolls horizontally when it overflows).
-  for (const b of barItems) {
-    const a = document.createElement('a'); a.textContent = b.title || b.url;
-    a.title = b.url;
-    a.onclick = () => window.dexerion.invoke('dex:navigate', s.active, b.url);
-    bar.appendChild(a);
-  }
+  updateBookmarksBar(s);
   // extensions toolbar — real action icons, cached per session
   const eb = $('#extbar'); eb.innerHTML = '';
   window.__extIcons = window.__extIcons || {};
@@ -460,6 +448,32 @@ function updateChromeRest(s) {
     }
   }
   reportChrome();
+}
+
+// Keep existing links when their visible labels and URLs have not changed.
+// Navigation still follows the active tab from the latest chrome state.
+let bookmarkBarRows = [];
+let bookmarkBarActive;
+function updateBookmarksBar(s) {
+  const bar = $('#bookmarkbar');
+  const items = (s.bookmarks && s.bookmarks.roots && s.bookmarks.roots.bar) || [];
+  bookmarkBarActive = s.active;
+  const display = (s.bookmarksBar && items.length) ? 'flex' : 'none';
+  if (bar.style.display !== display) bar.style.display = display;
+  if (items.length === bookmarkBarRows.length && items.every((b, i) =>
+    b.url === bookmarkBarRows[i].url && (b.title || b.url) === bookmarkBarRows[i].label)) return;
+
+  // No cap: the whole bar remains scrollable, including when it is re-shown.
+  bookmarkBarRows = items.map(b => ({ url: b.url, label: b.title || b.url }));
+  const links = document.createDocumentFragment();
+  for (const { url, label } of bookmarkBarRows) {
+    const a = document.createElement('a');
+    a.textContent = label;
+    a.title = url;
+    a.onclick = () => window.dexerion.invoke('dex:navigate', bookmarkBarActive, url);
+    links.appendChild(a);
+  }
+  bar.replaceChildren(links);
 }
 
 // Memoised chrome measurements. The calls earlier in the module run from state

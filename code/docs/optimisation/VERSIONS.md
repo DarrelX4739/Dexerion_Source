@@ -54,3 +54,35 @@ background (fails every scenario).
 - **Ladder length is not fixed at 50** (user direction): versions continue only
   until every axis meets the bar in every state, then the ladder stops and the
   final report is written.
+
+## Current target: at least 20% lighter than Edge (40% stretch)
+
+Grade CPU, RAM, GPU utilisation and attributable power separately in active
+browsing, background tabs, idle and multitasking. The minimum is **≤80% of
+Edge in each cell**, with **≤60%** as the stretch. Missing counters, zero
+Edge baselines and noise-limited power do not count as passing. Run the
+existing Windows protocol on AC with disposable profiles, both windows
+focused during their respective trials, and no competing browser session.
+From `code/build`, run:
+
+```powershell
+node scripts/measure-protocol.js
+node scripts/grade-edge-target.cjs "$env:TEMP\opencode\dexerion-test1\measure-protocol-main.json"
+node --test scripts/test-bookmarks-bar.cjs scripts/test-edge-target.cjs
+```
+
+Run 4 remains historical evidence, not a result for this branch. Its active
+working set was 488.1 MB against Edge's 442.8 MB (20% target: 354.2 MB);
+idle was 457.7 MB against 413.3 MB (target: 330.6 MB). Foreground CPU and GPU
+were near parity; power was noise-limited. Do not trade off browser behaviour
+or change the workload to meet the target.
+
+First renderer change: retain bookmark bar links across unchanged chrome
+updates. The repeat-state test with 100 bookmarks and 250 subsequent updates
+allocates 100 links instead of 25,100 under the previous rebuild path. This is
+a link-allocation count in a test fixture, not a measured CPU, RAM or power
+gain. On Windows, check the toolbar and new-tab suggestions, rapid typing and
+close/reopen, keyboard navigation, and bookmarking after tab switches in the
+real app. For the previous suggestion change, use `DEX_SUGGEST_RESCAN=1` to
+measure the old double scan on the same commit; time local results separately
+from network completions.
