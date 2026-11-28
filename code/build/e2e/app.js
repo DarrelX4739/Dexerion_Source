@@ -14,7 +14,7 @@ const { _electron: electron } = require('@playwright/test');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function launchOnce(options) {
-  const buildDir = path.join(__dirname, '..');
+  const buildDir = options.buildDir ? path.resolve(options.buildDir) : path.join(__dirname, '..');
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'dexerion-e2e-'));
   const buildModules = path.join(buildDir, 'node_modules');
   const env = {
@@ -34,7 +34,7 @@ async function launchOnce(options) {
     // and on a busy machine the handshake alone has been seen to exceed a
     // minute (measured app-side cold start is 12-15 s; the rest is contention).
     app = await electron.launch({
-      executablePath: require('electron'),
+      executablePath: options.executablePath || require('electron'),
       cwd: buildDir,
       // Throwaway-profile E2E only. Compositor timing inside a sandboxed
       // iframe was flaky with a real GPU, so the default harness forces

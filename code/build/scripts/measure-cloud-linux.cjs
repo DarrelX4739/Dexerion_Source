@@ -126,8 +126,8 @@ async function openChrome(urls) {
   }
 }
 
-async function openDexerion(urls, launch = launchDexerion) {
-  const { app, win, profile } = await launch({ attempts: 1, gpu: 'off' });
+async function openDexerion(urls, buildOptions = {}) {
+  const { app, win, profile } = await launchDexerion({ attempts: 1, gpu: 'off', ...buildOptions });
   const close = async () => {
     await app.close().catch(() => {});
     fs.rmSync(profile, { force: true, recursive: true, maxRetries: 3 });
@@ -215,12 +215,14 @@ async function main() {
   let reference = null;
   if (REFERENCE) {
     const build = path.resolve(REFERENCE);
-    const launch = require(path.join(build, 'e2e', 'app.js')).launchDexerion;
+    // One Playwright instance controls both apps. Only the executable and
+    // runtime modules come from the reference's own lockfile and checkout.
+    const executablePath = require(path.join(build, 'node_modules', 'electron'));
     reference = {
       commit: execFileSync('git', ['-C', build, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       electron: require(path.join(build, 'node_modules', 'electron', 'package.json')).version,
     };
-    openers.reference = (urls) => openDexerion(urls, launch);
+    openers.reference = (urls) => openDexerion(urls, { buildDir: build, executablePath });
   }
   const orders = reference ? [
     ['chrome', 'dexerion', 'reference'], ['dexerion', 'reference', 'chrome'],
