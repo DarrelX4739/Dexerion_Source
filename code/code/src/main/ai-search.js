@@ -48,7 +48,7 @@ function clampAdaptations(value) {
 
 function createAiSearchRunner(deps) {
   const runs = new Map();
-  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body, ddgRows? }
+  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body, providerRows? }
 
   function emit(run, event) {
     try { deps.emit(run.winId, Object.assign({ reqId: run.reqId }, event)); } catch {}
@@ -111,19 +111,23 @@ function createAiSearchRunner(deps) {
     return entry;
   }
 
-  // DuckDuckGo serves a full HTML page for at most ten extracted rows.
-  // Retain only these rows for larger responses. A serialized snapshot
-  // releases substring references to the HTML and gives every hit fresh
-  // data; the usual normalization (including local dates) runs every time.
-  function duckDuckGoRows(provider, entry) {
-    if (entry.ddgRows) return providers.normalizeProviderRows(provider, deserialize(entry.ddgRows));
+  // Provider responses can be much larger than the handful of extracted
+  // rows, including XML markup and unconsumed JSON metadata. A serialized
+  // snapshot also releases substrings that would retain the response.
+  // Normalize fresh rows on every hit, including dates relative to local time.
+  // PubMed's e-search response is not a row cache; only its summary is.
+  function cachedProviderRows(provider, entry) {
+    if (entry.providerRows) return providers.normalizeProviderRows(provider, deserialize(entry.providerRows));
     const rawRows = providers.parseProviderRows(provider, entry.body);
     const rows = providers.normalizeProviderRows(provider, rawRows);
     if (entry.body.length < MIN_BODY_FOR_ROW_CACHE) return rows;
     try {
-      const packed = serialize(rawRows);
+      // normalizeProviderRows never sees rows beyond max+2; a large or
+      // nonconforming response must not grow the snapshot with unused rows.
+      const limit = provider.max + 2;
+      const packed = serialize(rawRows.length > limit ? rawRows.slice(0, limit) : rawRows);
       if (packed.length < entry.body.length / 2) {
-        entry.ddgRows = packed;
+        entry.providerRows = packed;
         entry.body = '';
       }
     } catch {}
@@ -178,18 +182,16 @@ function createAiSearchRunner(deps) {
           const pre = readModule.checkFetchUrl(req.url);
           if (!pre.ok) continue;
           const first = await fetchCached(req.url, run.controller.signal);
-          if (!first.ok || (!first.body && !first.ddgRows)) continue;
+          if (!first.ok || (!first.body && !first.providerRows)) continue;
           let rows = [];
           if (req.provider === 'pubmed') {
             const ids = providers.PROVIDERS.pubmed.parseIds(first.body);
             if (!ids.length) continue;
             const second = await fetchCached(providers.PROVIDERS.pubmed.secondUrl(ids.slice(0, MAX_RESULT_LINKS)), run.controller.signal);
-            if (!second.ok || !second.body) continue;
-            rows = providers.parseProvider('pubmed', second.body);
-          } else if (req.provider === 'duckduckgo') {
-            rows = duckDuckGoRows(provider, first);
+            if (!second.ok || (!second.body && !second.providerRows)) continue;
+            rows = cachedProviderRows(provider, second);
           } else {
-            rows = providers.parseProvider(req.provider, first.body);
+            rows = cachedProviderRows(provider, first);
           }
           for (const row of rows.slice(0, MAX_RESULT_LINKS)) results.push(row);
         } catch {

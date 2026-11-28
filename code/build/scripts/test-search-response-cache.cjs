@@ -31,12 +31,15 @@ function webResponse(url, setting) {
       + '<li><a class="result__a" href="https://www.google.com/search?q=test">Must not be opened</a></li></ul>';
     return '<html><body>' + markup + '<!-- unrelated response bytes -->'.repeat(setting.large ? 3_000 : 0) + '</body></html>';
   }
-  if (url.hostname.includes('bing')) return '<rss><channel><item><title>Duplicate copy</title>'
+  const unused = setting.largeOther ? 'Fixture metadata '.repeat(1800) : '';
+  if (url.hostname.includes('bing')) return '<rss><channel><!--' + unused + '--><item><title>Duplicate copy</title>'
     + '<link>' + endpoint + '</link><description>Richer comparison text repeated in this source.</description></item></channel></rss>';
-  if (url.hostname.endsWith('wikipedia.org')) return '{"pages":[{"title":"History","key":"History_fixture","excerpt":"Notes"}]}';
-  if (url.pathname.endsWith('esearch.fcgi')) return '{"esearchresult":{"idlist":[47,15]}}';
+  if (url.hostname.endsWith('wikipedia.org'))
+    return JSON.stringify({ pages:[{ title:'History',key:'History_fixture',excerpt:'Notes',description:unused }] });
+  if (url.pathname.endsWith('esearch.fcgi'))
+    return JSON.stringify({ esearchresult: { idlist:[47,15], querytranslation:unused } });
   if (url.pathname.endsWith('esummary.fcgi')) {
-    return '{"result":{"uids":[47,15],"47":{"title":"Study fixture","pubdate":"2024 Jan 2"},"15":{"title":"Other study"}}}';
+    return JSON.stringify({ result: { uids:[47,15], 47:{title:'Study fixture',pubdate:'2024 Jan 2',affiliations:[unused]}, 15:{title:'Other study'} } });
   }
   if (url.hostname.includes('arxiv.org')) return '<feed><entry><title>Review</title><id>https://arxiv.org/abs/2345</id><summary>Review text</summary></entry></feed>';
   return '{"message":{"items":[]}}';
@@ -99,7 +102,7 @@ test('warm search reads and ranks the same pages and reruns local date normaliza
   assert.deepEqual(f.trace.opened, f.trace.closed);
 });
 
-test('large provider HTML is released; small HTML and the other providers are not rewritten', async () => {
+test('large provider HTML is released; small HTML/XML/JSON stay in the raw cache', async () => {
   const f = makeFixture();
   await f.search('large');
   f.options.large = false;
@@ -110,14 +113,35 @@ test('large provider HTML is released; small HTML and the other providers are no
   for (const [url, entry] of entries) {
     if (url.includes('duckduckgo.com') && url.includes('large')) {
       assert.equal(entry.body, '', 'cache retained the full DuckDuckGo response');
-      assert.ok(Buffer.isBuffer(entry.ddgRows) && entry.ddgRows.byteLength < 2_048);
+      assert.ok(Buffer.isBuffer(entry.providerRows) && entry.providerRows.byteLength < 2_048);
       compactCount++;
     } else {
       assert.ok(entry.body);
-      assert.equal(entry.ddgRows, undefined);
+      assert.equal(entry.providerRows, undefined);
     }
   }
   assert.equal(compactCount, 2);
+});
+
+test('large XML/JSON result payloads compact but PubMed e-search IDs keep their raw body', async () => {
+  const f = makeFixture({ largeOther:true });
+  await f.search('archive', false, 'Find the scientific studies');
+  const stored = f.runner.entries();
+  for (const part of ['bing.com','wikipedia.org','esummary.fcgi']) {
+    const candidates = stored.filter(([url]) => url.includes(part));
+    assert.ok(candidates.length, 'missing ' + part);
+    for (const [,entry] of candidates) {
+      assert.equal(entry.body, '');
+      assert.ok(Buffer.isBuffer(entry.providerRows) && entry.providerRows.byteLength < 2048);
+    }
+  }
+  for (const [,entry] of stored.filter(([url]) => url.includes('esearch.fcgi'))) {
+    assert.ok(entry.body.length >= 16384);
+    assert.equal(entry.providerRows, undefined);
+  }
+  const requests = f.trace.request.slice();
+  await f.search('archive', false, 'Find the scientific studies');
+  assert.deepEqual(f.trace.request, requests);
 });
 
 test('expiry, size resets, failed and malformed responses, and PubMed two-step remain unchanged', async () => {
