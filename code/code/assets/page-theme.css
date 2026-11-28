@@ -670,6 +670,35 @@ html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd
   html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd .lead { left: 11px; }
 }
 
+/* Use a wider reading surface when both utility columns have room. The
+   launch controls and quote stay above them in their original DOM order. */
+@media (min-width: 940px) {
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) {
+    --dx-launch-width: 64rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-rows: repeat(4, max-content) 26px auto;
+    gap: 0 clamp(24px, 3vw, 40px);
+    align-items: start;
+    align-content: start;
+    width: min(100%, calc(var(--dx-launch-width) + 72px));
+    margin-inline: auto;
+  }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > :is(.daylight, .mark, .cmd, .acts) {
+    grid-column: 1 / -1;
+  }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .acts { margin-block-end: 26px; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #starred-title {
+    grid-area: 5 / 1;
+    margin: 0;
+  }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #starred { grid-area: 6 / 1; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #tasks-panel {
+    grid-area: 5 / 2 / span 2;
+    margin: 0;
+  }
+}
+
 /* Appearance only: preset chips are a family; the native custom control is
    visibly a different action. Do not change/persist the selected colour. */
 .dx-card:has(#swatches) .themeopt:hover { transform: none; }
