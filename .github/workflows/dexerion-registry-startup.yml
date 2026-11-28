@@ -23,7 +23,9 @@ jobs:
         shell: bash
         run: |
           test "$(git rev-parse HEAD:code)" = '9180619b50ea9f3da77c00f38648293e6a3422e7'
-          node experiments/startup-registry/compare.cjs code/code/src/main/defaultbrowser.js registry-cost.json
+          cmake -S experiments/startup-registry -B "$RUNNER_TEMP/dex-registry-fixture" -A x64
+          cmake --build "$RUNNER_TEMP/dex-registry-fixture" --config Release --parallel 2
+          node experiments/startup-registry/compare.cjs code/code/src/main/defaultbrowser.js registry-cost.json "$RUNNER_TEMP/dex-registry-fixture/Release/dex_registry_fixture.exe"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

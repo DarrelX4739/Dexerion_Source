@@ -70,6 +70,20 @@ async function oneImport(root, plan, dir) {
   fs.writeFileSync(p, importText(root, plan), 'utf16le');
   await exec('reg.exe', ['import', p], options);
 }
+async function nativeHelper(exe, root, plan, mode = 'write') {
+  return exec(exe, [root, mode, ...plan.flatMap(({ subkey, name, data }) => [subkey, name, data])], options);
+}
+async function checkNativeStops(exe, plan) {
+  const root = scratchKey();
+  try {
+    await assert.rejects(nativeHelper(exe, root, plan, 'stop-test'), (error) => error.code === 7);
+    assert.deepEqual(sorted(await readValues(root)), sorted(plan.slice(0, 6)));
+  } finally {
+    await exec('reg.exe', ['delete', root, '/f'], options);
+  }
+  await assert.rejects(exec(exe, ['intentionally-invalid-scratch-root', 'write',
+    ...plan.flatMap(({ subkey, name, data }) => [subkey, name, data])], options), (error) => error.code === 2);
+}
 async function readValues(root) {
   const script = `
   $ErrorActionPreference='Stop'
@@ -95,23 +109,28 @@ function sorted(values) {
   return values.map((x) => [x.subkey, x.name, x.data, x.type || 'String'])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en'));
 }
-async function run(file, out) {
+async function run(file, out, nativeExe) {
   assert.equal(process.platform, 'win32');
   // Refuse to run outside a dedicated hosted GitHub Actions job.
   assert.equal(process.env.GITHUB_ACTIONS, 'true');
   const plan = await productWritePlan(file);
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-registry-fixture-'));
+  const native = path.resolve(nativeExe);
+  assert.ok(fs.statSync(native).isFile());
+  await checkNativeStops(native, plan);
   const rows = [];
+  const arms = ['sequential', 'single', 'native'];
   try {
-    for (let i = 0; i < 7; i++) {
-      const order = i % 2 ? ['single', 'sequential'] : ['sequential', 'single'];
+    for (let i = 0; i < 9; i++) {
+      const order = [...arms.slice(i % arms.length), ...arms.slice(0, i % arms.length)];
       for (const arm of order) {
         const root = scratchKey();
         try {
           const timed = async () => {
             const start = performance.now();
             if (arm === 'sequential') await originalPlan(root, plan);
-            else await oneImport(root, plan, temp);
+            else if (arm === 'single') await oneImport(root, plan, temp);
+            else await nativeHelper(native, root, plan);
             return performance.now() - start;
           };
           const freshMs = await timed();
@@ -125,9 +144,9 @@ async function run(file, out) {
       }
     }
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
-  const summary = Object.fromEntries(['sequential', 'single'].map((arm) => [arm,
+  const summary = Object.fromEntries(arms.map((arm) => [arm,
     Object.fromEntries(['freshMs', 'repeatMs'].map((key) => [key, rows.filter((r) => r.arm === arm)
-      .map((r) => r[key]).sort((a, b) => a - b)[3]]))]));
+      .map((r) => r[key]).sort((a, b) => a - b)[4]]))]));
   const result = { rows, summary, verifiedStringValues: plan.length,
     scope: 'Synthetic registry paths only; excludes Electron launch and does not test genuine registration failures.' };
   console.log('REGISTRY FIXTURE COST: ' + JSON.stringify(summary));
@@ -135,6 +154,6 @@ async function run(file, out) {
 }
 
 if (require.main === module) {
-  run(process.argv[2], process.argv[3]).catch((error) => { console.error(error); process.exitCode = 1; });
+  run(process.argv[2], process.argv[3], process.argv[4]).catch((error) => { console.error(error); process.exitCode = 1; });
 }
 module.exports = { productWritePlan, importText, scratchKey };
