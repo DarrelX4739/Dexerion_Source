@@ -10,6 +10,7 @@
 // on the final URL after redirects, and every citation is a page actually read.
 'use strict';
 
+const { serialize, deserialize } = require('node:v8');
 const planModule = require('./ai-search-plan');
 const providers = require('./ai-search-providers');
 const rankModule = require('./ai-search-rank');
@@ -28,6 +29,7 @@ const FETCH_CONCURRENCY = 4;
 const RETRIEVE_BUDGET_MS = 45000;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 80;
+const MIN_BODY_FOR_ROW_CACHE = 16 * 1024;
 const DIFFICULTIES = ['low', 'medium', 'high', 'max'];
 
 function clampInt(value, lo, hi, fallback) {
@@ -46,7 +48,7 @@ function clampAdaptations(value) {
 
 function createAiSearchRunner(deps) {
   const runs = new Map();
-  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body }
+  const fetchCache = new Map(); // url -> { at, ok, finalUrl, contentType, body, providerRows? }
 
   function emit(run, event) {
     try { deps.emit(run.winId, Object.assign({ reqId: run.reqId }, event)); } catch {}
@@ -109,6 +111,29 @@ function createAiSearchRunner(deps) {
     return entry;
   }
 
+  // Provider responses can be much larger than the handful of extracted
+  // rows, including XML markup and unconsumed JSON metadata. A serialized
+  // snapshot also releases substrings that would retain the response.
+  // Normalize fresh rows on every hit, including dates relative to local time.
+  // PubMed's e-search response is not a row cache; only its summary is.
+  function cachedProviderRows(provider, entry) {
+    if (entry.providerRows) return providers.normalizeProviderRows(provider, deserialize(entry.providerRows));
+    const rawRows = providers.parseProviderRows(provider, entry.body);
+    const rows = providers.normalizeProviderRows(provider, rawRows);
+    if (entry.body.length < MIN_BODY_FOR_ROW_CACHE) return rows;
+    try {
+      // normalizeProviderRows never sees rows beyond max+2; a large or
+      // nonconforming response must not grow the snapshot with unused rows.
+      const limit = provider.max + 2;
+      const packed = serialize(rawRows.length > limit ? rawRows.slice(0, limit) : rawRows);
+      if (packed.length < entry.body.length / 2) {
+        entry.providerRows = packed;
+        entry.body = '';
+      }
+    } catch {}
+    return rows;
+  }
+
   async function planStep(run, query, count, history, streamOpts) {
     emit(run, { phase: 'adapt', label: 'Adapting your question', i: 0, n: 1 });
     run.planReq = run.reqId + ':plan';
@@ -157,16 +182,16 @@ function createAiSearchRunner(deps) {
           const pre = readModule.checkFetchUrl(req.url);
           if (!pre.ok) continue;
           const first = await fetchCached(req.url, run.controller.signal);
-          if (!first.ok || !first.body) continue;
+          if (!first.ok || (!first.body && !first.providerRows)) continue;
           let rows = [];
           if (req.provider === 'pubmed') {
             const ids = providers.PROVIDERS.pubmed.parseIds(first.body);
             if (!ids.length) continue;
             const second = await fetchCached(providers.PROVIDERS.pubmed.secondUrl(ids.slice(0, MAX_RESULT_LINKS)), run.controller.signal);
-            if (!second.ok || !second.body) continue;
-            rows = providers.parseProvider('pubmed', second.body);
+            if (!second.ok || (!second.body && !second.providerRows)) continue;
+            rows = cachedProviderRows(provider, second);
           } else {
-            rows = providers.parseProvider(req.provider, first.body);
+            rows = cachedProviderRows(provider, first);
           }
           for (const row of rows.slice(0, MAX_RESULT_LINKS)) results.push(row);
         } catch {
