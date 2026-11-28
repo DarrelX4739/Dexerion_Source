@@ -35,6 +35,7 @@
 //   MEASURE_BROWSERS       comma list; default edge,dexerion
 //   MEASURE_DEADLINE_MIN   wall-clock budget in minutes (default 45); trials
 //                          that would start past it are recorded as pending
+//   MEASURE_NATIVE_LAUNCH  1 launches both binaries without automation flags
 //   MEASURE_SKIP_POWER     1 omits RAPL on virtual hosts; never guesses power
 //   DEX_BUILD_DIR          launch Dexerion from another build tree (used to
 //                          measure the pre-build-1 baseline from a git
@@ -46,6 +47,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
+const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
 const { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
@@ -59,6 +61,7 @@ const BG_TABS = 8;
 const DEADLINE_MIN = Number(process.env.MEASURE_DEADLINE_MIN) || 45;
 const CORES = os.cpus().length;
 const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
+const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
 const E = path.join(__dirname, 'measure-env.ps1');
@@ -322,6 +325,53 @@ async function prepareDexerion(base, scenario) {
   } catch (err) { await close(); throw err; }
 }
 
+// A separate mode for hosted comparisons without Playwright's launch
+// switches. Use Playwright only as a local controller over native DevTools.
+async function prepareNative(browser, base, scenario) {
+  const urls = workloadUrls(base, SCENARIOS[scenario]);
+  const dex = browser === 'dexerion';
+  const executable = dex
+    ? require(require.resolve('electron', { paths: [DEX_BUILD_DIR] }))
+    : edgeExecutable();
+  const session = await openNative(browser, {
+    chromium, executable, cwd: dex ? DEX_BUILD_DIR : undefined,
+    env: dex ? { ...process.env, DEX_AI_TEST: '1' } : process.env,
+  });
+  const list = () => pagesIn(session.browser);
+  try {
+    let front;
+    if (dex) {
+      const shell = await waitFor(() => list().find((p) => isShellUrl(p.url())), 'native Dexerion shell');
+      const getState = () => shell.evaluate(() => window.dexerion?.invoke('dex:get-state'));
+      const boot = await waitFor(async () => (await getState())?.active, 'native Dexerion active tab');
+      await shell.evaluate(({ id, url }) => window.dexerion.invoke('dex:navigate', id, url), { id: boot, url: urls[0] });
+      for (const url of urls.slice(1)) {
+        await shell.evaluate((u) => window.dexerion.invoke('dex:new-tab', u, true), url);
+      }
+      await waitFor(async () => {
+        const st = await getState();
+        return st?.active === boot && !st.tabs.some((t) => t.loading) &&
+          matchesInventory(st.tabs.map((t) => t.url), urls);
+      }, 'native Dexerion tab inventory');
+      front = await waitFor(() => list().find((p) => p.url() === urls[0]), 'native Dexerion foreground page');
+    } else {
+      const context = session.browser.contexts()[0];
+      front = context.pages()[0] || await context.newPage();
+      await front.goto(urls[0], { waitUntil: 'domcontentloaded' });
+      for (const url of urls.slice(1)) {
+        const p = await context.newPage();
+        await p.goto(url, { waitUntil: 'domcontentloaded' });
+      }
+      if (!matchesInventory(context.pages().map((p) => p.url()), urls)) {
+        throw new Error('Native Edge tab inventory did not match the workload');
+      }
+      await front.bringToFront();
+    }
+    await waitFor(async () => (await samplePage(front)).visible, 'native foreground visibility');
+    return { profileDir: session.profileDir, pageState: () => samplePage(front), close: session.close };
+  } catch (err) { await session.close(); throw err; }
+}
+
 // ------------------------------------------------------------ statistics
 const quantile = (arr, q) => {
   const s = [...arr].sort((x, y) => x - y);
@@ -353,9 +403,8 @@ async function runTrial(browser, scenario, base, trialIdx) {
     if (!t.env || !t.env.powerPlan || t.env.onAc === 'unknown' || t.env.osBuild === undefined) {
       t.valid = false; t.invalidReason = 'environment-record-missing';
     }
-    session = browser === 'edge'
-      ? await prepareEdge(base, scenario)
-      : await prepareDexerion(base, scenario);
+    session = NATIVE_LAUNCH ? await prepareNative(browser, base, scenario)
+      : browser === 'edge' ? await prepareEdge(base, scenario) : await prepareDexerion(base, scenario);
     await sleep(SETTLE_MS);
 
     const beforeForeground = await session.pageState();
@@ -376,6 +425,9 @@ async function runTrial(browser, scenario, base, trialIdx) {
     t.wallSec = round(wallSec, 1);
     t.foreground = foregroundSample(beforeForeground, afterForeground, wallSec,
       SCENARIOS[scenario].foreground === 'animated');
+    if (NATIVE_LAUNCH) {
+      t.foreground.viewport = { width: beforeForeground.width, height: beforeForeground.height, scale: beforeForeground.scale };
+    }
 
     // CPU + RAM across the whole tree.
     const cd = cpuDelta(treeA, treeB);
@@ -487,8 +539,9 @@ function pctOfEdge(dexS, edgeS) {
       scenarioOrder: SCENARIO_ORDER, browsers: BROWSERS,
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
-      edgeLaunchFlags: ['--no-first-run', '--no-default-browser-check', 'throwaway --user-data-dir (stock Edge otherwise)'],
-      dexerionLaunch: 'e2e harness, throwaway profile, gpu=adaptive (shipped policy), kill switches at shipped defaults',
+      nativeLaunch: NATIVE_LAUNCH,
+      edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
+      dexerionLaunch: NATIVE_LAUNCH ? 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP' : 'Playwright Electron loader, isolated data dir, GPU adaptive',
     },
     env: envRecord(),
     scenarios: {},
@@ -523,6 +576,7 @@ function pctOfEdge(dexS, edgeS) {
           } else {
             console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts, foreground fps ' + (t.foreground.fps === null ? 'n/a' : round(t.foreground.fps, 2)));
           }
+          if (t.foreground?.viewport) console.log('    viewport ' + JSON.stringify(t.foreground.viewport));
           await sleep(2000); // let the browser's processes fully exit
         }
       }

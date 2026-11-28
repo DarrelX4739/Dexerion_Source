@@ -6,6 +6,8 @@ on:
       - '.github/workflows/dexerion-edge-cloud.yml'
       - 'code/build/scripts/measure-protocol.js'
       - 'code/build/scripts/measure-sample-guard.cjs'
+      - 'code/build/scripts/measure-native-browser.cjs'
+      - 'code/build/scripts/test-measure-native-browser.cjs'
 permissions:
   contents: read
 
@@ -36,11 +38,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node -p "require('electron')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs
-      - name: Measure stock Edge and Dexerion on the same virtual Windows host
+          node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs scripts/test-measure-native-browser.cjs
+      - name: Measure Edge and Dexerion on the same virtual Windows host
         env:
+          NATIVE_LAUNCH: ${{ contains(github.event.head_commit.message, '[native-launch]') }}
           FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
         run: |
+          if ($env:NATIVE_LAUNCH -eq 'true') { $env:MEASURE_NATIVE_LAUNCH = '1' }
           if ($env:FOCUS_ONLY -eq 'true') { $env:MEASURE_SCENARIOS = 'active-browsing' }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js
