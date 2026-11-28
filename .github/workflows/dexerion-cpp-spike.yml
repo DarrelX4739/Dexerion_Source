@@ -55,7 +55,7 @@ jobs:
         run: npm run test:e2e -- e2e/boot.spec.js e2e/chat-batch-scroll.spec.js e2e/search.spec.js e2e/downloads-progress.spec.js e2e/cold-accounts.spec.js e2e/newtab-tasks.spec.js
 
   native-cef:
-    if: github.ref == 'refs/heads/cpp-native-spike'
+    if: github.ref == 'refs/heads/cpp-native-spike' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[cef]'))
     strategy:
       fail-fast: false
       matrix:
@@ -106,3 +106,25 @@ jobs:
           app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
           test -n "$app"
           python experiments/cef-shell/smoke.py "$app"
+
+  native-core:
+    if: github.ref == 'refs/heads/cpp-native-spike'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build native algorithms and compare against original JS
+        shell: bash
+        run: |
+          cmake -S experiments/native-core -B "$RUNNER_TEMP/dex-native-core" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/dex-native-core" --config Release --parallel 3
+          ctest --test-dir "$RUNNER_TEMP/dex-native-core" -C Release --output-on-failure
