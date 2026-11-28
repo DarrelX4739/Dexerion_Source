@@ -126,7 +126,7 @@ body > * { position: relative; z-index: 1; }
 
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.005em; margin: 0; }
 p { margin: 0; }
-a { color: var(--accent); }
+a { color: var(--accent-text); }
 
 /* Text selection: the user's accent. Websites get the same 45% mix, injected as
    a user-origin stylesheet from src/main/browser.js, so highlighting reads the
@@ -169,7 +169,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-text);
   margin-bottom: 10px;
 }
 .dx-head h1 { font-size: 27px; letter-spacing: -0.01em; }
@@ -402,7 +402,7 @@ button { font-family: inherit; }
   transition: left var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .dx-sw input:checked + i { background: var(--accent); border-color: transparent; }
-.dx-sw input:checked + i::after { left: 20px; background: #fff; }
+.dx-sw input:checked + i::after { left: 20px; background: var(--dx-on-accent); }
 .dx-sw input:focus-visible + i { box-shadow: 0 0 0 3px var(--dx-focus-ring); }
 
 /* ---------- badges + chips ---------- */
@@ -412,7 +412,7 @@ button { font-family: inherit; }
   font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 3px 8px;
   border-radius: var(--r-xs);
-  color: var(--accent);
+  color: var(--accent-text);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
 }
@@ -554,3 +554,26 @@ body:not(.ai):has(> .cmd > #q) #starred .tile {min-width:0;border-radius:9px}
 .dx-card, .dx-list {border-radius:12px}
 .dx-search input {border-radius:9px}
 .dx-item {padding-inline:clamp(12px, 3vw, 18px);gap:clamp(8px, 2vw, 14px)}
+
+/* Welcome and New Tab use the existing paired dark/light marks. Resize only
+   the hero logos; the report, assistant avatar, and original images stay put. */
+body > .wrap:has(> button#enter) > .mark {
+  width: clamp(64px, 19vh, 88px);
+  height: auto;
+  aspect-ratio: 1;
+}
+body > .wrap:has(> button#enter) > .mark > img { border-radius: 22%; }
+body > .wrap > #enter:focus-visible { outline-color: var(--dx-focus-ring); }
+
+body:has(> .cmd > #q) > .mark > .crest {
+  width: clamp(74px, 14vh, 94px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 22%;
+}
+body > .cmd > #q:focus,
+body #ai-form #ai-box:focus { border-color: var(--dx-focus-ring); }
+body > .cmd > #q:focus ~ .lead,
+body > .acts > #ai-btn:is(:hover, :focus-visible),
+body > .acts > #ai-btn svg,
+body #ai-log a.md-a { color: var(--accent-text); }

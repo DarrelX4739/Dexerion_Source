@@ -3,6 +3,7 @@
 (() => {
   'use strict';
   const palettes = new WeakMap();
+  const SC_TEAL = "#1f6f6b";
 
   function bind(root) {
     if (!root) return null;
@@ -11,6 +12,7 @@
     const panel = root.querySelector('.dx-palette-panel');
     const value = trigger.querySelector('.dx-palette-value');
     const clearance = root.closest('[data-palette-clearance]');
+    const settingsAccent = root.id === 'settings-accent-palette';
     let mode = '';
     let leaveTimer = 0;
     let frame = 0;
@@ -169,7 +171,7 @@
     const instance = {
       close,
       select(label, colour) {
-        value.textContent = label;
+        value.textContent = settingsAccent && typeof colour === 'string' && colour.toLowerCase() === SC_TEAL ? 'SC Teal' : label;
         trigger.style.setProperty('--dx-palette-swatch', colour || 'transparent');
         reflow();
       },
@@ -215,6 +217,42 @@
     syncSelection();
   }
 
+  // Dia's curated choices informed the tiled Appearance palette. Keep the
+  // native custom control and existing Settings save path unchanged.
+  // https://www.diabrowser.com/release-notes/1-56-make-yourself-at-home
+  function addSettingsTeal() {
+    const root = document.getElementById('settings-accent-palette');
+    if (!root) return;
+    const swatches = root.querySelector('#swatches');
+    const observer = new MutationObserver(add);
+    function add() {
+      const native = root.querySelector('#customAccent');
+      if (!native) return;
+      observer.disconnect();
+      const teal = document.createElement('button');
+      teal.type = 'button';
+      teal.className = 'dx-swatch';
+      teal.dataset.c = SC_TEAL;
+      teal.style.background = teal.dataset.c;
+      teal.title = 'SC Teal (#1F6F6B)';
+      teal.setAttribute('aria-label', 'SC Teal accent');
+      const selected = native.value.toLowerCase() === teal.dataset.c;
+      teal.classList.toggle('sel', selected);
+      teal.setAttribute('aria-pressed', String(selected));
+      teal.addEventListener('click', () => {
+        bind(root).close(true);
+        if (native.value.toLowerCase() === teal.dataset.c) return;
+        native.value = teal.dataset.c;
+        native.dispatchEvent(new Event('input', { bubbles:true }));
+        native.dispatchEvent(new Event('change', { bubbles:true }));
+      });
+      swatches.prepend(teal);
+    }
+    observer.observe(root, { childList:true, subtree:true });
+    add();
+  }
+
   window.DexPalette = { bind };
   bindReportSheet();
+  addSettingsTeal();
 })();

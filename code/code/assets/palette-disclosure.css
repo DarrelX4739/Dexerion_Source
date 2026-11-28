@@ -39,7 +39,7 @@
 }
 .dx-palette .dx-palette-trigger:focus-visible,
 .dx-palette-panel .dx-palette-swatches > button:focus-visible,
-.dx-palette-panel input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.dx-palette-panel input:focus-visible { outline:2px solid var(--dx-focus-ring); outline-offset:2px; }
 .dx-palette-panel .dx-palette-custom {
   display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; padding-top:8px;
   border-top:1px solid var(--pborder); font:600 12px/1.2 var(--font-ui,system-ui);
@@ -61,3 +61,19 @@
 #ai-sidebar #ai-report-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #ai-sidebar .ai-report-panel .ai-panel-head { gap:5px; }
 #ai-sidebar .ai-report-panel .ai-icon-btn { flex:none; }
+
+/* Appearance: curated colour tiles, with the original native picker below. */
+#settings-accent-palette .dx-palette-value { color:var(--pfg-2); }
+#settings-accent-palette-panel { width:min(242px,calc(100vw - 16px)); padding:11px; }
+#settings-accent-palette-panel .dx-palette-swatches {
+  grid-template-columns:repeat(auto-fit,minmax(25px,1fr)); gap:7px; padding:3px;
+}
+#settings-accent-palette-panel .dx-palette-swatches > button {
+  inline-size:25px; block-size:25px; border-radius:6px; border:1px solid var(--pborder-2);
+}
+#settings-accent-palette-panel input[type="color"] {
+  inline-size:32px; block-size:28px; padding:3px;
+  border:1px solid var(--pborder-2); border-radius:6px; background:var(--pfield); cursor:pointer;
+}
+#settings-accent-palette-panel input[type="color"]::-webkit-color-swatch-wrapper { padding:0; }
+#settings-accent-palette-panel input[type="color"]::-webkit-color-swatch { border:0; border-radius:3px; }
