@@ -1,0 +1,3 @@
+[mcp_servers.dexerion_ui_browser]
+command = "npx"
+args = ["--yes", "@playwright/mcp@0.0.86", "--headless", "--isolated", "--sandbox"]

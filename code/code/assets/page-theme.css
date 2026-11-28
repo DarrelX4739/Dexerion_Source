@@ -255,6 +255,58 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .dx-item:hover .actions, .dx-item:focus-within .actions { opacity: 1; }
 @media (hover: none) { .dx-item .actions { opacity: 1; } }
 
+/* Only the three Library pages. Keep the lists and their original actions;
+   a simple rule separates rows, and narrow rows give the title its own line. */
+html[data-theme="dark"] :is(
+  .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+  .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+  .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+) {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+html[data-theme="dark"] :is(
+  .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+  .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+  .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+) > .dx-list {
+  background: transparent;
+  border-inline: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+@media (max-width: 540px) {
+  html[data-theme="dark"] :is(
+    .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+    .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+    .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+  ) > .dx-list > .dx-item {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 4px 10px;
+    align-items: start;
+    padding-inline: 8px;
+  }
+  html[data-theme="dark"] :is(
+    .dx-page:has(> #bar.dx-list):has(> #other.dx-list),
+    .dx-page:has(> .dx-search > #q[aria-label="Search history"]),
+    .dx-page:has(.dx-head #folder):has(> #list.dx-list)
+  ) > .dx-list > .dx-item > :is(.actions, .dl-actions) {
+    grid-column: 2;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin-inline-start: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    opacity: 1;
+  }
+  html[data-theme="dark"] .dx-page:has(.dx-head #folder):has(> #list.dx-list) > .dx-list > .dl-row > .st {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 /* ---------- empty state ---------- */
 .dx-empty {
   text-align: center;
@@ -374,6 +426,13 @@ button { font-family: inherit; }
 }
 .btn.primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px -8px var(--accent); }
 
+/* The saved accent can be darker or lighter than the theme's fallback.
+   Match the ink to the actual fill, including on hover. */
+@supports (color: contrast-color(#1f6f6b)) {
+  :root:not([data-skin]) { --accent-ink: contrast-color(var(--accent)); }
+  :root:not([data-skin]) .btn.primary:hover { filter: none; }
+}
+
 .btn.ghost { background: transparent; }
 .btn.ghost:hover { background: var(--phover); }
 
@@ -440,14 +499,14 @@ button { font-family: inherit; }
 .dx-swatches { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .dx-swatch {
   width: 26px; height: 26px;
-  border-radius: 50%;
+  border-radius: 4px;
   border: 2px solid transparent;
   padding: 0;
   cursor: pointer;
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition: box-shadow var(--dur) var(--ease);
 }
-.dx-swatch:hover { transform: scale(1.12); }
-.dx-swatch.sel { box-shadow: 0 0 0 2px var(--pbg), 0 0 0 4px var(--pfg-2); }
+.dx-swatch:hover { outline: 1px solid var(--pfg-2); }
+.dx-swatch.sel { box-shadow: 0 0 0 2px var(--pbg), 0 0 0 4px var(--pfg); }
 
 /* ---------- toast ---------- */
 .dx-toast {
@@ -510,4 +569,209 @@ button { font-family: inherit; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Original dark New Tab geometry. These are paint and narrow-screen
+   corrections only; the centered launch column and task placement live in
+   New Tab's own stylesheet. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .crest {
+  box-shadow: none;
+  border-color: var(--pborder);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q {
+  background: var(--phover);
+  border-color: var(--pborder-2);
+  box-shadow: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q:focus,
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q:focus-visible {
+  outline: 2px solid var(--pfg-2);
+  outline-offset: -2px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #q::placeholder {
+  color: var(--pfg-2);
+  opacity: 1;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .acts #ai-btn {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--pfg-2);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .acts #ai-btn:hover {
+  transform: none;
+  color: var(--pfg);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) :is(#starred .tile, #tasks-nt .tk-todo) { box-shadow: none; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile { padding-inline-end: 32px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile .x { width: 24px; height: 24px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile:hover {
+  transform: none;
+  background: var(--phover);
+  box-shadow: none;
+}
+
+/* Preserve the daily quote on narrow windows where the old layout hid it. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight :is(.quote, .author):not(:empty) {
+  display: block;
+  overflow-wrap: break-word;
+}
+@media (max-width: 600px) {
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .quote {
+    margin-block-start: 7px;
+    padding-block-start: 7px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .crest { width: 58px; height: 58px; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark h1 { margin-block-start: 12px; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd { margin-block-start: 20px; }
+}
+@media (max-width: 380px) {
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) { padding-block-start: 16px; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .crest { width: 52px; height: 52px; }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd { margin-block-start: 16px; }
+}
+@media (min-width: 1101px) and (max-height: 540px) {
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #tasks-panel {
+    position: static;
+    width: min(620px, 92vw);
+    margin: 34px auto 0;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* Keep the three-row resting task viewport and the existing expanded
+   disclosure, while preserving full titles and visible keyboard focus. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded b {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded :is(.tk-box, .tk-exp, .tk-dot) {
+  align-self: flex-start;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt .tk-todo.expanded .tk-dot {
+  margin-block-start: 7px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #tasks-nt :is(.tk-box, .tk-exp):focus-visible {
+  color: var(--pfg);
+  outline: 2px solid var(--pfg-2);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Appearance only: preset chips are a family; the native custom control is
+   visibly a different action. Do not change/persist the selected colour. */
+.dx-card:has(#swatches) .themeopt:hover { transform: none; }
+.dx-card:has(#swatches) .themeopt.sel {
+  border-color: var(--pfg-2);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.dx-card:has(#swatches) #swatches { gap: 8px; }
+.dx-card:has(#swatches) #swatches #customAccent {
+  width: 29px;
+  height: 26px;
+  padding: 2px;
+  margin-inline-start: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dx-card:has(#swatches) #customAccent::-webkit-color-swatch-wrapper { padding: 0; }
+.dx-card:has(#swatches) #customAccent::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.dx-card:has(#swatches) #customAccent.preset-active { border: 1px dashed var(--pfg-2); }
+.dx-card:has(#swatches) #customAccent.preset-active::-webkit-color-swatch {
+  background:
+    linear-gradient(var(--pfg-2), var(--pfg-2)) center / 9px 1px no-repeat,
+    linear-gradient(var(--pfg-2), var(--pfg-2)) center / 1px 9px no-repeat,
+    var(--pfield) !important;
+}
+.dx-card:has(#swatches) #customAccent:focus-visible {
+  outline: 2px solid var(--pfg);
+  outline-offset: 2px;
+}
+
+/* Settings only: a quiet list of sections. Keep every existing label,
+   control and section in place; allow dense control groups to wrap. */
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-head {
+  padding-block-end: 18px;
+  margin-block-end: 22px;
+  border-block-end: 1px solid var(--pborder);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  margin-block-end: 24px;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) > .dx-card + .dx-card {
+  border-block-start: 1px solid var(--pborder);
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-head {
+  padding: 18px 0 0;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-head h3 {
+  color: var(--pfg);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-card-body {
+  padding: 6px 0 0;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  max-inline-size: 62%;
+  justify-content: flex-end;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl > :is(input, select) {
+  min-inline-size: 0 !important;
+  max-inline-size: 100%;
+}
+html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) #aimodel-custom {
+  margin-inline-start: 0 !important;
+}
+@media (max-width: 560px) {
+  html[data-theme="dark"] .dx-page:has(> #about):has(#swatches) .dx-row .ctl {
+    max-inline-size: 100%;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 560px) {
+  .dx-card:has(#swatches) .dx-row:has(#swatches) { flex-wrap: wrap; gap: 10px; }
+  .dx-card:has(#swatches) .dx-row:has(#swatches) > .tx { flex: 1 0 100%; }
+  .dx-card:has(#swatches) .dx-row:has(#swatches) > .ctl { max-width: 100%; }
+}
+
+@media (forced-colors: active) {
+  /* Keep only actual colour samples exempt from the system palette. */
+  #swatches .dx-swatch {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+  #swatches .dx-swatch.sel {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+  #swatches .dx-swatch:focus-visible {
+    outline: 2px dashed CanvasText;
+    outline-offset: 2px;
+  }
+  #swatches .dx-swatch.sel:focus-visible { border-color: Highlight; }
+}
+
+/* Keep the launch controls readable immediately. Preserve the established
+   sky/phase treatment and the assistant page's motion, without staggering
+   the primary wordmark, clock and search controls on every dark New Tab. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > :is(.daylight, .mark, .cmd, .acts),
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .sub {
+  animation: none;
 }

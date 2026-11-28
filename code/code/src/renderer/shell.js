@@ -165,7 +165,7 @@ function buildTabs(s) {
   const plus = $('#newtab-btn');
   tabsEl.innerHTML = '';
   // Keep the rename/color editor open across re-renders unless its group died.
-  if (geditFor && !(s.groups || []).some(g => g.id === geditFor)) closeGroupEditor();
+  if (groupEditor && !(s.groups || []).some(g => g.id === groupEditor.id)) closeGroupEditor();
   const groups = new Map((s.groups || []).map(g => [g.id, g]));
   for (const id of collapsedGroups) if (!groups.has(id)) collapsedGroups.delete(id);
   let lastG = null;
@@ -177,12 +177,14 @@ function buildTabs(s) {
     tabsEl.appendChild(tabEl(t, i, s, g));
   });
   if (plus) tabsEl.appendChild(plus);
+  if (groupEditor) positionGroupEditor();
 }
 
 function groupChip(g, s) {
   const count = s.tabs.filter(t => t.groupId === g.id).length;
   const collapsed = collapsedGroups.has(g.id);
   const d = document.createElement('div');
+  d.dataset.groupId = g.id;
   d.className = 'gchip' + (collapsed ? ' collapsed' : '');
   d.style.setProperty('--gc', G_COLORS[g.color] || G_COLORS.grey);
   d.title = (g.name || 'Tab group') + ` (${count} tab${count === 1 ? '' : 's'}) — click to ${collapsed ? 'expand' : 'collapse'}, right-click for group options`;
@@ -195,14 +197,14 @@ function groupChip(g, s) {
   const n = document.createElement('span'); n.className = 'gct'; n.textContent = count;
   d.append(state, dot, nm, n);
   const toggle = (e) => {
-    e.preventDefault(); e.stopPropagation(); closeGroupEditor();
+    e.preventDefault(); e.stopPropagation(); closeGroupEditor(true);
     if (collapsedGroups.has(g.id)) collapsedGroups.delete(g.id); else collapsedGroups.add(g.id);
     lastTabKey = '';
     if (S) render(S);
   };
   d.onclick = toggle;
   d.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') toggle(e); };
-  d.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openGroupEditor(g, d); };
+  d.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openGroupEditor(g); };
   d.ondragover = (e) => {
     if (!e.dataTransfer.types.includes('text/tab')) return;
     e.preventDefault(); d.classList.add('drop');
@@ -294,10 +296,30 @@ function clearDropMarks() {
 }
 
 // Group rename / recolor editor (floating panel anchored to the chip).
-let geditFor = null;
-function openGroupEditor(g, anchor) {
-  closeGroupEditor();
-  geditFor = g.id;
+let groupEditor = null;
+function positionGroupEditor() {
+  const rail = railEl();
+  const panel = document.getElementById('gedit');
+  if (!panel || !rail.classList.contains('rail-open')) return;
+  const chip = $('#tabs').querySelector(`.gchip[data-group-id="${CSS.escape(groupEditor.id)}"]`);
+  if (!chip) return closeGroupEditor();
+  const row = chip.getBoundingClientRect();
+  const list = $('#tabs').getBoundingClientRect();
+  if (row.bottom <= list.top || row.top >= list.bottom) return closeGroupEditor(true);
+  const below = row.bottom - rail.getBoundingClientRect().top + 8;
+  const above = below - row.height - panel.offsetHeight - 16;
+  const bottomLimit = rail.clientHeight - panel.offsetHeight - 8;
+  panel.style.top = Math.max(8, below <= bottomLimit ? below : Math.min(above, bottomLimit)) + 'px';
+}
+function focusGroupEditor() {
+  positionGroupEditor();
+  const name = document.querySelector('#gedit input');
+  if (name) { name.focus({ preventScroll: true }); name.select(); }
+}
+function openGroupEditor(g) {
+  closeGroupEditor(true);
+  clearTimeout(railStowT);
+  expandRail();
   const p = document.createElement('div');
   p.id = 'gedit';
   p.style.setProperty('--gc', G_COLORS[g.color] || G_COLORS.grey);
@@ -312,13 +334,17 @@ function openGroupEditor(g, anchor) {
     const patch = namePatch();
     return Object.keys(patch).length ? window.dexerion.invoke('dex:group-set', g.id, patch) : Promise.resolve(true);
   };
-  const commit = () => { saveName(); closeGroupEditor(); };
-  nm.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') commit();
-    else if (e.key === 'Escape') closeGroupEditor();
+  groupEditor = { id: g.id, saveName };
+  p.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeGroupEditor(); }
+    else if (e.target === nm) {
+      e.stopPropagation();
+      if (e.key === 'Enter') closeGroupEditor(true);
+    }
   });
-  nm.addEventListener('blur', (e) => { if (!p.contains(e.relatedTarget)) commit(); });
+  p.addEventListener('focusout', (e) => {
+    if (groupEditor && !p.contains(e.relatedTarget)) closeGroupEditor(true);
+  });
   const sw = document.createElement('div'); sw.className = 'gsw';
   for (const name of Object.keys(G_COLORS)) {
     const b = document.createElement('button');
@@ -347,24 +373,28 @@ function openGroupEditor(g, anchor) {
   };
   row.append(un, cl);
   p.append(nm, sw, row);
-  document.body.appendChild(p);
-  const r = anchor.getBoundingClientRect();
-  const pw = 248, ph = p.offsetHeight || 180;
-  p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8)) + 'px';
-  p.style.top = ((r.bottom + 8 + ph < window.innerHeight) ? r.bottom + 8 : Math.max(8, r.top - ph - 8)) + 'px';
-  setTimeout(() => { nm.focus(); nm.select(); }, 0);
-  setTimeout(() => document.addEventListener('pointerdown', geditOutside, true), 0);
+  railEl().appendChild(p);
+  if (railEl().classList.contains('rail-open')) focusGroupEditor();
+  document.addEventListener('pointerdown', geditOutside, true);
+  window.addEventListener('resize', positionGroupEditor);
+  $('#tabs').addEventListener('scroll', positionGroupEditor);
 }
 function geditOutside(e) {
   if (!document.getElementById('gedit')) return;
   if (e.target.closest && (e.target.closest('#gedit') || e.target.closest('.gchip'))) return;
-  closeGroupEditor();
+  closeGroupEditor(true);
 }
-function closeGroupEditor() {
-  geditFor = null;
+function closeGroupEditor(save = false) {
+  const editor = groupEditor;
+  groupEditor = null;
+  if (editor && save) editor.saveName();
   document.removeEventListener('pointerdown', geditOutside, true);
   const p = document.getElementById('gedit');
-  if (p) p.remove();
+  if (p) {
+    window.removeEventListener('resize', positionGroupEditor);
+    $('#tabs').removeEventListener('scroll', positionGroupEditor);
+    p.remove();
+  }
 }
 
 function updateChromeRest(s) {
@@ -979,7 +1009,11 @@ function expandRail() {
   clearTimeout(railOpenT);
   railTrackWidth();
   // Full timer UI + tab text only join once the width has landed.
-  railOpenT = setTimeout(() => { el.classList.add('rail-open'); reportChrome(); }, RAIL_ANIM_MS);
+  railOpenT = setTimeout(() => {
+    el.classList.add('rail-open');
+    reportChrome();
+    if (groupEditor) focusGroupEditor();
+  }, RAIL_ANIM_MS);
 }
 function scheduleRailStow() {
   clearTimeout(railStowT);
@@ -987,8 +1021,10 @@ function scheduleRailStow() {
     if (draggingTab) { scheduleRailStow(); return; }
     const ae = document.activeElement;
     const el = railEl();
-    if (el && ae && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) { scheduleRailStow(); return; }
+    if (groupEditor && el && el.matches(':hover')) return;
+    if (el && ae && !ae.closest('#gedit') && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) { scheduleRailStow(); return; }
     if (el) {
+      if (groupEditor) closeGroupEditor(true);
       clearTimeout(railOpenT);
       el.classList.remove('rail-open');
       el.classList.add('rail-collapsed');

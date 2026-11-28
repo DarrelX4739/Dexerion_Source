@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round">
+  <defs>
+    <path id="person" d="M15.3 8.8a3.3 3.3 0 1 1-6.6 0 3.3 3.3 0 0 1 6.6 0ZM6.4 17.7c.6-2.3 2.2-3.4 4.1-3.4h3c1.9 0 3.5 1.1 4.1 3.4"/>
+  </defs>
+  <use href="#person" stroke="#323232" stroke-width="2.3"/>
+  <use href="#person" stroke="white" stroke-width="1.6"/>
+</svg>
