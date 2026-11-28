@@ -35,6 +35,7 @@
 //   MEASURE_BROWSERS       comma list; default edge,dexerion
 //   MEASURE_DEADLINE_MIN   wall-clock budget in minutes (default 45); trials
 //                          that would start past it are recorded as pending
+//   MEASURE_SKIP_POWER     1 omits RAPL on virtual hosts; never guesses power
 //   DEX_BUILD_DIR          launch Dexerion from another build tree (used to
 //                          measure the pre-build-1 baseline from a git
 //                          worktree with a node_modules junction)
@@ -45,6 +46,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
+const { optionalSample, requireTree, hasGpuSample } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -56,6 +58,7 @@ const GPU_INTERVAL_SEC = 2;
 const BG_TABS = 8;
 const DEADLINE_MIN = Number(process.env.MEASURE_DEADLINE_MIN) || 45;
 const CORES = os.cpus().length;
+const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
 const E = path.join(__dirname, 'measure-env.ps1');
@@ -328,10 +331,13 @@ async function runTrial(browser, scenario, base, trialIdx) {
   try {
     // Paired floor: sampled immediately before the workload with NO browser
     // running, so package-power attribution is local in time (drift-immune).
-    t.floor = samplePower('floor', FLOOR_SEC);
-    t.floorMedianMW = t.floor.medianMW;
-    t.floorSpreadPct = t.floor.medianMW > 0
-      ? round((t.floor.p90MW - t.floor.p10MW) / t.floor.medianMW * 100, 1) : null;
+    const floor = await optionalSample(() => samplePower('floor', FLOOR_SEC), FLOOR_SEC * 1000,
+      { skip: SKIP_POWER, wait: sleep });
+    t.floor = floor.sample;
+    t.floorError = floor.error;
+    t.floorMedianMW = t.floor?.medianMW ?? null;
+    t.floorSpreadPct = t.floorMedianMW > 0
+      ? round((t.floor.p90MW - t.floor.p10MW) / t.floorMedianMW * 100, 1) : null;
     // Per-trial environment (brief req 6): a trial missing this is invalid.
     t.env = envRecord();
     if (!t.env || !t.env.powerPlan || t.env.onAc === 'unknown' || t.env.osBuild === undefined) {
@@ -343,13 +349,16 @@ async function runTrial(browser, scenario, base, trialIdx) {
     await sleep(SETTLE_MS);
 
     const snapA = treeSnapshot();
-    const treeA = extractTree(snapA, session.profileDir);
+    const treeA = requireTree(extractTree(snapA, session.profileDir), 'A');
     gpu = spawnGpu(treeA.map((p) => p.pid).join(','));
-    t.power = samplePower('workload', SAMPLE_SEC);
+    const workloadPower = await optionalSample(() => samplePower('workload', SAMPLE_SEC), SAMPLE_SEC * 1000,
+      { skip: !t.floor, wait: sleep });
+    t.power = workloadPower.sample;
+    t.powerError = workloadPower.error;
     const snapB = treeSnapshot();
     gpuFinished = await gpu.finish();
 
-    const treeB = extractTree(snapB, session.profileDir);
+    const treeB = requireTree(extractTree(snapB, session.profileDir), 'B');
     const wallMs = Date.parse(snapB.capturedAt) - Date.parse(snapA.capturedAt);
     const wallSec = Math.max(1, wallMs / 1000);
     t.wallSec = round(wallSec, 1);
@@ -373,7 +382,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
     t.ram = { wsMBA: round(wsA, 1), wsMBB: round(wsB, 1) };
 
     // GPU axis, grouped by pid and filtered to the tree.
-    if (gpuFinished && !gpuFinished.error) {
+    if (hasGpuSample(gpuFinished)) {
       const treePidSet = new Set([...treeA, ...treeB].map((p) => p.pid));
       const rows = gpuFinished.perPid.filter((r) => treePidSet.has(r.pid));
       t.gpu = {
@@ -386,7 +395,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
         perPid: rows.map((r) => ({ pid: r.pid, role: (treeB.find((p) => p.pid === r.pid) ? roleOf(treeB.find((p) => p.pid === r.pid)) : 'exited'), utilPointsMean: r.utilPointsMean, utilPointsPeak: r.utilPointsPeak, memMBPeak: round(r.memBytesPeak / (1024 * 1024), 1) })),
       };
     } else {
-      t.gpu = { error: gpuFinished ? gpuFinished.error : 'gpu sampler missing' };
+      t.gpu = { error: gpuFinished?.error || 'No usable GPU intervals' };
     }
 
     t.coTenants = coTenants(snapA, snapB, new Set([...treeA, ...treeB].map((p) => p.pid)), wallSec);
@@ -455,6 +464,7 @@ function pctOfEdge(dexS, edgeS) {
       settleMs: SETTLE_MS, gpuIntervalSec: GPU_INTERVAL_SEC, bgTabs: BG_TABS,
       scenarioOrder: SCENARIO_ORDER, browsers: BROWSERS,
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
+      skipPower: SKIP_POWER,
       edgeLaunchFlags: ['--no-first-run', '--no-default-browser-check', 'throwaway --user-data-dir (stock Edge otherwise)'],
       dexerionLaunch: 'e2e harness, throwaway profile, gpu=adaptive (shipped policy), kill switches at shipped defaults',
     },
@@ -489,7 +499,7 @@ function pctOfEdge(dexS, edgeS) {
             results.invalidTrials.push({ browser, scenario, trial: t.trial, reason: t.invalidReason });
             console.log('    INVALID: ' + t.invalidReason);
           } else {
-            console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + t.power.medianMW + ' mW (floor ' + t.floorMedianMW + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts');
+            console.log('    cpu ' + t.cpu.cpuCorePct + '% core, ws ' + t.ram.wsMBB + ' MB, power ' + (t.power?.medianMW ?? 'n/a') + ' mW (floor ' + (t.floorMedianMW ?? 'n/a') + '), gpu ' + (t.gpu && t.gpu.treeUtilPointsMean !== undefined ? t.gpu.treeUtilPointsMean : 'n/a') + ' pts');
           }
           await sleep(2000); // let the browser's processes fully exit
         }
@@ -500,12 +510,12 @@ function pctOfEdge(dexS, edgeS) {
       // group's reference floor (median of the others) is contaminated.
       for (const browser of BROWSERS) {
         const g = results.scenarios[scenario][browser];
-        let ref = median(g.trials.filter((t) => t.valid).map((t) => t.floorMedianMW));
+        let ref = median(g.trials.filter((t) => t.valid && t.floorMedianMW > 0).map((t) => t.floorMedianMW));
         for (let pass = 0; pass < 2; pass += 1) {
-          ref = median(g.trials.filter((t) => t.valid).map((t) => t.floorMedianMW));
+          ref = median(g.trials.filter((t) => t.valid && t.floorMedianMW > 0).map((t) => t.floorMedianMW));
           for (const t of g.trials) {
             if (!t.valid) continue;
-            if (Number.isFinite(ref) && ref > 0
+            if (Number.isFinite(ref) && ref > 0 && t.floorMedianMW > 0
               && Math.abs(t.floorMedianMW - ref) / ref > FLOOR_SWING_LIMIT) {
               t.valid = false;
               t.invalidReason = 'floor-swing>' + (FLOOR_SWING_LIMIT * 100) + '% (floor ' + t.floorMedianMW + ' vs ref ' + round(ref, 0) + ')';
@@ -540,7 +550,7 @@ function pctOfEdge(dexS, edgeS) {
       }
     }
 
-    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B. GPU = GPU Engine utilisation percentage points summed per pid + GPU Process Memory Local Usage, tree-filtered. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Medians/IQR over VALID trials only; all trials published.';
+    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B. GPU = GPU Engine utilisation percentage points summed per pid + GPU Process Memory Local Usage, tree-filtered. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
     const outJson = path.join(OUT_DIR, 'measure-protocol-' + (process.env.DEX_BUILD_DIR ? 'baseline' : 'main') + '.json');
     fs.writeFileSync(outJson, JSON.stringify(results, null, 2), 'utf8');
     console.log('PROTOCOL EVIDENCE: ' + outJson);

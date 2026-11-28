@@ -1,0 +1,56 @@
+name: Dexerion Edge cloud comparison
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-edge-cloud.yml'
+      - 'code/build/scripts/measure-protocol.js'
+      - 'code/build/scripts/measure-sample-guard.cjs'
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: windows-latest
+    timeout-minutes: 32
+    defaults:
+      run:
+        working-directory: code/build
+    env:
+      MEASURE_OUT_DIR: ${{ runner.temp }}\dexerion-edge
+      MEASURE_SKIP_POWER: '1'
+      MEASURE_TRIALS: '5'
+      MEASURE_SAMPLE_SEC: '7'
+      MEASURE_SETTLE_MS: '4000'
+      MEASURE_DEADLINE_MIN: '25'
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install dependencies and verify the Electron harness
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node -p "require('electron')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs
+      - name: Measure stock Edge and Dexerion on the same virtual Windows host
+        run: |
+          node scripts/measure-protocol.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $file = Join-Path $env:MEASURE_OUT_DIR 'measure-protocol-main.json'
+          node scripts/grade-edge-target.cjs $file
+          if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
+          node -e "const r=require(process.argv[1]); const names=['active-browsing','background-tabs','idle','multitasking']; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=3)))))process.exit(1)" $file
+      - name: Keep Windows comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-windows-edge-comparison
+          path: ${{ runner.temp }}/dexerion-edge/measure-protocol-main.json
+          if-no-files-found: ignore
+          retention-days: 7
