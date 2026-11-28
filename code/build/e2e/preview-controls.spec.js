@@ -275,6 +275,38 @@ test('site and report preview chrome: widths, expand, reload, console, edit, ful
     expect(chrome.exit).toBe(true);
     expect(chrome.tab).toBe(true);
 
+    // The full page and the in-window report preview share this renderer.
+    // A paper tray must leave the wrapped toolbar's actions unobstructed.
+    const palette = await overlayDom(app, 'report', `(() => {
+      const trigger = document.querySelector('#report-paper-palette .dx-palette-trigger');
+      const tray = document.getElementById('report-paper-palette-panel');
+      const collapsed = !tray.matches(':popover-open');
+      trigger.dispatchEvent(new PointerEvent('pointerenter', {pointerType:'mouse'}));
+      const rect = tray.getBoundingClientRect();
+      const bar = document.getElementById('bar').getBoundingClientRect();
+      return {
+        collapsed,
+        expanded: tray.matches(':popover-open'),
+        count: tray.querySelectorAll('.pdot').length,
+        bounded: rect.x >= 0 && rect.y >= bar.bottom - 1 &&
+          rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1,
+      };
+    })()`);
+    expect(palette).toEqual({ collapsed:true, expanded:true, count:12, bounded:true });
+    await overlayDom(app, 'report', `(() => {
+      document.querySelector('#papers [data-paper="lavender"]').click();
+      return true;
+    })()`);
+    await expect.poll(async () => overlayDom(app, 'report',
+      'document.querySelector("#report-paper-palette .dx-palette-value").textContent'), { timeout: 5000 }).toBe('Lavender');
+    expect(await overlayDom(app, 'report', `(() => {
+      const trigger = document.querySelector('#report-paper-palette .dx-palette-trigger');
+      trigger.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown',bubbles:true}));
+      if (document.activeElement?.dataset?.paper !== 'lavender') return false;
+      document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}));
+      return document.activeElement === trigger && trigger.getAttribute('aria-expanded') === 'false';
+    })()`)).toBe(true);
+
     expect(await clickOverlayButton(app, 'report', 'btnFullscreen')).toBe('Fullscreen');
     await expect.poll(async () => win.evaluate(() => window.dexerion.invoke('dex:overlay-fullscreen-state', { kind: 'report' })), { timeout: 15000 }).toBe(true);
     await expect.poll(async () => overlayDom(app, 'report', 'document.getElementById("btnFullscreen").textContent'), { timeout: 15000 }).toBe('Exit fullscreen');

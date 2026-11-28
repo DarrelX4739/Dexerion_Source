@@ -566,7 +566,7 @@
 
 .dxa-report .dxa-md,
 .dxa-report .dxa-list { font-family: var(--dxa-report-face); }
-.dxa-report .dxa-h { font-family: var(--dxa-report-face); font-weight: 650; }
+.dxa-report .dxa-h { font-family: var(--dxa-report-face); font-weight: 650; color: var(--dxa-report-ink); }
 .dxa-report .dxa-h3 { font-size: 12.5px; }
 .dxa-report .dxa-subtitle { color: var(--dxa-report-ink-2); }
 .dxa-report .dxa-h { border-bottom: 1px solid var(--dxa-report-hair); padding-bottom: 4px; }

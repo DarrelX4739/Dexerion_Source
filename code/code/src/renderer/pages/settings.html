@@ -1,5 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Settings — Dexerion</title>
 <link rel="stylesheet" href="dexerion://assets/page-theme.css">
+<link rel="stylesheet" href="dexerion://assets/palette-disclosure.css">
 <style>
 /* Settings: grouped bands inside hairline cards, controls right-aligned. */
 .dx-head .eyebrow{color:var(--pfaint)}
@@ -111,7 +112,18 @@
       <button class="themeopt" data-theme-opt="light"><div class="mock light"><div class="mrow"><span class="mtab on"></span><span class="mtab"></span><span class="mtab"></span></div><div class="mbar"></div><div class="mbody"></div></div><span class="lbl">Light <span class="tick"></span></span></button>
     </div>
     <div class="dx-row"><div class="tx"><b>Accent colour</b><small>Tints the active tab rail, focus rings and primary buttons</small></div>
-      <div class="ctl"><div class="dx-swatches" id="swatches"></div></div></div>
+      <div class="ctl">
+        <div class="dx-palette" id="settings-accent-palette">
+          <button type="button" class="dx-palette-trigger" aria-controls="settings-accent-palette-panel" aria-expanded="false">
+            <span>Accent colour</span><span class="dx-palette-value">Blue</span>
+          </button>
+          <div class="dx-palette-panel" id="settings-accent-palette-panel" popover="manual">
+            <div id="swatches" class="dx-palette-swatches dx-swatches" role="group" aria-label="Accent colour"></div>
+            <label class="dx-palette-custom" for="customAccent" id="customAccentRow">Custom colour</label>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="dx-row"><div class="tx"><b>Bookmarks bar</b><small>Show pinned bookmarks under the toolbar</small></div>
       <div class="ctl"><label class="dx-sw"><input type="checkbox" id="bar"><i></i></label></div></div>
     <div class="dx-row"><div class="tx"><b>Welcome page</b><small>Show a welcome page each time Dexerion opens</small></div>
@@ -191,8 +203,11 @@
 </div>
 <div id="saved" class="dx-toast">Saved</div>
 <script src="dexerion://assets/page-theme.js"></script>
+<script src="dexerion://assets/palette-disclosure.js"></script>
 <script>
 const PRESETS=['#35c4ff','#8b7bff','#3ddc84','#ffb020','#ff6b9d'];
+const accentNames=['Blue','Violet','Green','Amber','Pink'];
+const accentPalette=window.DexPalette.bind(document.getElementById('settings-accent-palette'));
 /* Browser themes. 'dexerion' is the shipped look — no stylesheet at all — and
    each entry's caption says what the theme does to the chrome, so the choice is
    legible before it is made. The tile itself is drawn by .mock rules further up. */
@@ -226,7 +241,13 @@ async function save(){
 function paintTheme(){document.querySelectorAll('[data-theme-opt]').forEach(o=>o.classList.toggle('sel',o.dataset.themeOpt===theme));document.documentElement.dataset.theme=theme;}
 function paintAccent(){
   document.documentElement.style.setProperty('--accent',accent);
-  document.querySelectorAll('#swatches .dx-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===accent));
+  const cssAccent = typeof accent === 'string' ? accent.toLowerCase() : '';
+  accentPalette.select(accentNames[PRESETS.indexOf(cssAccent)] || 'Custom', accent);
+  document.querySelectorAll('#swatches .dx-swatch').forEach(s=>{
+    const selected=s.dataset.c===cssAccent;
+    s.classList.toggle('sel',selected);
+    s.setAttribute('aria-pressed',String(selected));
+  });
   const custom=document.getElementById('customAccent');if(custom)custom.value=accent;
 }
 function paintSkin(){
@@ -268,11 +289,12 @@ function buildSkins(){
   theme=s.theme||'light';accent=s.accent||PRESETS[0];
   skin=s.skin||'dexerion';
   const box=document.getElementById('swatches');
-  PRESETS.forEach(c=>{const b=document.createElement('button');b.className='dx-swatch';b.dataset.c=c;b.style.background=c;b.title=c;
-    b.onclick=async()=>{accent=c;paintAccent();await save();};box.appendChild(b);});
+  PRESETS.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='dx-swatch';b.dataset.c=c;b.style.background=c;
+    b.title=accentNames[i]+' ('+c+')';b.setAttribute('aria-label',accentNames[i]+' accent');
+    b.onclick=async()=>{accentPalette.close(true);accent=c;paintAccent();await save();};box.appendChild(b);});
   const custom=document.createElement('input');custom.type='color';custom.id='customAccent';custom.title='Custom colour';
   custom.oninput=async()=>{accent=custom.value;paintAccent();};
-  custom.onchange=save;box.appendChild(custom);
+  custom.onchange=save;document.getElementById('customAccentRow').appendChild(custom);
   document.querySelectorAll('[data-theme-opt]').forEach(o=>o.onclick=async()=>{theme=o.dataset.themeOpt;paintTheme();await save();});
   document.getElementById('se').onchange=save;
   document.getElementById('bar').onchange=save;

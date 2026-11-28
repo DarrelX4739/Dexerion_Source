@@ -1,0 +1,63 @@
+/* Shared by the report page, assistant report sheet, and Appearance. */
+.dx-palette { display:inline-flex; max-width:100%; min-width:0; }
+.dx-palette .dx-palette-trigger {
+  display:inline-flex; align-items:center; gap:7px; min-width:0; min-height:30px; max-width:100%;
+  padding:4px 8px; border:1px solid var(--pborder,var(--hair));
+  border-radius:7px; background:var(--pfield,var(--field)); color:var(--pfg,var(--fg));
+  font:600 12px/1.2 var(--font-ui,var(--font,system-ui)); cursor:pointer;
+}
+.dx-palette .dx-palette-trigger:hover,
+.dx-palette .dx-palette-trigger[aria-expanded="true"] { border-color:var(--pborder-2,var(--hair2)); }
+.dx-palette-trigger::before {
+  content:""; inline-size:11px; block-size:11px; flex:none; border-radius:50%;
+  border:1px solid var(--pborder-2,var(--hair2)); background:var(--dx-palette-swatch,transparent);
+}
+.dx-palette-trigger::after {
+  content:""; inline-size:5px; block-size:5px; flex:none; margin:0 2px 2px 1px;
+  border:solid currentColor; border-width:0 1px 1px 0; transform:rotate(45deg);
+}
+.dx-palette-trigger[aria-expanded="true"]::after { transform:rotate(225deg); margin-block:2px 0; }
+.dx-palette-value { max-inline-size:9em; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--pmuted,var(--muted)); }
+.dx-palette-panel {
+  position:fixed; inset:auto; margin:0; padding:9px; box-sizing:border-box;
+  width:min(216px,calc(100vw - 16px)); overflow:auto; overscroll-behavior:contain;
+  color:var(--pfg,var(--fg)); background:var(--pcard,var(--bg2));
+  border:1px solid var(--pborder-2,var(--hair2)); border-radius:9px; box-shadow:var(--sh-2,var(--sh2));
+}
+.dx-palette-panel:not(:popover-open) { display:none; }
+.dx-palette-panel .dx-palette-swatches {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(26px,1fr)); gap:6px;
+  align-items:center; justify-items:center;
+}
+.dx-palette-panel .dx-palette-swatches > button {
+  inline-size:24px; block-size:24px; border-radius:50%; padding:0;
+  transition:none; transform:none;
+}
+.dx-palette-panel .dx-palette-swatches > button:not(.sel):hover { outline:1px solid currentColor; outline-offset:2px; }
+.dx-palette-panel .dx-palette-swatches > button.sel {
+  outline:1px solid currentColor; outline-offset:2px; box-shadow:none;
+}
+.dx-palette .dx-palette-trigger:focus-visible,
+.dx-palette-panel .dx-palette-swatches > button:focus-visible,
+.dx-palette-panel input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.dx-palette-panel .dx-palette-custom {
+  display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; padding-top:8px;
+  border-top:1px solid var(--pborder); font:600 12px/1.2 var(--font-ui,system-ui);
+}
+@media (forced-colors:active) {
+  .dx-palette-trigger::before, .dx-palette-panel .dx-palette-swatches > button { forced-color-adjust:none; }
+  .dx-palette-panel .dx-palette-swatches > button.sel { outline-color:CanvasText; }
+  .dx-palette .dx-palette-trigger:focus-visible,
+  .dx-palette-panel .dx-palette-swatches > button:focus-visible,
+  .dx-palette-panel input:focus-visible { outline-color:Highlight; }
+}
+@media print { .dx-palette, .dx-palette .dx-palette-panel { display:none !important; } }
+
+/* The assistant sheet can be narrow. Treat a label/select pair as one item
+   instead of letting a global width:100% put every field on a separate row. */
+#ai-sidebar .ai-report-tools { gap:7px 10px; }
+#ai-sidebar .ai-report-tool { display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:100%; }
+#ai-sidebar .ai-report-tool .ai-select { width:auto; min-width:0; max-width:100%; }
+#ai-sidebar #ai-report-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#ai-sidebar .ai-report-panel .ai-panel-head { gap:5px; }
+#ai-sidebar .ai-report-panel .ai-icon-btn { flex:none; }
