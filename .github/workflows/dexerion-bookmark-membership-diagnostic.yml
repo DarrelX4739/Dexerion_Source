@@ -1,0 +1,95 @@
+name: Dexerion Windows bookmark membership parity
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-bookmark-membership-diagnostic.yml'
+      - 'code/build/e2e/bookmark-membership-native.spec.js'
+      - 'code/build/scripts/test-bookmark-membership.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  same-source:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked desktop test runtime
+        run: npm ci --include=dev
+      - name: Exercise stock and temporary candidate with actual stored bookmarks and keyboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=../code/src/renderer/shell.js
+          cp "$f" shell.before.fixture
+          trap 'cp shell.before.fixture "$f"; rm -f shell.before.fixture' EXIT
+          test "$(git rev-parse HEAD:code/code/src/renderer/shell.js)" = db1d22bca625c6e98542d7e7e33280f4c51a1d7a
+          DEX_BOOKMARK_PHASE=stock DEX_BOOKMARK_OUT="$RUNNER_TEMP/bookmark-membership-stock.json" \
+            npm run test:e2e -- e2e/bookmark-membership-native.spec.js --output "$RUNNER_TEMP/bookmark-trace-stock"
+          node - "$f" <<'NODE'
+          const assert=require('node:assert/strict'),fs=require('node:fs');
+          const digest=s=>require('node:child_process').execFileSync('git',['hash-object','--stdin'],{encoding:'utf8',input:s}).trim();
+          const p=process.argv[2],raw=fs.readFileSync(p,'utf8'),crlf=raw.includes('\r\n');
+          let s=raw.replace(/\r\n/g,'\n');
+          assert.equal(digest(s),'db1d22bca625c6e98542d7e7e33280f4c51a1d7a');
+          const start=s.indexOf('function bookmarkSet()'),end=s.indexOf('\nfunction updateBookmarkStar',start);
+          assert(start>=0&&end>start);
+          const next=[
+            'function isBookmarked(url) {',
+            '  const roots = S && S.bookmarks && S.bookmarks.roots;',
+            '  let marked = false;',
+            '  if (roots) for (const k of Object.keys(roots)) for (const b of (roots[k] || [])) {',
+            '    const saved = b.url;',
+            "    // Match Set.has's SameValueZero equality and visit the same entries.",
+            '    if (saved === url || (saved !== saved && url !== url)) marked = true;',
+            '  }',
+            '  return marked;',
+            '}',
+          ].join('\n');
+          s=(s.slice(0,start)+next+s.slice(end)).replaceAll('bookmarkSet().has(url)','isBookmarked(url)');
+          assert.equal(digest(s),'7e74d2ccbff34ec8a73b7c865c3c944c5157c9e4');
+          fs.writeFileSync(p,crlf?s.replace(/\n/g,'\r\n'):s);
+          NODE
+          node --test scripts/test-bookmark-membership.cjs
+          DEX_BOOKMARK_PHASE=candidate DEX_BOOKMARK_OUT="$RUNNER_TEMP/bookmark-membership-candidate.json" \
+            npm run test:e2e -- e2e/bookmark-membership-native.spec.js --output "$RUNNER_TEMP/bookmark-trace-candidate"
+          cp shell.before.fixture "$f"
+          git diff --exit-code -- "$f"
+          node - "$RUNNER_TEMP/bookmark-membership-stock.json" "$RUNNER_TEMP/bookmark-membership-candidate.json" <<'NODE'
+          const assert=require('node:assert/strict'),fs=require('node:fs');
+          const [stock,candidate]=process.argv.slice(2).map(p=>JSON.parse(fs.readFileSync(p,'utf8')));
+          assert.equal(stock.phase,'stock');
+          assert.equal(candidate.phase,'candidate');
+          assert.equal(stock.snapshots.length,7);
+          assert.deepEqual(stock.snapshots,candidate.snapshots);
+          assert.deepEqual(stock.fixtures,candidate.fixtures);
+          const med=x=>[...x.usPerLookup].sort((a,b)=>a-b)[3];
+          for(const row of [stock,candidate]) {
+            assert.equal(row.lookup.lookupsPerBatch,2400);
+            assert.equal(row.lookup.usPerLookup.length,7);
+            assert(row.lookup.usPerLookup.every(n=>Number.isFinite(n)&&n>0));
+          }
+          console.log('Identical actual SVG, title, accessibility, focus, order, navigation and persistence; isolated native shell lookup fixture µs:',JSON.stringify({stock:med(stock.lookup),candidate:med(candidate.lookup)}));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bookmark-membership-native
+          path: |
+            ${{ runner.temp }}/bookmark-membership-*.json
+            ${{ runner.temp }}/bookmark-trace-stock/
+            ${{ runner.temp }}/bookmark-trace-candidate/
+          if-no-files-found: warn
+          retention-days: 7
