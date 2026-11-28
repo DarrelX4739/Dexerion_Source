@@ -74,6 +74,17 @@
   border:1px solid var(--pborder);border-radius:var(--r-xs);padding:1px 5px}
 
 @media (max-width:520px){.themes{grid-template-columns:1fr}}
+
+.themeopt:hover {transform:none}
+.themeopt:focus-visible {outline-offset:2px}
+@media (max-width:560px) {
+  .dx-card .dx-row {flex-wrap:wrap;row-gap:8px}
+  .dx-card .dx-row .tx {flex-basis:100%}
+  .dx-card .dx-row .ctl {flex:0 1 auto;min-width:0;max-width:100%;flex-wrap:wrap}
+  .dx-card .dx-row .ctl :is(input,select,button) {max-width:100%}
+  #aimodel, #aimodel-custom, #aibaseurl {min-width:0 !important}
+  #aimodel-custom {margin-left:0 !important}
+}
 </style>
 </head><body><div class="dx-page">
 

@@ -592,4 +592,14 @@ body:not(.ai) > .mark h1 {letter-spacing:.105em}
 body:not(.ai) > .acts #ai-btn:hover {transform:none}
 @media (max-width:1100px) {
   body:not(.ai):has(> .cmd > #q) > #tasks-panel {width:var(--start-column)}
+
+/* Keep Library rows aligned on narrower embedded pages without changing
+   which buttons are displayed or their keyboard order. */
+.dx-page > .dx-list .dx-item .actions {gap:4px}
+.dx-page > .dx-list .dx-item .main b {line-height:1.35}
+.dx-page > .dx-list .dx-item .main small {margin-block-start:3px}
+.dx-page > .dx-section h2 {letter-spacing:.11em}
+@media (max-width:480px) {
+  .dx-page {padding-block-start:30px}
+  .dx-page > .dx-list .dx-item .actions {flex-wrap:wrap;justify-content:flex-end;max-width:48%}
 }
