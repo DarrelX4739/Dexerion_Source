@@ -361,9 +361,9 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
   });
   const list = () => pagesIn(session.browser);
   try {
-    let front;
+    let front, shell;
     if (dex) {
-      const shell = await waitFor(() => list().find((p) => isShellUrl(p.url())), 'native Dexerion shell');
+      shell = await waitFor(() => list().find((p) => isShellUrl(p.url())), 'native Dexerion shell');
       const getState = () => shell.evaluate(() => window.dexerion?.invoke('dex:get-state'));
       const initial = await waitFor(async () => {
         const state = await getState();
@@ -431,6 +431,20 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
         }
         return Object.fromEntries(tally);
       },
+      // Existing trusted-shell diagnostic, after sampler B. Report only
+      // verified content-tab PIDs; unassigned renderers stay unassigned.
+      rendererRoles: shell ? () => shell.evaluate(async (fixtureUrls) => {
+        const bridge = window.dexerion;
+        const state = await bridge.invoke('dex:get-state');
+        const metrics = await bridge.invoke('dex:memory');
+        const matched = new Map(state.tabs.filter((t) => fixtureUrls.includes(t.url)).map((t) => [t.id, t.url]));
+        if (matched.size !== fixtureUrls.length || !matched.has(state.active)) {
+          throw new Error('Raw tab attribution lost the expected fixture inventory');
+        }
+        return metrics.tabs.filter((t) => matched.has(t.tabId)).map((t) => ({
+          pid: t.pid, kind: t.tabId === state.active ? 'foreground' : 'background',
+        }));
+      }, urls) : undefined,
       pageState: () => samplePage(front), close: session.close };
   } catch (err) { await session.close(false); throw err; }
 }

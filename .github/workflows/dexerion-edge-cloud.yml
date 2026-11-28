@@ -59,6 +59,7 @@ jobs:
           NATIVE_SOAK: ${{ contains(github.event.head_commit.message, '[native-soak]') }}
           NATIVE_LAUNCH: ${{ contains(github.event.head_commit.message, '[native-launch]') }}
           FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
+          LIGHT_WORKLOADS: ${{ contains(github.event.head_commit.message, '[edge-light-workloads]') }}
           EXTENDED_SAMPLE: ${{ contains(github.event.head_commit.message, '[edge-extended-sample]') }}
         run: |
           if ($env:FOUR_TRIALS -eq 'true') { $env:MEASURE_TRIALS = '4' }
@@ -68,6 +69,7 @@ jobs:
           if ($env:EXTENDED_SAMPLE -eq 'true') { $env:MEASURE_SAMPLE_SEC = '15' }
           if ($env:NATIVE_LAUNCH -eq 'true') { $env:MEASURE_NATIVE_LAUNCH = '1' }
           if ($env:FOCUS_ONLY -eq 'true') { $env:MEASURE_SCENARIOS = 'active-browsing' }
+          if ($env:LIGHT_WORKLOADS -eq 'true') { $env:MEASURE_SCENARIOS = 'active-browsing,idle' }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
