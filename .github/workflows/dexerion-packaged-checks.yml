@@ -1,0 +1,61 @@
+name: Dexerion packaged smoke
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-packaged-checks.yml'
+      - 'code/build/e2e/packaged-smoke.spec.js'
+      - 'code/build/electron-builder.json'
+      - 'code/build/package-lock.json'
+permissions:
+  contents: read
+
+jobs:
+  packed:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: code/build
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build unpacked app without signing, installing or publishing
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const config = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
+          config.directories.output = 'packaged-smoke-dist';
+          if (process.platform === 'linux') {
+            config.linux = { executableName: 'dexerion', icon: '../code/assets/logo.png' };
+            config.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');
+          }
+          fs.writeFileSync('electron-builder.smoke.json', JSON.stringify(config));
+          NODE
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            npx --no-install electron-builder --win dir --x64 --config electron-builder.smoke.json --publish never
+            echo "DEX_PACKAGED_APP=packaged-smoke-dist/win-unpacked/Dexerion.exe" >> "$GITHUB_ENV"
+          else
+            npx --no-install electron-builder --linux dir --x64 --config electron-builder.smoke.json --publish never
+            echo "DEX_PACKAGED_APP=packaged-smoke-dist/linux-unpacked/dexerion" >> "$GITHUB_ENV"
+          fi
+      - name: Boot and navigate the packaged app on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:e2e -- e2e/packaged-smoke.spec.js
+      - name: Boot and navigate the packaged app on Windows
+        if: runner.os == 'Windows'
+        run: npm run test:e2e -- e2e/packaged-smoke.spec.js
