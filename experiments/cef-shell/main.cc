@@ -1,3 +1,5 @@
+#include <charconv>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -15,6 +17,7 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_parser.h"
+#include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_browser_view_delegate.h"
@@ -57,6 +60,7 @@ struct Options {
   CefString expected_title;
   fs::path profile;
   fs::path proof;
+  std::int64_t smoke_hold_ms = 0;
 };
 
 bool Status(const fs::path& path, fs::file_status& result) {
@@ -86,6 +90,16 @@ bool ParseOptions(CefRefPtr<CefCommandLine> arguments, Options& options) {
   if (arguments->HasSwitch("smoke-title")) {
     options.expected_title = arguments->GetSwitchValue("smoke-title");
     if (options.expected_title.empty() || !arguments->HasSwitch("smoke-proof")) return false;
+    CefURLParts parts;
+    if (!CefParseURL(options.url, parts) || CefString(&parts.scheme) != "http" ||
+        CefString(&parts.host) != "127.0.0.1") return false;
+    if (arguments->HasSwitch("smoke-hold-ms")) {
+      const auto text = arguments->GetSwitchValue("smoke-hold-ms").ToString();
+      const auto end = text.data() + text.size();
+      const auto result = std::from_chars(text.data(), end, options.smoke_hold_ms);
+      if (result.ptr != end || result.ec != std::errc{} ||
+          options.smoke_hold_ms < 0 || options.smoke_hold_ms > 120000) return false;
+    }
     // Proof files can only be written inside the dedicated profile.
     const std::string proof = arguments->GetSwitchValue("smoke-proof").ToString();
     if (proof != "smoke-result.txt") return false;
@@ -103,6 +117,18 @@ bool ParseOptions(CefRefPtr<CefCommandLine> arguments, Options& options) {
   return true;
 }
 
+class CloseFixture final : public CefTask {
+ public:
+  explicit CloseFixture(CefRefPtr<CefBrowser> browser) : browser_(browser) {}
+  void Execute() override {
+    if (browser_ && browser_->IsValid()) browser_->GetHost()->CloseBrowser(false);
+    browser_ = nullptr;
+  }
+ private:
+  CefRefPtr<CefBrowser> browser_;
+  IMPLEMENT_REFCOUNTING(CloseFixture);
+};
+
 class Client final : public CefClient,
                      public CefLifeSpanHandler,
                      public CefDisplayHandler,
@@ -112,6 +138,27 @@ class Client final : public CefClient,
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+
+  void SetAddressField(CefRefPtr<CefTextfield> field) {
+    field_ = field;
+    if (field_ && !committed_url_.empty()) field_->SetText(committed_url_);
+  }
+
+  void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                       const CefString& url) override {
+    if (browser->IsPopup() || !frame || !frame->IsMain()) return;
+    committed_url_ = url;
+    if (field_ && !field_->HasFocus()) field_->SetText(committed_url_);
+  }
+
+  // The spike has no multi-window/account popup policy yet.
+  bool OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int,
+                     const CefString&, const CefString&, WindowOpenDisposition,
+                     bool, const CefPopupFeatures&, CefWindowInfo&,
+                     CefRefPtr<CefClient>&, CefBrowserSettings&,
+                     CefRefPtr<CefDictionaryValue>&, bool*) override {
+    return true;
+  }
 
   void OnTitleChange(CefRefPtr<CefBrowser> browser, const CefString& title) override {
     if (browser->IsPopup()) return;
@@ -132,7 +179,7 @@ class Client final : public CefClient,
   }
 
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
-    if (!browser->IsPopup()) CefQuitMessageLoop();
+    if (!browser->IsPopup()) { field_ = nullptr; CefQuitMessageLoop(); }
   }
 
  private:
@@ -144,11 +191,15 @@ class Client final : public CefClient,
     proof.close();
     if (!proof) return;
     finished_ = true;
+    if (options_.smoke_hold_ms > 0 &&
+        CefPostDelayedTask(TID_UI, new CloseFixture(browser), options_.smoke_hold_ms)) return;
     browser->GetHost()->CloseBrowser(false);
   }
 
   const Options options_;
   CefString title_;
+  CefString committed_url_;
+  CefRefPtr<CefTextfield> field_;
   bool fixture_loaded_ = false;
   bool finished_ = false;
   IMPLEMENT_REFCOUNTING(Client);
@@ -165,8 +216,8 @@ class Frame final : public CefWindowDelegate,
                     public CefButtonDelegate,
                     public CefTextfieldDelegate {
  public:
-  Frame(CefRefPtr<CefBrowserView> view, CefString start)
-      : view_(view), start_(std::move(start)) {}
+  Frame(CefRefPtr<CefBrowserView> view, CefRefPtr<Client> client, CefString start)
+      : view_(view), client_(client), start_(std::move(start)) {}
 
   cef_runtime_style_t GetWindowRuntimeStyle() override { return CEF_RUNTIME_STYLE_ALLOY; }
   CefSize GetPreferredSize(CefRefPtr<CefView>) override { return {1120, 760}; }
@@ -185,6 +236,7 @@ class Frame final : public CefWindowDelegate,
     AddButton(bar, "Reload", kReload);
     address_ = CefTextfield::CreateTextfield(this);
     address_->SetText(start_);
+    client_->SetAddressField(address_);
     bar->AddChildView(address_);
     row->SetFlexForView(address_, 1);
     AddButton(bar, "Go", kGo);
@@ -200,8 +252,10 @@ class Frame final : public CefWindowDelegate,
   }
 
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
+    client_->SetAddressField(nullptr);
     address_ = nullptr;
     view_ = nullptr;
+    client_ = nullptr;
   }
 
   void OnButtonPressed(CefRefPtr<CefButton> button) override {
@@ -239,6 +293,7 @@ class Frame final : public CefWindowDelegate,
   }
 
   CefRefPtr<CefBrowserView> view_;
+  CefRefPtr<Client> client_;
   CefRefPtr<CefTextfield> address_;
   const CefString start_;
   IMPLEMENT_REFCOUNTING(Frame);
@@ -250,10 +305,11 @@ class App final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
   void OnContextInitialized() override {
     CefBrowserSettings settings;
-    auto content = CefBrowserView::CreateBrowserView(new Client(options_), options_.url,
+    CefRefPtr<Client> client = new Client(options_);
+    auto content = CefBrowserView::CreateBrowserView(client, options_.url,
         settings, nullptr, nullptr, new ViewStyle());
     if (!content) { CefQuitMessageLoop(); return; }
-    CefWindow::CreateTopLevelWindow(new Frame(content, options_.url));
+    CefWindow::CreateTopLevelWindow(new Frame(content, client, options_.url));
   }
  private:
   const Options options_;

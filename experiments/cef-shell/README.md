@@ -5,6 +5,7 @@ It does not replace the Electron app or change its installer, profiles,
 shortcuts, permission policy or build. The native browser window uses
 CEF Views for navigation controls and Chromium for the page. It currently
 has one view with an HTTP(S) address field, Go, Back, Forward and Reload.
+The address follows committed navigation; popup windows are not ported.
 It is not a feature-complete browser or a migration tool.
 
 Use a dedicated absolute profile directory (a new/empty one or one already

@@ -80,6 +80,11 @@ jobs:
         run: |
           root="$(python experiments/cef-shell/fetch_sdk.py "$CEF_PLATFORM" "$RUNNER_TEMP/dex-cef-sdk")"
           echo "CEF_SDK_ROOT=$root" >> "$GITHUB_ENV"
+      - name: Install Linux desktop SDK headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libx11-dev
       - name: Configure and build native CEF under Linux
         if: runner.os == 'Linux'
         run: |
