@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <title>Dexerion</title>
 <link rel="stylesheet" href="shell.css">
-<link rel="stylesheet" href="group-rail.css">
 <link rel="stylesheet" href="../../assets/ai-artifacts.css">
-<link rel="stylesheet" href="../../assets/palette-disclosure.css">
 </head>
 <body>
 <div id="tabstrip"><div id="tabs"><button id="newtab-btn" title="New tab (Ctrl+T)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div>
@@ -250,34 +248,21 @@
       <button class="ai-icon-btn" id="ai-report-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
     </header>
     <div class="ai-report-menu" id="ai-report-menu" hidden role="menu" aria-label="Download format"></div>
-    <div class="ai-report-tools" id="ai-report-tools" data-palette-clearance>
-      <span class="ai-report-tool">
-        <label class="ai-label" for="ai-report-theme">Design</label>
-        <select class="ai-select" id="ai-report-theme">
-          <option value="clean">Clean</option><option value="editorial">Editorial</option><option value="brief">Brief</option>
-          <option value="modern">Modern</option><option value="magazine">Magazine</option><option value="academic">Academic</option><option value="notebook">Notebook</option>
-        </select>
-      </span>
-      <div class="dx-palette" id="ai-report-palette">
-        <button type="button" class="dx-palette-trigger" aria-controls="ai-report-palette-panel" aria-expanded="false">
-          <span>Paper colour</span><span class="dx-palette-value">Paper</span>
-        </button>
-        <div class="dx-palette-panel" id="ai-report-palette-panel" popover="manual">
-          <div class="dx-palette-swatches ai-report-swatches" id="ai-report-papers" role="group" aria-label="Paper colour"></div>
-        </div>
-      </div>
-      <span class="ai-report-tool">
-        <label class="ai-label" for="ai-report-pattern">Pattern</label>
-        <select class="ai-select" id="ai-report-pattern">
-          <option value="solid">Solid</option><option value="hatch">Hatched</option><option value="diagonal">Diagonal</option>
-        </select>
-      </span>
-      <span class="ai-report-tool">
-        <label class="ai-label" for="ai-report-font">Type</label>
-        <select class="ai-select" id="ai-report-font">
-          <option value="neutral">Neutral</option><option value="editorial">Editorial</option><option value="typewriter">Typewriter</option>
-        </select>
-      </span>
+    <div class="ai-report-tools" id="ai-report-tools">
+      <label class="ai-label" for="ai-report-theme">Design</label>
+      <select class="ai-select" id="ai-report-theme">
+        <option value="clean">Clean</option><option value="editorial">Editorial</option><option value="brief">Brief</option>
+        <option value="modern">Modern</option><option value="magazine">Magazine</option><option value="academic">Academic</option><option value="notebook">Notebook</option>
+      </select>
+      <span class="ai-report-swatches" id="ai-report-papers" role="radiogroup" aria-label="Paper colour"></span>
+      <label class="ai-label" for="ai-report-pattern">Pattern</label>
+      <select class="ai-select" id="ai-report-pattern">
+        <option value="solid">Solid</option><option value="hatch">Hatched</option><option value="diagonal">Diagonal</option>
+      </select>
+      <label class="ai-label" for="ai-report-font">Type</label>
+      <select class="ai-select" id="ai-report-font">
+        <option value="neutral">Neutral</option><option value="editorial">Editorial</option><option value="typewriter">Typewriter</option>
+      </select>
     </div>
     <div class="ai-panel-body ai-report-scroll">
       <button class="ai-report-comment" id="ai-report-comment" type="button" hidden>Comment</button>
@@ -475,12 +460,10 @@
 <script src="lofi-player.js"></script>
 <script src="lofi-songs.js"></script>
 <script src="shell.js"></script>
-<script src="group-rail.js"></script>
 <script src="../../assets/ai-markdown.js"></script>
 <script src="../../assets/ai-artifacts.js"></script>
 <script src="../../assets/report-export.js"></script>
 <script src="../../assets/vendor/lucide.min.js"></script>
-<script src="../../assets/palette-disclosure.js"></script>
 <script src="ai-sidebar.js"></script>
 <script src="ai-search.js"></script>
 </body>

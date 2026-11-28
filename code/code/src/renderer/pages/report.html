@@ -1,6 +1,5 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Report — Dexerion</title>
 <link rel="stylesheet" href="dexerion://assets/page-theme.css">
-<link rel="stylesheet" href="dexerion://assets/palette-disclosure.css">
 <link rel="stylesheet" href="dexerion://assets/ai-artifacts.css">
 <style>
 /* Full-page report: a sticky design bar, then the document. This is the view
@@ -14,16 +13,12 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 /* Accent used AS TEXT (raw accent ~2.7:1 on light paper); mixed toward the
    system text colour it clears 4.5:1 in light and stays bright in dark. */
 :root{--accent-text:color-mix(in srgb,var(--accent,#35c4ff) 74%,CanvasText 26%)}
-.bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:7px 15px;flex-wrap:wrap;padding:8px clamp(10px,3vw,28px);background:color-mix(in srgb,var(--pbg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--pborder);font-size:12px}
-.bar[hidden],.bar .report-actions[hidden]{display:none}
+.bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 28px;background:color-mix(in srgb,var(--pbg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--pborder);font-size:12px}
+.bar[hidden]{display:none}
 .bar label{color:var(--pmuted);font-size:11px;font-weight:600}
 .bar select{font:12px/1.4 inherit;color:var(--pfg);background:color-mix(in srgb,var(--pfg) 5%,transparent);border:1px solid var(--pborder);border-radius:6px;padding:3px 6px}
 .bar select:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:1px}
-.bar .report-tools,.bar .report-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
-.bar .report-field{display:inline-flex;align-items:center;gap:5px}
-.bar select,.bar .btn{min-height:30px}
-.bar .report-status{flex:1 1 135px;min-width:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
-@media(max-width:560px){.bar .report-status{justify-content:flex-start}}
+.papers{display:inline-flex;gap:5px;align-items:center}
 .pdot{width:16px;height:16px;border-radius:50%;border:1px solid var(--pborder);padding:0;cursor:pointer}
 .pdot.sel{outline:2px solid var(--pfg);outline-offset:1px}
 .pdot[data-paper="paper"]{background:#efece6}
@@ -38,6 +33,7 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 .pdot[data-paper="slate"]{background:#e7e9ec}
 .pdot[data-paper="ivory"]{background:#fbfaf5}
 .pdot[data-paper="mist"]{background:#eef3f3}
+.spacer{flex:1}
 .hint{color:var(--pmuted);font-size:10.5px}
 .copy-status{color:var(--accent-text,#35c4ff);font-size:10.5px;font-weight:600;min-height:1em}
 .copy-status:empty,.copy-status[hidden]{display:none}
@@ -202,40 +198,27 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 }
 .print-only,.dxa-print-only{display:none}
 </style></head><body>
-<div class="bar" id="bar" data-palette-clearance hidden>
-  <div class="report-tools">
-    <button type="button" class="btn" id="btnCloseOverlay" title="Close (Esc)" aria-label="Close this report" hidden>✕</button>
-    <span class="report-field"><label for="theme">Design</label> <select id="theme" aria-label="Design"></select></span>
-    <div class="dx-palette" id="report-paper-palette">
-      <button type="button" class="dx-palette-trigger" aria-controls="report-paper-palette-panel" aria-expanded="false">
-        <span>Page colour</span><span class="dx-palette-value">Paper</span>
-      </button>
-      <div class="dx-palette-panel" id="report-paper-palette-panel" popover="manual">
-        <div id="papers" class="dx-palette-swatches papers" role="group" aria-label="Page colour"></div>
-      </div>
-    </div>
-    <span class="report-field"><label for="font">Font</label> <select id="font" aria-label="Font"></select></span>
-  </div>
-  <div class="report-actions" role="group" aria-label="Read and annotate report">
-    <button type="button" class="btn primary" id="btnToc" title="Table of contents">Contents</button>
-    <button type="button" class="btn" id="btnSearch" title="Search in report">Search</button>
-    <button type="button" class="btn" id="btnAnnotations" title="Annotations">Notes</button>
-  </div>
-  <div class="report-actions" role="group" aria-label="Copy and export report">
-    <button type="button" class="btn" id="btnCopy" title="Copy report HTML to clipboard">Copy</button>
-    <button type="button" class="btn" id="btnExportHtml" title="Export this report as a standalone HTML file">Export HTML</button>
-    <button type="button" class="btn" id="btnExportMd" title="Export this report as Markdown">Markdown</button>
-    <button type="button" class="btn" id="btnExportPdf" title="Print or save this report as PDF">Print / PDF</button>
-  </div>
-  <div class="report-status">
-    <span class="copy-status" id="copyStatus" role="status" aria-live="polite" aria-atomic="true"></span>
-    <span class="copy-status" id="overlayStatus" role="status" aria-live="polite" aria-atomic="true" hidden></span>
-    <span class="hint" id="lookHint">Style is saved with the report</span>
-  </div>
-  <div class="report-actions" role="group" aria-label="Preview actions" id="reportPreviewActions" hidden>
-    <button type="button" class="btn" id="btnFullscreen" title="Fill the whole window (Esc to exit)" hidden>Fullscreen</button>
-    <button type="button" class="btn" id="btnOpenTab" title="Open in a new tab" hidden>Open in tab</button>
-  </div>
+<div class="bar" id="bar" hidden>
+  <button type="button" class="btn" id="btnCloseOverlay" title="Close (Esc)" aria-label="Close this report" hidden>✕</button>
+  <label for="theme">Design</label>
+  <select id="theme" aria-label="Design"></select>
+  <label>Page colour</label>
+  <span class="papers" id="papers" role="group" aria-label="Page colour"></span>
+  <label for="font">Font</label>
+  <select id="font" aria-label="Font"></select>
+  <button type="button" class="btn primary" id="btnToc" title="Table of contents">Contents</button>
+  <button type="button" class="btn" id="btnSearch" title="Search in report">Search</button>
+  <button type="button" class="btn" id="btnAnnotations" title="Annotations">Notes</button>
+  <button type="button" class="btn" id="btnCopy" title="Copy report HTML to clipboard">Copy</button>
+  <button type="button" class="btn" id="btnExportHtml" title="Export this report as a standalone HTML file">Export HTML</button>
+  <button type="button" class="btn" id="btnExportMd" title="Export this report as Markdown">Markdown</button>
+  <button type="button" class="btn" id="btnExportPdf" title="Print or save this report as PDF">Print / PDF</button>
+  <span class="spacer"></span>
+  <span class="copy-status" id="copyStatus" role="status" aria-live="polite" aria-atomic="true"></span>
+  <span class="copy-status" id="overlayStatus" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+  <span class="hint" id="lookHint">Style is saved with the report</span>
+  <button type="button" class="btn" id="btnFullscreen" title="Fill the whole window (Esc to exit)" hidden>Fullscreen</button>
+  <button type="button" class="btn" id="btnOpenTab" title="Open in a new tab" hidden>Open in tab</button>
 </div>
 <div class="wrap" id="wrap"><p class="err">Loading…</p></div>
 <button type="button" class="top-btn" id="btnTop" hidden aria-label="Back to top" title="Back to top">↑</button>
@@ -293,14 +276,12 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 </div>
 
 <script src="dexerion://assets/page-theme.js"></script>
-<script src="dexerion://assets/palette-disclosure.js"></script>
 <script src="dexerion://assets/ai-markdown.js"></script>
 <script src="dexerion://assets/ai-artifacts.js"></script>
 <script>
 (async () => {
   const wrap = document.getElementById('wrap');
   const bar = document.getElementById('bar');
-  const paperPalette = window.DexPalette.bind(document.getElementById('report-paper-palette'));
   const overlay = document.getElementById('overlay');
   const params = new URLSearchParams(location.search);
   let chatId = params.get('chat') || '';
@@ -326,7 +307,6 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
     if (!Object.prototype.hasOwnProperty.call(panels, name)) return;
     const el = panelEl(name);
     if (!el) return;
-    paperPalette.close();
     if (activePanel && activePanel !== name) closePanel(activePanel, false);
     if (!activePanel) panelReturnFocus = returnFocus || panelReturnFocus || document.activeElement;
     panels[name] = true;
@@ -1010,12 +990,11 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
     if (font) font.value = (art.font && window.DexArtifacts.REPORT_FONTS.includes(art.font)) ? art.font : 'neutral';
     const papers = document.getElementById('papers');
     if (papers) {
-      const current = window.DexArtifacts.REPORT_PAPERS.includes(art.paper) ? art.paper : 'paper';
+      const current = art.paper || 'paper';
       for (const dot of papers.querySelectorAll('.pdot')) {
         const sel = dot.dataset.paper === current;
         dot.classList.toggle('sel', sel);
         dot.setAttribute('aria-pressed', sel ? 'true' : 'false');
-        if (sel) paperPalette.select(dot.title, getComputedStyle(dot).backgroundColor);
       }
     }
   }
@@ -1084,12 +1063,9 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
       dot.className = 'pdot';
       dot.dataset.paper = p;
       dot.title = label(p);
-      dot.setAttribute('aria-label', 'Page colour: ' + label(p));
+      dot.setAttribute('aria-label', 'Page colour: ' + p);
       dot.setAttribute('aria-pressed', 'false');
-      dot.addEventListener('click', () => {
-        paperPalette.close(true);
-        applyLook({ paper: p });
-      });
+      dot.addEventListener('click', () => applyLook({ paper: p }));
       papers.appendChild(dot);
     }
     theme.addEventListener('change', () => applyLook({ theme: theme.value }));
@@ -1253,7 +1229,6 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
     const tabBtn = document.getElementById('btnOpenTab');
     const fsBtn = document.getElementById('btnFullscreen');
     const statusEl = document.getElementById('overlayStatus');
-    document.getElementById('reportPreviewActions').hidden = false;
     closeBtn.hidden = false;
     tabBtn.hidden = false;
     fsBtn.hidden = false;

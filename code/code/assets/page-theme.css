@@ -126,7 +126,7 @@ body > * { position: relative; z-index: 1; }
 
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.005em; margin: 0; }
 p { margin: 0; }
-a { color: var(--accent-text); }
+a { color: var(--accent); }
 
 /* Text selection: the user's accent. Websites get the same 45% mix, injected as
    a user-origin stylesheet from src/main/browser.js, so highlighting reads the
@@ -169,7 +169,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent-text);
+  color: var(--accent);
   margin-bottom: 10px;
 }
 .dx-head h1 { font-size: 27px; letter-spacing: -0.01em; }
@@ -402,7 +402,7 @@ button { font-family: inherit; }
   transition: left var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .dx-sw input:checked + i { background: var(--accent); border-color: transparent; }
-.dx-sw input:checked + i::after { left: 20px; background: var(--dx-on-accent); }
+.dx-sw input:checked + i::after { left: 20px; background: #fff; }
 .dx-sw input:focus-visible + i { box-shadow: 0 0 0 3px var(--dx-focus-ring); }
 
 /* ---------- badges + chips ---------- */
@@ -412,7 +412,7 @@ button { font-family: inherit; }
   font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 3px 8px;
   border-radius: var(--r-xs);
-  color: var(--accent-text);
+  color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
 }
@@ -510,100 +510,4 @@ button { font-family: inherit; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Internal pages: layout only. Existing theme tokens and all state paints
-   remain the authority. The legacy inline layouts still own the chat state. */
-body:has(> .wrap > #enter) .wrap {
-  max-width:min(100%, 610px);padding-inline:clamp(16px, 6vw, 42px);
-}
-body:has(> .wrap > #enter) .wrap h1 {
-  font-size:clamp(30px, 5.5vw, 44px);letter-spacing:-.035em;line-height:1.12;
-  text-wrap:balance;
-}
-body:has(> .wrap > #enter) .wrap .qline {max-width:400px;text-wrap:pretty}
-body:has(> .wrap > #enter) .wrap #enter {height:40px;padding-inline:20px;border-radius:9px}
-@media (max-height:480px) {
-  body:has(> .wrap > #enter) .wrap .mark {width:45px;height:45px;margin-bottom:12px}
-  body:has(> .wrap > #enter) .wrap .date {margin-bottom:12px}
-  body:has(> .wrap > #enter) .wrap .qline {padding-top:12px}
-  body:has(> .wrap > #enter) .wrap #enter {margin-top:16px}
-}
-body:not(.ai):has(> .cmd > #q) .cmd {margin-top:22px}
-body:not(.ai):has(> .cmd > #q) .cmd #q {border-radius:12px;padding-inline-end:68px}
-body:not(.ai):has(> .cmd > #q) .acts #ai-btn {border-radius:9px}
-body:not(.ai):has(> .cmd > #q) #starred-title {margin-block:32px 12px}
-body:not(.ai):has(> .cmd > #q) #starred .tile {min-width:0;border-radius:9px}
-@media (max-width:900px) {
-  /* The in-flow clock and centered wordmark are independent of the sky. */
-  body:not(.ai):has(> .cmd > #q) .daylight {margin-block-end:16px}
-}
-@media (max-height:640px) {
-  body:not(.ai):has(> .cmd > #q) {padding-block-start:clamp(18px, 7vh, 36px)}
-  body:not(.ai):has(> .cmd > #q) .mark .crest {width:60px;height:60px;border-radius:16px}
-  body:not(.ai):has(> .cmd > #q) .mark h1 {margin-block-start:13px}
-  body:not(.ai):has(> .cmd > #q) #starred-title {margin-block-start:26px}
-}
-@media (max-width:430px) {
-  body:not(.ai):has(> .cmd > #q) #starred {grid-template-columns:minmax(0,1fr)}
-}
-
-.dx-page {padding-inline:clamp(16px, 4vw, 32px)}
-.dx-head h1 {line-height:1.15;letter-spacing:-.025em}
-.dx-card-head, .dx-card-body {padding-inline:clamp(14px, 3vw, 22px)}
-.dx-card, .dx-list {border-radius:12px}
-.dx-search input {border-radius:9px}
-.dx-item {padding-inline:clamp(12px, 3vw, 18px);gap:clamp(8px, 2vw, 14px)}
-
-/* Welcome and New Tab use the existing paired dark/light marks. Resize only
-   the hero logos; the report, assistant avatar, and original images stay put. */
-body > .wrap:has(> button#enter) > .mark {
-  width: clamp(64px, 19vh, 88px);
-  height: auto;
-  aspect-ratio: 1;
-}
-body > .wrap:has(> button#enter) > .mark > img { border-radius: 22%; }
-body > .wrap > #enter:focus-visible { outline-color: var(--dx-focus-ring); }
-
-body:has(> .cmd > #q) > .mark > .crest {
-  width: clamp(74px, 14vh, 94px);
-  height: auto;
-  aspect-ratio: 1;
-  border-radius: 22%;
-}
-body > .cmd > #q:focus,
-body #ai-form #ai-box:focus { border-color: var(--dx-focus-ring); }
-body > .cmd > #q:focus ~ .lead,
-body > .acts > #ai-btn:is(:hover, :focus-visible),
-body > .acts > #ai-btn svg,
-body #ai-log a.md-a { color: var(--accent-text); }
-
-/* Search, Starred and Tasks use one gutter. The daylight layer, quote,
-   assistant mode and existing narrow-window breakpoints stay as before. */
-body:not(.ai):has(> .cmd > #q) {
-  --start-column:min(620px,92vw,100%);
-}
-body:not(.ai):has(> .cmd > #q) > :is(.cmd,#starred-title,#starred) {width:var(--start-column)}
-body:not(.ai) #starred .tile {padding-inline:11px;box-shadow:none}
-body:not(.ai) #starred .tile:hover {transform:none}
-body:not(.ai) #starred .tile .x {width:24px;height:24px}
-body:not(.ai) #starred .tile:has(> .x) {padding-inline-end:34px}
-body:not(.ai) > .mark h1 {letter-spacing:.105em}
-body:not(.ai) > .acts #ai-btn:hover {transform:none}
-@media (max-width:1100px) {
-  body:not(.ai):has(> .cmd > #q) > #tasks-panel {width:var(--start-column)}
-
-/* Keep Library rows aligned on narrower embedded pages without changing
-   which buttons are displayed or their keyboard order. */
-.dx-page > .dx-list .dx-item .actions {gap:4px}
-.dx-page > .dx-list .dx-item .main b {line-height:1.35}
-.dx-page > .dx-list .dx-item .main small {margin-block-start:3px}
-.dx-page > .dx-section h2 {letter-spacing:.11em}
-@media (max-width:480px) {
-  .dx-page {padding-block-start:30px}
-  .dx-page > .dx-list .dx-item .actions {flex-wrap:wrap;justify-content:flex-end;max-width:48%}
-}
-
-@media (forced-colors:active) {
-  body > .cmd > #q:focus-visible {outline:2px solid Highlight;outline-offset:1px}
 }

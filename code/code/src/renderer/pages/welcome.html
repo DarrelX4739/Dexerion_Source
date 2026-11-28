@@ -44,20 +44,6 @@ body.s2 h1,body.s2 .sub,body.s2 .date,body.s2 .qline{opacity:1;transform:none}
   transition:opacity .4s var(--ease),transform .4s var(--ease)}
 body.s3 .enter{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion: reduce){ .mark,h1,.sub,.date,.qline,.enter{transition:none} }
-
-/* Keep the brand, daily quote and existing entrance sequence. Give the
-   greeting editorial spacing rather than adding decorative UI. */
-.wrap:has(> #enter) {padding-inline:clamp(16px,5vw,32px)}
-.wrap > #greet {font-size:clamp(26px,6vw,40px);font-weight:570;line-height:1.12;text-wrap:balance}
-.wrap > .qline {max-inline-size:39ch}
-.wrap > #enter {justify-content:center;min-inline-size:134px;border-radius:9px}
-@media (max-height:380px) {
-  body:has(> .wrap > #enter) {overflow:auto;align-items:safe center}
-  body:has(> .wrap > #enter) .wrap {padding-block:12px}
-  body:has(> .wrap > #enter) .wrap > .mark {width:clamp(36px,16vh,60px);height:auto}
-  .wrap > .qline {padding-top:12px}
-  .qline > .quote {font-size:15px;line-height:1.4}
-}
 </style>
 </head><body>
 <div class="wrap">
