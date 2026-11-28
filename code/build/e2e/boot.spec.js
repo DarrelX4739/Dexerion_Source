@@ -70,10 +70,16 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     //    (persisted and clamped in main), and one-click Summarise sends.
     await win.keyboard.press('Control+Shift+A');
     await expect(win.locator('#ai-sidebar')).toBeHidden();
-    await win.evaluate(async () => {
+    // A hosted Windows display can be narrower than the default Xvfb
+    // screen. Leave room for an actual 80px drag below the existing 52vw cap;
+    // keep the 600px preference on wider windows.
+    const viewport = await win.evaluate(() => window.innerWidth);
+    expect(viewport, 'sidebar drag needs a window wider than the mobile breakpoint').toBeGreaterThan(650);
+    const preferredWidth = viewport > 1100 ? 600 : Math.max(320, Math.min(600, Math.floor(viewport * 0.52) - 90));
+    await win.evaluate(async (width) => {
       await window.dexerion.invoke('dex:ai-page-set', { usePage: true });
-      await window.dexerion.invoke('dex:ai-ui-set', { width: 600 });
-    });
+      await window.dexerion.invoke('dex:ai-ui-set', { width });
+    }, preferredWidth);
     // The shell dedupes repeated shortcuts for 350ms (one press can arrive
     // from both the shell handler and the app-menu accelerator).
     await win.waitForTimeout(600);
@@ -82,16 +88,16 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     await expect(win.locator('#ai-resize')).toHaveCount(1);
     const appliedWidth = await win.evaluate(() =>
       getComputedStyle(document.querySelector('#ai-sidebar')).getPropertyValue('--ai-w').trim());
-    expect(appliedWidth).toBe('600px');
+    expect(appliedWidth).toBe(preferredWidth + 'px');
     // The rendered panel must match the reserved width (a stale 480px rule
     // once left the panel pinned while main reserved the dragged width).
     const geometry = await win.evaluate(() => {
       const rect = document.querySelector('#ai-sidebar').getBoundingClientRect();
       return { left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width), inner: window.innerWidth };
     });
-    expect(geometry.width).toBe(600);
+    expect(geometry.width).toBe(preferredWidth);
     expect(Math.abs(geometry.right - geometry.inner)).toBeLessThanOrEqual(2);
-    expect(Math.abs(geometry.left - (geometry.inner - 600))).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry.left - (geometry.inner - preferredWidth))).toBeLessThanOrEqual(2);
 
     // A real drag: the rendered width and the persisted width move together.
     const handleBox = await win.locator('#ai-resize').boundingBox();
@@ -105,7 +111,7 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
       const prefs = await window.dexerion.invoke('dex:ai-ui-get');
       return { width: Math.round(rect.width), right: Math.round(rect.right), prefs: prefs.width, inner: window.innerWidth };
     });
-    expect(afterDrag.width).toBeGreaterThan(600);
+    expect(afterDrag.width).toBeGreaterThan(preferredWidth);
     expect(Math.abs(afterDrag.width - afterDrag.prefs)).toBeLessThanOrEqual(1);
     expect(Math.abs(afterDrag.right - afterDrag.inner)).toBeLessThanOrEqual(2);
     // The one-click Summarise button is gone; the same job is now a sentence.

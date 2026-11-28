@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/dexerion-engine-candidate.yml'
       - 'code/build/e2e/engine-candidate.spec.js'
+      - 'code/build/e2e/boot.spec.js'
 permissions:
   contents: read
 
