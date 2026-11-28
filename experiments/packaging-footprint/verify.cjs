@@ -38,13 +38,15 @@ function compareLock(base, next) {
 function snapshot(asar, archive) {
   const entries = new Map();
   for (const raw of asar.listPackage(archive)) {
-    const entry = raw.replace(/\\/g, '/').replace(/^\//, '');
-    const info = asar.statFile(archive, entry);
+    // The ASAR filesystem looks up native paths; normalise only the report ID.
+    const native = raw.replace(/^[\\/]+/, '');
+    const entry = native.replace(/\\/g, '/').replace(/^\//, '');
+    const info = asar.statFile(archive, native, false);
     if (info.files) continue;
     if (info.link) {
       entries.set(entry, { link: info.link });
     } else {
-      const data = asar.extractFile(archive, entry);
+      const data = asar.extractFile(archive, native);
       entries.set(entry, { bytes: data.length, sha256: crypto.createHash('sha256').update(data).digest('hex') });
     }
   }
