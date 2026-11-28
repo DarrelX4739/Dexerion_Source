@@ -1,0 +1,140 @@
+{
+  "architecture": "x86_64",
+  "binaryPipeUs": {
+    "batch1": 26.29,
+    "batch128": 0.726,
+    "batch32": 1.101,
+    "batch8": 3.995
+  },
+  "cpuAdaptiveUs": {
+    "idle": {
+      "js": 0.484,
+      "napiObject": 2.404,
+      "napiPacked": 0.148,
+      "normalizedJS": 0.066
+    },
+    "mixed": {
+      "js": 0.9,
+      "napiObject": 2.458,
+      "napiPacked": 0.151,
+      "normalizedJS": 0.086
+    }
+  },
+  "electron": "44.4.5",
+  "environment": {
+    "cpuModel": "AMD EPYC 9V74 80-Core Processor",
+    "g++": "14.2.0 -O2",
+    "mode": "Electron run-as-Node; no GUI/GPU",
+    "node": "24.21.0",
+    "v8": "15.2.124.28-electron.0"
+  },
+  "hosts": 5,
+  "hotAdaptiveUs": {
+    "idle": {
+      "js": 0.477,
+      "napiObject": 2.346,
+      "napiPacked": 0.143,
+      "normalizedJS": 0.064
+    },
+    "mixed": {
+      "js": 0.896,
+      "napiObject": 2.392,
+      "napiPacked": 0.148,
+      "normalizedJS": 0.084
+    }
+  },
+  "memoryUs": {
+    "over1": {
+      "jsUs": 0.066,
+      "nativeObjectUs": 1.882
+    },
+    "over128": {
+      "jsUs": 10.142,
+      "nativeObjectUs": 136.084
+    },
+    "over32": {
+      "jsUs": 2.097,
+      "nativeObjectUs": 34.878
+    },
+    "over512": {
+      "jsUs": 54.445,
+      "nativeObjectUs": 550.004
+    },
+    "over8": {
+      "jsUs": 0.391,
+      "nativeObjectUs": 9.619
+    },
+    "under": {
+      "jsUs": 0.032,
+      "nativeObjectUs": 0.692
+    }
+  },
+  "oneSecondPacedSamplesPerMethod": 16,
+  "oneSecondPacedWallUs": {
+    "js": 9.204,
+    "napiObject": 40.831,
+    "napiPacked": 8.513,
+    "pipe": 345.701
+  },
+  "packedMemoryUs": {
+    "over1": {
+      "jsUs": 0.067,
+      "nativePackedUs": 0.179
+    },
+    "over128": {
+      "jsUs": 10.024,
+      "nativePackedUs": 14.069
+    },
+    "over32": {
+      "jsUs": 2.004,
+      "nativePackedUs": 3.477
+    },
+    "over512": {
+      "jsUs": 54.256,
+      "nativePackedUs": 65.855
+    },
+    "over8": {
+      "jsUs": 0.431,
+      "nativePackedUs": 1.199
+    },
+    "under": {
+      "jsUs": 0.024,
+      "nativePackedUs": 0.088
+    }
+  },
+  "scope": "Synthetic policy decisions; not whole-browser or Edge results.",
+  "spawnHelperUs": 3101.841,
+  "tasksCacheMissUs": {
+    "0": {
+      "direct": 0.025,
+      "native": 0.092,
+      "original": 0.042
+    },
+    "100": {
+      "direct": 10.83,
+      "native": 64.823,
+      "original": 19.485
+    },
+    "20": {
+      "direct": 1.479,
+      "native": 12.493,
+      "original": 2.578
+    },
+    "2000": {
+      "direct": 483.62,
+      "native": 1646.773,
+      "original": 892.113
+    },
+    "3": {
+      "direct": 0.196,
+      "native": 2.14,
+      "original": 0.312
+    },
+    "500": {
+      "direct": 98.158,
+      "native": 378.577,
+      "original": 176.028
+    }
+  },
+  "textPipeSingleUs": 38.759
+}
