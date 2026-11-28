@@ -305,6 +305,36 @@ async function main() {
   }
 }
 
-if (require.main === module) main().then(result => console.log(JSON.stringify(result, null, 2)))
-  .catch(e => { console.error(e.stack || e); process.exitCode = 1; });
-module.exports = { startFixture, seedExtension, runSettings, fixtureHtml };
+function verifyResult(result, {strict, want} = runSettings()) {
+  assert.equal(result.electron, '44.4.5');
+  assert.equal(result.platform, process.platform);
+  assert.equal(result.appModified, false);
+  assert.equal(result.windowsCounterRequired, strict);
+  assert.equal(result.sandboxExpectation, want);
+  if (strict) assert.equal(result.platform, 'win32');
+  const { tabMetric, realCredentialManager, popup, isolation } = result.checks;
+  assert.equal(realCredentialManager, true);
+  assert.deepEqual(isolation, { wrongOriginDenied:true, differentAccountSeparated:true, extensionRestoredBoth:true });
+  assert.deepEqual([popup.sharesStorage, popup.liveOpener, popup.plainPopupCredentialAccessDenied], [true,true,true]);
+  for (const m of [tabMetric, popup.metric]) {
+    assert.equal(m.stablePid, true);
+    assert.ok(Number.isInteger(m.workingSetKiB) && m.workingSetKiB > 0);
+    if (strict || m.sandboxed !== null) assert.equal(m.sandboxed, want);
+  }
+  return result;
+}
+
+function outputPath(args) {
+  if (!args.length) return null;
+  assert.ok(args.length === 2 && args[0] === '--out' && args[1], 'Usage: full-app-baseline.cjs [--out JSON_FILE]');
+  return path.resolve(args[1]);
+}
+
+if (require.main === module) Promise.resolve().then(async () => {
+  const file = outputPath(process.argv.slice(2));
+  const result = verifyResult(await main());
+  const report = JSON.stringify(result, null, 2) + '\n';
+  if (file) fs.writeFileSync(file, report, { encoding:'utf8', flag:'wx' });
+  process.stdout.write(report);
+}).catch(e => { console.error(e.stack || e); process.exitCode = 1; });
+module.exports = { startFixture, seedExtension, runSettings, fixtureHtml, outputPath, verifyResult };

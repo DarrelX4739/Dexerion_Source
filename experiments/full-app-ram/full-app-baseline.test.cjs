@@ -36,6 +36,9 @@ test('expectations are assertions only, not app switches', () => {
   assert.equal(fixtures.runSettings({}).strict, false);
   assert.equal(fixtures.runSettings({ DEX_RAM_EXPECT_WEB_SANDBOX:'1' }).want, true);
   assert.throws(() => fixtures.runSettings({DEX_RAM_EXPECT_WEB_SANDBOX:'yes'}));
+  assert.equal(fixtures.outputPath([]), null);
+  assert.equal(fixtures.outputPath(['--out','baseline.json']), path.resolve('baseline.json'));
+  assert.throws(() => fixtures.outputPath(['--out']));
 });
 
 test('local fixture permits only fixed host/method/route and never reflects strings', async () => {
@@ -54,4 +57,23 @@ test('local fixture permits only fixed host/method/route and never reflects stri
     assert.equal((await request('/login',expected.host,'POST'))[0],404);
     assert.equal(fixture.count(),1);
   } finally { await fixture.close(); }
+});
+
+test('schema gate fails on missing isolation, sandbox mismatch or unverified PID', () => {
+  const metric={stablePid:true,workingSetKiB:1024,sandboxed:false};
+  const proof={electron:'44.4.5',platform:process.platform,appModified:false,sandboxExpectation:false,
+    windowsCounterRequired:false,checks:{realCredentialManager:true,tabMetric:metric,
+      popup:{sharesStorage:true,liveOpener:true,plainPopupCredentialAccessDenied:true,metric},
+      isolation:{wrongOriginDenied:true,differentAccountSeparated:true,extensionRestoredBoth:true}}};
+  const expected={strict:false,want:false};
+  assert.equal(fixtures.verifyResult(proof,expected),proof);
+  for (const mutate of [
+    x => {delete x.checks.isolation;},
+    x => {x.checks.tabMetric.sandboxed=true;},
+    x => {x.checks.popup.metric.stablePid=false;},
+    x => {x.appModified=true;},
+  ]) {
+    const copy=structuredClone(proof);mutate(copy);
+    assert.throws(()=>fixtures.verifyResult(copy,expected));
+  }
 });

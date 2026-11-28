@@ -27,17 +27,19 @@ jobs:
           cache-dependency-path: code/build/package-lock.json
       - name: Install the checkout’s locked Electron and Playwright dependencies
         working-directory: code/build
-        run: npm ci
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node -p "require('electron')"
       - name: Validate loopback and disposable profile controls
         run: node --test experiments/full-app-ram/full-app-baseline.test.cjs
       - name: Launch unchanged Dexerion with a disposable profile
         shell: pwsh
         run: |
-          node experiments/full-app-ram/full-app-baseline.cjs | Tee-Object -FilePath full-app-ram-baseline.json
+          node experiments/full-app-ram/full-app-baseline.cjs --out full-app-ram-baseline.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ((Get-Content full-app-ram-baseline.json -Raw | ConvertFrom-Json).appModified -ne $false) {
-            throw 'No verified stock app baseline'
-          }
+          node -e "require('./experiments/full-app-ram/full-app-baseline.cjs').verifyResult(JSON.parse(require('node:fs').readFileSync('full-app-ram-baseline.json','utf8')))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: dexerion-full-app-ram-baseline-windows
