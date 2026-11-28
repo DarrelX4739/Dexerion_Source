@@ -1,0 +1,63 @@
+name: Dexerion Windows native cycle-counter sensitivity
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-windows-cycle-sensitivity.yml'
+      - 'code/build/scripts/query-owned-windows-cpu.ps1'
+      - 'code/build/scripts/windows-cycle-interval.cjs'
+      - 'code/build/scripts/test-windows-cycle-interval.cjs'
+      - 'code/build/scripts/diagnose-native-windows-cycle-sensitivity.cjs'
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 14
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Verify already installed host API tool and use existing app lock
+        shell: pwsh
+        run: |
+          Get-Command pwsh.exe -ErrorAction Stop | Out-Null
+          $tokens=$null
+          $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'scripts/query-owned-windows-cpu.ps1'),[ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw ($errors -join '; ') }
+          npm ci --include=dev
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-windows-cycle-interval.cjs scripts/test-site-memory-diagnostic.cjs scripts/test-measure-native-browser.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build current Windows unpacked product, no publication
+        shell: pwsh
+        run: |
+          $out=Join-Path $env:RUNNER_TEMP 'dex-win-cycle'
+          node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$out" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compare documented counter sensitivity on one visible exact tab
+        shell: pwsh
+        run: |
+          $exe=Join-Path $env:RUNNER_TEMP 'dex-win-cycle/win-unpacked/Dexerion.exe'
+          node scripts/diagnose-native-windows-cycle-sensitivity.cjs $exe (Join-Path $env:RUNNER_TEMP 'dex-windows-cycle-sensitivity.json')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-windows-cycle-sensitivity
+          path: ${{ runner.temp }}/dex-windows-cycle-sensitivity.json
+          if-no-files-found: ignore
+          retention-days: 7
