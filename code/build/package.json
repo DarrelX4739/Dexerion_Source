@@ -42,6 +42,7 @@
     "test:e2e:artifacts": "playwright test e2e/artifacts.spec.js",
     "test:intensive": "node scripts/intensive-e2e.js",
     "dist:win": "electron-builder --win --config electron-builder.json",
+    "dist:win:branded": "node installer/branded/build.cjs",
     "pack:win": "electron-builder --win --dir --config electron-builder.json"
   },
   "devDependencies": {
