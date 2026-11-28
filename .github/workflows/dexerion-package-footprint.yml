@@ -1,0 +1,39 @@
+name: Dexerion same-source archive footprint
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-package-footprint.yml'
+      - 'experiments/package-footprint/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked dependencies
+        working-directory: code/build
+        run: npm ci --include=dev
+      - name: Build unsigned unpacked archives and check every retained byte
+        run: node experiments/package-footprint/compare.cjs package-footprint.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-footprint-${{ matrix.os }}
+          path: package-footprint.json
+          if-no-files-found: error
+          retention-days: 7
