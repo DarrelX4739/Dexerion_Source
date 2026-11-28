@@ -43,4 +43,30 @@ function matchesInventory(tabs, expected) {
     new Set(tabs).size === expected.length && expected.every((url) => tabs.includes(url));
 }
 
-module.exports = { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
+function memoryByRole(tree, roleOf) {
+  const byRole = new Map();
+  const totals = { count: 0, wsBytes: 0, privateBytes: 0 };
+  const add = (row, field, value) => {
+    // Missing counters are not zeros. If any process lacks a measurement,
+    // keep the affected total unavailable rather than under-reporting it.
+    row[field] = row[field] !== null && Number.isFinite(value) && value >= 0
+      ? row[field] + value : null;
+  };
+  for (const process of tree) {
+    const role = roleOf(process);
+    if (!byRole.has(role)) byRole.set(role, { count: 0, wsBytes: 0, privateBytes: 0 });
+    for (const row of [byRole.get(role), totals]) {
+      row.count++;
+      add(row, 'wsBytes', process.wsBytes);
+      add(row, 'privateBytes', process.privateBytes);
+    }
+  }
+  return { byRole: Object.fromEntries(byRole), totals };
+}
+
+function workloadOrder(browsers, trial, reverseFirst) {
+  return Boolean(reverseFirst) !== (trial % 2 === 0)
+    ? [...browsers].reverse() : [...browsers];
+}
+
+module.exports = { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };

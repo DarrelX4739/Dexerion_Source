@@ -1,7 +1,7 @@
 # Tester measurement tooling (TESTER-BRIEF.md req 2/3/C3): one full-process
 # snapshot for whole-tree attribution. Emits every process with
 #   - UserModeTime + KernelModeTime (100 ns units) for CPU-time deltas,
-#   - WorkingSetSize (bytes) for the RAM axis,
+#   - WorkingSetSize (bytes) for the RAM axis and System.Diagnostics.Process.PrivateMemorySize64 for private allocations,
 #   - CommandLine + ParentProcessId so the driver can seed the browser tree
 #     by --user-data-dir and expand it along parent links (renderers, GPU,
 #     utility, crashpad), and classify process roles.
@@ -14,12 +14,20 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $procs = Get-CimInstance Win32_Process -ErrorAction Stop
+$capturedAt = (Get-Date).ToUniversalTime().ToString('o')
+$privateByPid = @{}
+foreach ($process in Get-Process -ErrorAction SilentlyContinue) {
+  try {
+    $bytes = $process.PrivateMemorySize64
+    if ($null -ne $bytes) { $privateByPid[[int]$process.Id] = [uint64]$bytes }
+  } catch {}
+}
 
 $list = New-Object System.Collections.Generic.List[object]
 foreach ($p in $procs) {
   $user = 0
   $kernel = 0
-  $ws = 0
+  $ws = $null
   if ($null -ne $p.UserModeTime) { $user = [int64]$p.UserModeTime }
   if ($null -ne $p.KernelModeTime) { $kernel = [int64]$p.KernelModeTime }
   if ($null -ne $p.WorkingSetSize) { $ws = [uint64]$p.WorkingSetSize }
@@ -29,13 +37,14 @@ foreach ($p in $procs) {
     name      = $p.Name
     cpu100ns  = ($user + $kernel)
     wsBytes   = $ws
+    privateBytes = $privateByPid[[int]$p.ProcessId]
     cmdline   = $p.CommandLine
   })
 }
 
 $result = [ordered]@{
-  capturedAt = (Get-Date).ToUniversalTime().ToString('o')
-  unit       = 'cpu100ns=100ns, wsBytes=bytes'
+  capturedAt = $capturedAt
+  unit       = 'cpu100ns=100ns, wsBytes=bytes, privateBytes=bytes'
   count      = $list.Count
   processes  = $list
 }

@@ -46,7 +46,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
-const { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -384,16 +384,24 @@ async function runTrial(browser, scenario, base, trialIdx) {
     for (const p of treeB) roles[roleOf(p)] = (roles[roleOf(p)] || 0) + 1;
     t.cpu = {
       treeCpuSec: round(cpuSec, 2),
-      cpuCorePct: round(cpuSec / wallSec * 100, 1), // percent of one logical core
+      cpuCorePct: round(cpuSec / wallSec * 100, 3), // percent of one logical core
       processCountA: treeA.length,
       processCountB: treeB.length,
       roles,
       newPidsMidWindow: cd.newPids,
       exitedPidsMidWindow: cd.exitedPids,
     };
-    const wsB = treeB.reduce((a, p) => a + Number(p.wsBytes || 0), 0) / (1024 * 1024);
-    const wsA = treeA.reduce((a, p) => a + Number(p.wsBytes || 0), 0) / (1024 * 1024);
-    t.ram = { wsMBA: round(wsA, 1), wsMBB: round(wsB, 1) };
+    const memoryA = memoryByRole(treeA, roleOf);
+    const memoryB = memoryByRole(treeB, roleOf);
+    const toMiB = (bytes) => bytes === null ? null : round(bytes / (1024 * 1024), 1);
+    t.ram = {
+      wsMBA: toMiB(memoryA.totals.wsBytes),
+      wsMBB: toMiB(memoryB.totals.wsBytes),
+      privateMiBB: toMiB(memoryB.totals.privateBytes),
+      byRoleB: Object.fromEntries(Object.entries(memoryB.byRole).map(([role, row]) => [
+        role, { count: row.count, wsMiB: toMiB(row.wsBytes), privateMiB: toMiB(row.privateBytes) },
+      ])),
+    };
 
     // GPU axis, grouped by pid and filtered to the tree.
     if (hasGpuSample(gpuFinished)) {
@@ -494,11 +502,11 @@ function pctOfEdge(dexS, edgeS) {
       for (const browser of BROWSERS) results.scenarios[scenario][browser] = { trials: [], pending: [] };
       console.log('=== scenario: ' + scenario + ' ===');
       const trialOrder = [];
-      // Interleaved trials with a randomized browser order each round: both
-      // arms see the same machine minutes, so co-tenant drift cannot favor
-      // one browser (brief req 1/8: repeated controlled trials, no gaming).
+      // Randomise only the first slot, then alternate to bound order imbalance
+      // to one round while keeping the two arms paired in time.
+      const reverseFirst = Math.random() < 0.5;
       for (let i = 1; i <= TRIALS; i += 1) {
-        const order = Math.random() < 0.5 ? [...BROWSERS] : [...BROWSERS].reverse();
+        const order = workloadOrder(BROWSERS, i, reverseFirst);
         trialOrder.push({ trial: i, order });
         for (const browser of order) {
           const elapsedMin = (Date.now() - startedAt) / 60000;
@@ -543,6 +551,14 @@ function pctOfEdge(dexS, edgeS) {
         g.nValid = valid.length;
         g.summary = {};
         for (const [axis, fn] of Object.entries(AXES)) g.summary[axis] = summarize(valid, fn);
+        g.privateMiB = summarize(valid, (t) => t.ram?.privateMiBB);
+        g.ramByRole = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.ram?.byRoleB || {})))].sort().map((role) => [
+          role, {
+            wsMiB: summarize(valid, (t) => t.ram?.byRoleB[role]?.wsMiB),
+            privateMiB: summarize(valid, (t) => t.ram?.byRoleB[role]?.privateMiB),
+          },
+        ]));
+        console.log('  RAM by role ' + browser + ': ' + JSON.stringify(g.ramByRole));
         // Within-sample power spread flag (noise-limited attribution).
         g.noiseLimited = valid.map((t) => ({
           trial: t.trial,
@@ -564,7 +580,7 @@ function pctOfEdge(dexS, edgeS) {
       }
     }
 
-    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B. GPU = GPU Engine utilisation percentage points summed per pid + GPU Process Memory Local Usage, tree-filtered. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
+    results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B; role working sets and private allocations are diagnostic only (not private resident memory). GPU = GPU Engine utilisation percentage points summed per pid + GPU Process Memory Local Usage, tree-filtered. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
     const outJson = path.join(OUT_DIR, 'measure-protocol-' + (process.env.DEX_BUILD_DIR ? 'baseline' : 'main') + '.json');
     fs.writeFileSync(outJson, JSON.stringify(results, null, 2), 'utf8');
     console.log('PROTOCOL EVIDENCE: ' + outJson);

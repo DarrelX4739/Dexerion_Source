@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -52,4 +52,35 @@ test('multitasking uses one distinct foreground URL and a matching inventory', (
   assert.ok(matchesInventory([...urls].reverse(), urls));
   assert.equal(matchesInventory([urls[1], ...urls.slice(1)], urls), false);
   assert.equal(matchesInventory(urls.slice(1), urls), false);
+});
+
+
+test('memory roles sum counts and counters independently without converting missing values to zero', () => {
+  const result = memoryByRole([
+    { role: 'browser', wsBytes: 10, privateBytes: 5 },
+    { role: 'renderer', wsBytes: 40, privateBytes: 20 },
+    { role: 'renderer', wsBytes: 50, privateBytes: null },
+    { role: 'gpu-process', wsBytes: 0, privateBytes: 0 },
+  ], (p) => p.role);
+  assert.deepEqual(result, {
+    byRole: {
+      browser: { count: 1, wsBytes: 10, privateBytes: 5 },
+      renderer: { count: 2, wsBytes: 90, privateBytes: null },
+      'gpu-process': { count: 1, wsBytes: 0, privateBytes: 0 },
+    },
+    totals: { count: 4, wsBytes: 100, privateBytes: null },
+  });
+  const missingWorkingSet = memoryByRole([{ role: 'renderer', privateBytes: 42 }], (p) => p.role);
+  assert.deepEqual(missingWorkingSet.totals, { count: 1, wsBytes: null, privateBytes: 42 });
+});
+
+test('trial orders alternate from either starting browser without mutating the input', () => {
+  const pair = ['edge', 'dexerion'];
+  assert.deepEqual([1, 2, 3, 4, 5].map((i) => workloadOrder(pair, i, false)), [
+    pair, ['dexerion', 'edge'], pair, ['dexerion', 'edge'], pair,
+  ]);
+  assert.deepEqual(workloadOrder(pair, 1, true), ['dexerion', 'edge']);
+  assert.deepEqual(workloadOrder(pair, 2, true), pair);
+  assert.deepEqual(workloadOrder(['edge'], 1, true), ['edge']);
+  assert.deepEqual(pair, ['edge', 'dexerion']);
 });
