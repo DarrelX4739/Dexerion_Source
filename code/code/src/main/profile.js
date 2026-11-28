@@ -158,10 +158,11 @@ class ProfileStore {
     };
   }
 
-  loadAccountData(id) {
+  loadAccountData(id, residentTasks) {
     const d = this.accountDir(id);
     const data = this.blankAccountData();
     for (const k of Object.keys(data)) {
+      if (k === 'tasks' && residentTasks !== undefined) { data.tasks = residentTasks; continue; }
       try {
         const p = path.join(d, k === 'topSites' ? 'topsites.json' : k === 'closedTabs' ? 'closed-tabs.json' : k + '.json');
         if (fs.existsSync(p)) data[k] = readJson(p);
@@ -169,6 +170,32 @@ class ProfileStore {
     }
     if (!data.bookmarks.roots) data.bookmarks = this.blankAccountData().bookmarks;
     return data;
+  }
+
+  loadAccountReminderData(id) {
+    const d = this.accountDir(id);
+    let bookmarks;
+    // The full loader rejects a parsed null bookmark document. Keep that
+    // existing skip for reminders too, without retaining the bookmark tree.
+    try { bookmarks = readJson(path.join(d, 'bookmarks.json')); } catch {}
+    if (bookmarks === null) throw new TypeError('Invalid account bookmarks');
+    let tasks = [];
+    try { tasks = readJson(path.join(d, 'tasks.json')); } catch {}
+    return { tasks };
+  }
+
+  saveAccountReminderData(id, data) {
+    try {
+      const d = this.accountDir(id);
+      fs.mkdirSync(d, { recursive: true });
+      writeJsonAtomic(path.join(d, 'tasks.json'), data.tasks ?? []);
+      this.lastError = '';
+      return true;
+    } catch (e) {
+      this.lastError = String((e && e.message) || e);
+      console.warn('[dexerion] account save failed', id, this.lastError);
+      return false;
+    }
   }
 
   // Returns true when every account file was written, false when any write

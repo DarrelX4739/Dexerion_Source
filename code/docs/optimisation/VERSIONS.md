@@ -226,3 +226,19 @@ A native-layout inspection found 1,188 repeated bounds writes in a
 does not establish native CPU savings, and a bounds cache needs real
 fullscreen, minimize/restore and reparent validation. Native layout was
 left unchanged.
+
+### Dormant account reminder sweep
+
+Keep the reminder task list resident without also retaining dormant accounts'
+histories, bookmarks, chats or other profile data. Switching to an account
+promotes the in-memory task list before normal account reads or saves. The
+existing one-time boot sweep and heartbeat cadence stay unchanged, and
+changed task flags still use the existing atomic persistence path. Set
+`DEX_COLD_ACCOUNT_TASKS=off` to restore the previous loading path.
+
+An alternating Node/disk component check used eight seeded inactive accounts.
+The first sweep went from 80 to 16 JSON reads and from 38.62 ms to 1.52 ms
+median. The isolated post-GC incremental JavaScript heap went from 14.47 MB
+to 25 KB. These figures are not whole-browser RAM; a same-build Electron
+A/B with 12 synthetic accounts measures that separately. Restart, quit,
+write failure, account activation and separation are covered independently.

@@ -30,6 +30,7 @@ async function launchOnce(options) {
   };
   let app = null;
   try {
+    if (options.seedProfile) await options.seedProfile(profile);
     // Generous: this is Chromium's cold start plus Playwright's CDP handshake,
     // and on a busy machine the handshake alone has been seen to exceed a
     // minute (measured app-side cold start is 12-15 s; the rest is contention).

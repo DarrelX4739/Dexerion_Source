@@ -33,6 +33,7 @@ function setup({ accounts = { a: { tasks: [{ ...original }] }, b: { tasks: [] } 
       sortTasks(list) { calls.sort++; return tasks.sortTasks(list); } },
     windows,
     accData: (id) => accounts[id],
+    reminderData: (id) => accounts[id],
     Aof: (e) => ({ st: e, A: accounts[e.accountId] }),
     needChrome: (e) => ({ st: e }),
     listAccounts: () => Object.keys(accounts).map((id) => ({ id })),

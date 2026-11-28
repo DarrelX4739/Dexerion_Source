@@ -38,7 +38,7 @@ jobs:
           npm run verify
           node --test scripts/test-*.cjs ../../.github/packaging/linux-launcher.test.cjs
       - name: Check real Electron boot, AI and toolbar controls
-        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js e2e/cold-accounts.spec.js
       - name: Check out the pre-optimisation reference at A/B milestones
         if: contains(github.event.head_commit.message, '[paired-ab]')
         uses: actions/checkout@v4
@@ -59,12 +59,17 @@ jobs:
           ref="$GITHUB_WORKSPACE/.ab-reference/code/build"
           if [[ -d "$ref/node_modules" ]]; then export DEX_CLOUD_REFERENCE_BUILD="$ref"; fi
           xvfb-run -a -s '-screen 0 1280x1024x24' node scripts/measure-cloud-linux.cjs
+      - name: Compare the dormant-account memory change on the same build
+        if: contains(github.event.head_commit.message, '[cold-accounts-ab]')
+        run: xvfb-run -a -s '-screen 0 1280x1024x24' node scripts/measure-cold-accounts.cjs
       - name: Keep comparison evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cloud-linux-comparison
-          path: code/build/cloud-comparison.json
+          path: |
+            code/build/cloud-comparison.json
+            code/build/cloud-cold-account-comparison.json
           if-no-files-found: ignore
           retention-days: 7
       - name: Run full Electron regression suite at milestones
