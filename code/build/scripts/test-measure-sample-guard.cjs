@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { verifiedNativeTree, stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -126,4 +126,16 @@ test('stable process CPU splits exact matching PIDs by role, not reused or missi
     measured: 2, skippedAtEnd: 3, missingAtEnd: 3, total100ns: 51,
     roles: { browser: { processes: 1, cpu100ns: 30 }, renderer: { processes: 1, cpu100ns: 21 } },
   });
+});
+
+test('native attribution rejects stale Windows PPIDs even under an otherwise valid launched root', () => {
+  const p = (pid, ppid, time, active = false) => ({ pid, ppid,
+    startedUtc: time == null ? null : '2026-01-01T00:00:' + time + 'Z', active });
+  const data = [p(10, 2, '12.0000020', true), p(20, 10, '12.0000021'),
+    p(21, 10, '12.0000010'), p(22, 21, '05.0000000'), p(23, 20, '13.0000000'),
+    p(24, 23, null), p(25, 20, '12.0000011'), p(26, 23, '17.0000000'), p(99, 2, '11.0000000')];
+  const g = verifiedNativeTree(data, 10, (proc) => proc.active);
+  assert.deepEqual(g.rows.map((x) => x.pid), [10, 20, 23, 26]);
+  assert.deepEqual([g.staleParentReferences, g.unknownParentReferences], [2, 1]);
+  assert.throws(() => verifiedNativeTree(data, 99, (proc) => proc.active), /launch process/);
 });

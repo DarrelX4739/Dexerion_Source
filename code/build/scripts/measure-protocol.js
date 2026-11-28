@@ -50,7 +50,7 @@ const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
 const { aggregateGpu } = require('./measure-gpu-aggregate.cjs');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
-const { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { verifiedNativeTree, stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -418,7 +418,7 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
     }
     await waitFor(async () => (await samplePage(front)).visible, 'native foreground visibility');
     const version = await session.devtools.send('Browser.getVersion');
-    return { profileDir: session.profileDir, version: version.product,
+    return { profileDir: session.profileDir, nativeRootPid: session.processId, version: version.product,
       telemetry: async () => {
         const { targetInfos } = await session.devtools.send('Target.getTargets');
         const tally = new Map();
@@ -475,7 +475,17 @@ async function runTrial(browser, scenario, base, trialIdx) {
 
     const beforeForeground = await session.pageState();
     const snapA = treeSnapshot();
-    const treeA = requireTree(extractTree(snapA, session.profileDir), 'A');
+    const treeEvidence = (snapshot) => {
+      if (!useNative) return { rows: extractTree(snapshot, session.profileDir), mode: 'legacy' };
+      if (!Number.isInteger(session.nativeRootPid) || session.nativeRootPid <= 0) {
+        throw new Error('Native browser launch did not provide its process ID');
+      }
+      return { mode: 'native creation-scoped', ...verifiedNativeTree(snapshot.processes, session.nativeRootPid,
+        (p) => /^(electron|Dexerion|msedge)\.exe$/i.test(p.name)
+          && String(p.cmdline || '').toLowerCase().includes(session.profileDir.toLowerCase())) };
+    };
+    const { rows: rowsA, ...attributionA } = treeEvidence(snapA);
+    const treeA = requireTree(rowsA, 'A');
     gpu = spawnGpu();
     const workloadPower = await optionalSample(() => samplePower('workload', SAMPLE_SEC), SAMPLE_SEC * 1000,
       { skip: !t.floor, wait: sleep });
@@ -485,7 +495,12 @@ async function runTrial(browser, scenario, base, trialIdx) {
     const afterForeground = await session.pageState();
     gpuFinished = await gpu.finish();
 
-    const treeB = requireTree(extractTree(snapB, session.profileDir), 'B');
+    const { rows: rowsB, ...attributionB } = treeEvidence(snapB);
+    const treeB = requireTree(rowsB, 'B');
+    if (useNative && !treeB.some((p) => roleOf(p) === 'renderer')) {
+      throw new Error('Verified native process tree contained no renderer');
+    }
+    t.processTreeAttribution = { A: attributionA, B: attributionB };
     const wallMs = Date.parse(snapB.capturedAt) - Date.parse(snapA.capturedAt);
     const wallSec = Math.max(1, wallMs / 1000);
     t.wallSec = round(wallSec, 1);

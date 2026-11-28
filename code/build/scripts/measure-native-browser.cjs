@@ -96,7 +96,7 @@ async function openNative(kind, { chromium, executable, cwd, packaged = false, s
       timeout: 15000, noDefaults: true, isLocal: true,
     });
     devtools = await browser.newBrowserCDPSession();
-    return { browser, devtools, profileDir, close };
+    return { browser, devtools, profileDir, processId: child.pid, close };
   } catch (err) {
     await close(false);
     throw err;

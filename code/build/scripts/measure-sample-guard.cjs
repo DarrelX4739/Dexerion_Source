@@ -121,4 +121,43 @@ function stableCpuByRole(treeA, treeB, classify) {
     missingAtEnd: treeA.length - measured, total100ns, roles: Object.fromEntries(used) };
 }
 
-module.exports = { stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
+// Windows can recycle a PID while old processes still name it as their PPID.
+// Include only a verified native root and descendants that were created no
+// earlier than their currently observed parent generation.
+function verifiedNativeTree(processes, rootPid, matchesProfile) {
+  const root = processes.find((x) => x.pid === rootPid);
+  const time = (x) => typeof x?.startedUtc === 'string' && x.startedUtc.endsWith('Z')
+    ? Date.parse(x.startedUtc) : NaN;
+  if (!root || !matchesProfile(root) || !Number.isFinite(time(root))) {
+    throw new Error('Verified browser launch process was absent from the snapshot');
+  }
+  const children = new Map();
+  for (const p of processes) {
+    if (p.pid === rootPid || p.pid === p.ppid) continue;
+    if (!children.has(p.ppid)) children.set(p.ppid, []);
+    children.get(p.ppid).push(p);
+  }
+  const found = new Map([[root.pid, root]]);
+  const queue = [root];
+  let staleParentReferences = 0;
+  let unknownParentReferences = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const parent = queue[i];
+    for (const p of children.get(parent.pid) || []) {
+      if (found.has(p.pid)) continue;
+      const started = time(p);
+      if (!Number.isFinite(started)) { unknownParentReferences++; continue; }
+      // The lexical UTC comparison retains the fraction of a millisecond
+      // when the CIM collation has both dates in round-trip ISO form.
+      if (started < time(parent) || (started === time(parent) && p.startedUtc < parent.startedUtc)) {
+        staleParentReferences++;
+        continue;
+      }
+      found.set(p.pid, p);
+      queue.push(p);
+    }
+  }
+  return { rows: [...found.values()], staleParentReferences, unknownParentReferences };
+}
+
+module.exports = { verifiedNativeTree, stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
