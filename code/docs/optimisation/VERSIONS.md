@@ -191,3 +191,16 @@ this measurement concerns CPU and repeated allocations, not application
 RAM, Electron IPC cost, or Edge. Tests cover exact serialized rows, malformed
 records, real task-handler mutations, account replacement, reminder flags,
 and the off switch.
+
+### Task renderer: share date and time formatters within one render
+
+Both the peek and full task views used to recreate locale date/time formatters
+per row. Lazily create at most one date and one time formatter for both views
+on a render, and discard them when it finishes. This does not memoize labels,
+tasks, time zones or overdue state between renders. The tests compare exact
+text across six locale/zone pairs, including DST and invalid dates, and check
+overdue, toggle/delete and empty/all-day behavior.
+
+In a 125-task Linux/Node fake-DOM fixture, the median of seven alternating
+eight-render batches went from 8.79 to 1.54 ms per render (about 82% less).
+This is an isolated large-list path, not an app CPU or Edge measurement.

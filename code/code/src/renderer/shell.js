@@ -1238,14 +1238,21 @@ async function tasksRefresh() {
     if (Array.isArray(list)) { TASKS = list; renderTasks(); }
   } catch {}
 }
-function tkDueText(t) {
+const TASK_DATE_OPTIONS = { month: 'short', day: 'numeric' };
+const TASK_TIME_OPTIONS = { hour: '2-digit', minute: '2-digit' };
+function tkDueText(t, formatters) {
   if (!t || !t.dueMs) return '';
   const d = new Date(t.dueMs);
-  const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const valid = Number.isFinite(d.getTime());
+  const day = valid
+    ? (formatters.date ||= new Intl.DateTimeFormat(undefined, TASK_DATE_OPTIONS)).format(d)
+    : d.toLocaleDateString(undefined, TASK_DATE_OPTIONS);
   if (!t.hasTime) return day;
-  return day + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return day + ' ' + (valid
+    ? (formatters.time ||= new Intl.DateTimeFormat(undefined, TASK_TIME_OPTIONS)).format(d)
+    : d.toLocaleTimeString(undefined, TASK_TIME_OPTIONS));
 }
-function tkRow(t) {
+function tkRow(t, formatters) {
   const row = document.createElement('div');
   row.className = 'tk-row' + (t.done ? ' done' : '');
   const box = document.createElement('button');
@@ -1261,7 +1268,7 @@ function tkRow(t) {
   b.textContent = t.title;
   b.title = t.notes || t.title;
   main.appendChild(b);
-  const meta = (t.notes ? t.notes + ' · ' : '') + tkDueText(t);
+  const meta = (t.notes ? t.notes + ' · ' : '') + tkDueText(t, formatters);
   if (meta) {
     const sm = document.createElement('small');
     sm.textContent = meta;
@@ -1314,6 +1321,9 @@ function renderTasks() {
   const peek = $('#tk-peek');
   const list = $('#tk-list');
   if (!badge || !peek || !list) return;
+  // Share Intl setup within this render only. A later render picks up the
+  // current locale/time zone and still recomputes the overdue labels.
+  const formatters = {};
   const open = TASKS.filter((t) => t && !t.done);
   if (open.length) {
     badge.hidden = false;
@@ -1331,7 +1341,7 @@ function renderTasks() {
     d.textContent = 'No open tasks.';
     peek.appendChild(d);
   } else {
-    for (const t of top) peek.appendChild(tkRow(t));
+    for (const t of top) peek.appendChild(tkRow(t, formatters));
   }
   if (open.length > 3) {
     const more = document.createElement('button');
@@ -1348,7 +1358,7 @@ function renderTasks() {
     d.textContent = 'No tasks yet — add one above.';
     list.appendChild(d);
   } else {
-    for (const t of TASKS) list.appendChild(tkRow(t));
+    for (const t of TASKS) list.appendChild(tkRow(t, formatters));
   }
   tkSyncListCap();
 }
