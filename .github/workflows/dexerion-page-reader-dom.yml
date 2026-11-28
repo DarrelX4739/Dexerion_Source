@@ -1,4 +1,4 @@
-name: Dexerion page reader native DOM experiment
+name: Dexerion reader text normalization experiment
 on:
   push:
     branches: [dev-V]
