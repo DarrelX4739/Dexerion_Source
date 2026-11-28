@@ -147,9 +147,9 @@ async function walkThrough(window) {
     throw Error('Preview did not reach: ' + expected);
   }
   await stage('welcome');
-  if (!await evaluate(`document.querySelector('.hero-logo').complete && document.querySelector('.hero-logo').naturalWidth > 0 &&
+  if (!await evaluate(`(async () => { const logo = document.querySelector('.hero-logo'); await logo.decode(); return logo.naturalWidth > 0 &&
       getComputedStyle(document.querySelector('#primary')).backgroundColor === 'rgb(31, 111, 107)' &&
-      document.querySelector('#preview').offsetWidth > 0`)) throw Error('Preview branding did not load');
+      document.querySelector('#preview').offsetWidth > 0; })()`)) throw Error('Preview branding did not load');
   await evaluate("document.querySelector('#primary').click(); true");
   await stage('options');
   await evaluate("document.querySelector('#browse-button').click(); true");
