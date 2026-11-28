@@ -53,7 +53,7 @@ test('rejects partial/raced sampling, renderer reuse, role overlap, stale owners
   assert.throws(()=>choosePre([pre1,pre2],base+161000),/no two/);
   assert.throws(()=>observe([...scope(),renderer(111,50)],140000,141000),/duplicate/);
   assert.throws(()=>observe([...scope(),renderer(19,100,0)],140000,141000),/uncertain native process tree/);
-  assert.throws(()=>observe(scope().map(p=>p.pid===112?{...p,cmdline:p.cmdline+' --no-sandbox'}:p),140000,141000),/policy-changing/);
+  assert.throws(()=>observe(scope().map(p=>p.pid===launch.processId?{...p,cmdline:p.cmdline+' --no-sandbox'}:p),140000,141000),/Verified browser launch/);
   const missingTreeScalar=observe([...scope(),renderer(15,null)],162000,163000);
   assert.equal(phase([missingTreeScalar,pre2],[cleanLater,cleanLast],roles,event).verifiedTreePrivateResidentBeforeBytes,null);
 });
@@ -72,4 +72,13 @@ test('uses existing sleep timing and refuses early, synthetic agings or changing
   assert.throws(()=>measure([{...record(220000,tabs),tabs:record(220000,tabs).tabs.slice(1)}]),/inventory/);
   assert.throws(()=>measure([record(238000,['tb']),record(237000,tabs)]),/order/);
   assert.throws(()=>measure([record(238000,['tb']),record(239000,['tc']),record(240000,tabs)]),/outside default/);
+});
+
+test('recognizes a stock Electron child switch, without permitting a root or unrelated override',()=>{
+  const stockChild=scope().map(p=>p.pid===111?{...p,cmdline:p.cmdline+' --no-sandbox'}:p);
+  assert.equal(observe(stockChild,140000,141000).tree.get(111).pid,111);
+  const childOverride=scope().map(p=>p.pid===111?{...p,cmdline:p.cmdline+' --disable-site-isolation-trials'}:p);
+  assert.throws(()=>observe(childOverride,140000,141000),/owned child/);
+  const missingBirth=scope().map(p=>p.pid===111?{...p,startedUtc:null}:p);
+  assert.throws(()=>observe(missingBirth,140000,141000),/uncertain native process tree|unverified process generation/);
 });

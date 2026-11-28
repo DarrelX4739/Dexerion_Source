@@ -5,6 +5,7 @@ const safe=n=>Number.isSafeInteger(n)&&n>=0;
 const recordedBirth=s=>typeof s==='string'&&s.endsWith('Z')&&Number.isFinite(Date.parse(s));
 const renderer=record=>typeof record?.cmdline==='string'&&/(?:^|\s)--type=renderer(?:\s|$)/.test(record.cmdline);
 const forbidden=/(?:^|\s)--(?:no-sandbox|disable-web-security|disable-site-isolation-trials)(?:[=\s]|$)/i;
+const childForbidden=/(?:^|\s)--(?:disable-web-security|disable-site-isolation-trials)(?:[=\s]|$)/i;
 const procKey=p=>[p.pid,p.startedUtc];
 
 function snapshot(raw,{processId,profileDir},from,end){
@@ -20,7 +21,13 @@ function snapshot(raw,{processId,profileDir},from,end){
   const tree=verifiedNativeTree(raw.processes,processId,root=>root.name.toLowerCase()==='dexerion.exe'&&
     root.cmdline?.toLowerCase().includes(profileDir.toLowerCase())&&!forbidden.test(root.cmdline));
   assert(!tree.staleParentReferences&&!tree.unknownParentReferences,'uncertain native process tree');
-  assert(tree.rows.every(r=>recordedBirth(r.startedUtc)&&!forbidden.test(r.cmdline||'')),'unverified process generation or policy-changing command line');
+  // The stock Electron child launcher can append --no-sandbox to the
+  // app's existing renderer configuration. It is not a caller override.
+  // Keep rejecting security-disabling overrides on the root and unrelated
+  // security flags on descendants; do not infer the actual OS sandbox bit.
+  assert(tree.rows.every(r=>recordedBirth(r.startedUtc)),'unverified process generation');
+  assert(tree.rows.slice(1).every(r=>!childForbidden.test(r.cmdline??'')),
+    'unexpected security-disabling switch on an owned child');
   return {start:from,end,root:procKey(tree.rows[0]),all,tree:new Map(tree.rows.map(r=>[r.pid,r]))};
 }
 function choosePre(samples,firstSleepAt){
