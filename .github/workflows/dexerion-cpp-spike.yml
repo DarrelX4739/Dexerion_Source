@@ -147,7 +147,10 @@ jobs:
       - name: Measure separate disposable one-page launch trees
         if: contains(github.event.head_commit.message, '[footprint]')
         run: |
-          electron="$(cd code/build && node -p "require('electron')" )"
+          # Electron downloads its locked binary lazily and may log on stdout.
+          # Keep diagnostics separate from the absolute executable path.
+          electron="$(cd code/build && node -e "console.log = console.error; process.stdout.write(require('electron'));")"
+          test -n "$electron" && test -f "$electron"
           if [[ "$RUNNER_OS" == Windows ]]; then
             app="$(find "$RUNNER_TEMP/dex-cef-build" -type f -name dexerion_cef_probe.exe -print -quit)"
             python experiments/cef-shell/compare_footprint.py --cef "$app" --electron "$electron" --output footprint.json
