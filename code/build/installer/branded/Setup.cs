@@ -54,7 +54,6 @@ internal sealed class Wizard
     private readonly Window window;
     private readonly StackPanel pages;
     private readonly Button primary, back, cancel, close, minimize;
-    private readonly TextBlock[] steps;
     private readonly ScrollViewer scroller;
     private Stage stage;
     private bool allUsers;
@@ -93,7 +92,7 @@ internal sealed class Wizard
         cancel = Element<Button>("CancelButton");
         close = Element<Button>("CloseButton");
         minimize = Element<Button>("MinimizeButton");
-        steps = new[] { Element<TextBlock>("Step1"), Element<TextBlock>("Step2"), Element<TextBlock>("Step3"), Element<TextBlock>("Step4") };
+        Element<TextBlock>("PreviewMode").Visibility = preview ? Visibility.Visible : Visibility.Collapsed;
 
         allUsers = engine.DefaultAllUsers;
         shownDefault = path = engine.Destination(allUsers);
@@ -135,11 +134,16 @@ internal sealed class Wizard
         };
     }
 
-    private void Lead(string eyebrow, string title, string note)
+    private void Lead(string title, string note, int size = 34)
     {
-        pages.Children.Add(Text(eyebrow, 12, "Accent", true));
-        pages.Children.Add(Text(title, 34, "Ink", true));
-        pages.Children.Add(Text(note, 14, "Muted", false));
+        var heading = Text(title, size, "Ink", true);
+        heading.Margin = new Thickness(0, 0, 0, 5);
+        pages.Children.Add(heading);
+        var description = Text(note, 14, "Muted", false);
+        description.MaxWidth = 470;
+        description.HorizontalAlignment = HorizontalAlignment.Left;
+        description.Margin = new Thickness(0, 0, 0, 19);
+        pages.Children.Add(description);
     }
 
     private void Show(Stage next)
@@ -147,12 +151,8 @@ internal sealed class Wizard
         stage = next;
         pages.Children.Clear();
         scroller.ScrollToTop();
-        for (int i = 0; i < steps.Length; i++)
-        {
-            int current = next == Stage.Welcome ? 0 : next == Stage.Ready ? 3 : next == Stage.Installing ? 2 : 1;
-            steps[i].Foreground = BrushFor(i == current ? "Accent" : "Muted");
-            steps[i].FontWeight = i == current ? FontWeights.SemiBold : FontWeights.Normal;
-        }
+        pages.Margin = new Thickness(0, next == Stage.Welcome ? 64 : next == Stage.Installing || next == Stage.Ready ? 41 : 0, 10, 0);
+        primary.Tag = next == Stage.Ready ? "finish" : next == Stage.Error ? "back" : null;
         primary.IsEnabled = true;
         primary.Visibility = next == Stage.Installing ? Visibility.Collapsed : Visibility.Visible;
         primary.IsDefault = next != Stage.Installing;
@@ -163,9 +163,9 @@ internal sealed class Wizard
         switch (next)
         {
             case Stage.Welcome:
-                Lead(preview ? "DESIGN PREVIEW" : "01  /  WELCOME", "Make room for a better browser.",
-                    preview ? "Walk through the new Dexerion Setup. This preview does not install anything."
-                    : "Set up Dexerion on this computer. Your existing browser profile stays in place.");
+                Lead("Install Dexerion",
+                    preview ? "Walk through Setup without installing Dexerion or changing this PC."
+                    : "Set up the Dexerion desktop browser. Your existing browser profile stays in place.", 44);
                 primary.Content = "_Continue";
                 primary.Focus();
                 break;
@@ -176,16 +176,14 @@ internal sealed class Wizard
                 Browse();
                 break;
             case Stage.Installing:
-                Lead(preview ? "DESIGN PREVIEW" : "03  /  INSTALLATION", "Setting up Dexerion",
-                    "Keep this window open while Setup prepares your browser.");
+                Lead("Installing Dexerion", "Keep this window open until Setup finishes.");
                 var indicator = new ProgressBar { Style = (Style)window.FindResource("InstallationProgress"), IsIndeterminate = true };
                 AutomationProperties.SetName(indicator, "Installing Dexerion");
                 pages.Children.Add(indicator);
                 break;
             case Stage.Ready:
-                Lead(preview ? "DESIGN PREVIEW" : "04  /  READY", "Dexerion is ready.",
-                    preview ? "You reached the end of the preview. Nothing was installed or changed."
-                    : "Installation is complete. Your Start menu and desktop shortcuts are ready.");
+                Lead(preview ? "Preview complete" : "Dexerion is installed",
+                    preview ? "Nothing was installed or changed on this PC." : "Open it now or finish Setup.");
                 launch = new CheckBox { Content = "_Launch Dexerion", IsChecked = true, Style = (Style)window.FindResource("Toggle") };
                 pages.Children.Add(launch);
                 primary.Content = "_Finish";
@@ -196,40 +194,57 @@ internal sealed class Wizard
         }
     }
 
-    private Button SmallButton(string label)
+    private Button SmallButton(string label, string icon)
     {
-        return new Button { Content = label, Style = (Style)window.FindResource("Btn") };
+        var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var glyph = new System.Windows.Shapes.Path
+        {
+            Data = (Geometry)window.FindResource(icon), Stroke = BrushFor("Muted"), StrokeThickness = 1.3,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+            Width = 13, Height = 12, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 7, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        content.Children.Add(glyph);
+        content.Children.Add(new AccessText { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Content = content, Style = (Style)window.FindResource("Btn") };
+        AutomationProperties.SetName(button, label.Replace("_", ""));
+        return button;
     }
 
     private void ShowInstalledError(string message)
     {
         Show(Stage.Error);
         primary.Content = "_Back to options";
-        Lead("SETUP NEEDS YOUR ATTENTION", "Installation could not be verified", message);
+        Lead("Installation could not be verified", message, 31);
         primary.Focus();
     }
 
     private void Options()
     {
-        Lead("02  /  INSTALL OPTIONS", "Choose your setup",
-            "Choose who can use Dexerion on this PC and where to install it.");
-        var scopeRow = new WrapPanel { Margin = new Thickness(0, 3, 0, 12) };
+        Lead("Install options", "Choose who can use Dexerion and where Setup puts it.");
+        var scopeRow = new StackPanel { Margin = new Thickness(0, 0, 0, 17) };
         RadioButton user = Choice("Just _me", !allUsers), machine = Choice("_Everyone on this PC", allUsers);
         machine.IsEnabled = engine.CanInstallForAll;
+        scopeRow.Children.Add(new Border { Height = 1, Background = BrushFor("Line") });
         scopeRow.Children.Add(user);
         scopeRow.Children.Add(machine);
         pages.Children.Add(scopeRow);
 
-        var targetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var browse = SmallButton("_Browse");
-        browse.Margin = new Thickness(8, 0, 0, 0);
-        DockPanel.SetDock(browse, Dock.Right);
-        targetRow.Children.Add(browse);
+        var targetRow = new DockPanel();
+        var browse = SmallButton("_Browse", "FolderGlyph");
+        var browseSlot = new Border { BorderBrush = BrushFor("Line"), BorderThickness = new Thickness(1, 0, 0, 0), Child = browse };
+        DockPanel.SetDock(browseSlot, Dock.Right);
+        targetRow.Children.Add(browseSlot);
         location = new TextBox { Text = path, Style = (Style)window.FindResource("TextEntry") };
         AutomationProperties.SetName(location, "Installation folder");
         targetRow.Children.Add(location);
         pages.Children.Add(Text("Installation folder", 13, "Ink", true));
-        pages.Children.Add(targetRow);
+        pages.Children.Add(new Border
+        {
+            Background = BrushFor("Panel"), BorderBrush = BrushFor("Line"),
+            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4),
+            Margin = new Thickness(0, 0, 0, 7), Child = targetRow
+        });
 
         status = Text(allUsers ? "Windows may ask for administrator approval." : "No administrator approval is needed.", 13, "Muted", false);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
@@ -251,7 +266,7 @@ internal sealed class Wizard
         return new RadioButton
         {
             Content = label, IsChecked = selected, GroupName = "InstallScope",
-            Margin = new Thickness(0, 0, 8, 0), Style = (Style)window.FindResource("Choice")
+            Style = (Style)window.FindResource("Choice")
         };
     }
 
@@ -283,14 +298,16 @@ internal sealed class Wizard
 
     private void Browse()
     {
-        Lead("02  /  INSTALL FOLDER", "Choose a folder",
-            "Open a folder or go up one level. You can also type a full path in Install options.");
+        Lead("Choose a folder", "Open a folder, go up a level, or enter a path in Install options.");
         var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var up = SmallButton("_Up one level");
+        var up = SmallButton("_Up one level", "ArrowUp");
         up.Height = 34;
         DockPanel.SetDock(up, Dock.Right);
         row.Children.Add(up);
-        row.Children.Add(Text(String.IsNullOrEmpty(browsePath) ? "This PC" : browsePath, 13, "Ink", true));
+        var directory = Text(String.IsNullOrEmpty(browsePath) ? "This PC" : browsePath, 13, "Ink", true);
+        directory.Margin = new Thickness(0, 0, 12, 0);
+        directory.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(directory);
         pages.Children.Add(row);
         up.IsEnabled = !String.IsNullOrEmpty(browsePath);
         up.Click += delegate
@@ -314,7 +331,7 @@ internal sealed class Wizard
             targets = new string[0];
             failure = "Setup could not list this folder.";
         }
-        folders = new ListBox { Height = 120, BorderThickness = new Thickness(1), Background = BrushFor("Panel"),
+        folders = new ListBox { Height = 164, BorderThickness = new Thickness(0, 1, 0, 1), Background = BrushFor("Ground"),
             BorderBrush = BrushFor("Line"), Foreground = BrushFor("Ink") };
         AutomationProperties.SetName(folders, "Folders");
         foreach (var target in targets)
