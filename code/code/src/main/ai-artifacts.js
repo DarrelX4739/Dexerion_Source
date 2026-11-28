@@ -1253,8 +1253,7 @@ function findHitSpot(a, lower) {
   return { blockIndex: null, noteHit: false };
 }
 
-function searchSnippet(text, query) {
-  const at = text.toLowerCase().indexOf(query.toLowerCase());
+function searchSnippet(text, query, at) {
   if (at < 0) return text.slice(0, 140);
   const start = Math.max(0, at - 60);
   const end = Math.min(text.length, at + query.length + 80);
@@ -1276,6 +1275,7 @@ function artifactSearchTextCached(a) {
 function searchArtifacts(chats, query, opts) {
   const q = String(query || '').trim();
   if (q.length < 2) return [];
+  const lower = q.toLowerCase();
   const o = opts || {};
   const limit = Math.max(1, Math.min(100, Number(o.limit) || 20));
   const hits = [];
@@ -1285,15 +1285,16 @@ function searchArtifacts(chats, query, opts) {
       const a = m && m.artifact;
       if (!a || typeof a !== 'object') return;
       const title = String(a.title || '');
-      const lower = q.toLowerCase();
       const titleHit = title.toLowerCase().includes(lower);
       const kindHit = String(a.kind || '').toLowerCase().includes(lower);
       // Full-text extraction is expensive (all blocks + up to 400KB of HTML
       // per site artifact) and the Files page runs it on every keystroke over
-      // the same store objects: the cache makes repeats O(1) (V20 polish pass).
+      // the same store objects: repeat queries reuse the extracted text (V20).
       const text = artifactSearchTextCached(a);
-      const bodyHit = text.toLowerCase().includes(lower);
-      if (!titleHit && !bodyHit && !kindHit) return;
+      // Reuse the folded-string offset for the snippet, rather than folding
+      // and searching the same cached body again for every match.
+      const bodyAt = text.toLowerCase().indexOf(lower);
+      if (!titleHit && bodyAt < 0 && !kindHit) return;
       const spot = findHitSpot(a, lower);
       hits.push({
         chatId: String(chat.id || ''),
@@ -1302,7 +1303,7 @@ function searchArtifacts(chats, query, opts) {
         kind: String(a.kind || ''),
         title: title || 'Artifact',
         score: (titleHit ? 10 : 0) + (kindHit ? 2 : 0),
-        snippet: searchSnippet(text, q),
+        snippet: searchSnippet(text, q, bodyAt),
         at: Number(a.updatedAt || chat.updatedAt || 0) || 0,
         blockIndex: spot.blockIndex,
         noteHit: spot.noteHit,
