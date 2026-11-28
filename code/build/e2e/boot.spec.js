@@ -80,34 +80,57 @@ test('boots with shared tokens and streams a mock NIM reply', async () => {
     await win.keyboard.press('Control+Shift+A');
     await expect(win.locator('#ai-sidebar')).toBeVisible();
     await expect(win.locator('#ai-resize')).toHaveCount(1);
-    const appliedWidth = await win.evaluate(() =>
-      getComputedStyle(document.querySelector('#ai-sidebar')).getPropertyValue('--ai-w').trim());
-    expect(appliedWidth).toBe('600px');
-    // The rendered panel must match the reserved width (a stale 480px rule
-    // once left the panel pinned while main reserved the dragged width).
-    const geometry = await win.evaluate(() => {
-      const rect = document.querySelector('#ai-sidebar').getBoundingClientRect();
+    const panel = win.locator('#ai-sidebar');
+    const readGeometry = () => panel.evaluate(element => {
+      const rect = element.getBoundingClientRect();
       return { left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width), inner: window.innerWidth };
     });
-    expect(geometry.width).toBe(600);
-    expect(Math.abs(geometry.right - geometry.inner)).toBeLessThanOrEqual(2);
-    expect(Math.abs(geometry.left - (geometry.inner - 600))).toBeLessThanOrEqual(2);
+    const appliedWidth = () => panel.evaluate(element => getComputedStyle(element).getPropertyValue('--ai-w').trim());
+    await expect.poll(appliedWidth).toBe('600px');
 
-    // A real drag: the rendered width and the persisted width move together.
-    const handleBox = await win.locator('#ai-resize').boundingBox();
-    await win.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 160);
+    // The preference is 600px on every desktop, but a narrow host correctly
+    // renders the panel inside the production breakpoint budget. Assert its
+    // exact visible width and both edges, rather than changing the viewport.
+    const geometry = await readGeometry();
+    const cap = geometry.inner <= 650 ? geometry.inner
+      : geometry.inner <= 1100 ? geometry.inner * 0.52 : 720;
+    const visibleWidth = Math.round(Math.min(600, cap));
+    expect(geometry.width).toBe(visibleWidth);
+    expect(Math.abs(geometry.right - geometry.inner)).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry.left - (geometry.inner - visibleWidth))).toBeLessThanOrEqual(2);
+
+    // The real drag must still move visible pixels and persist that exact
+    // rendered width. Start below the cap so it has runway on small CI screens.
+    const dragStart = Math.min(600, Math.max(320, Math.floor(cap) - 100));
+    const dragPixels = Math.min(80, Math.floor(cap) - dragStart - 4);
+    expect(dragPixels, 'desktop must leave sufficient visible drag room').toBeGreaterThanOrEqual(16);
+    if (dragStart !== 600) {
+      await win.locator('#ai-btn').click();
+      await expect(panel).toBeHidden();
+      await win.evaluate(width => window.dexerion.invoke('dex:ai-ui-set', { width }), dragStart);
+      await win.locator('#ai-btn').click();
+      await expect(panel).toBeVisible();
+      await expect.poll(appliedWidth).toBe(dragStart + 'px');
+    }
+    expect((await readGeometry()).width).toBe(dragStart);
+
+    const handle = win.locator('#ai-resize');
+    await expect(handle).toBeVisible();
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const startX = handleBox.x + handleBox.width / 2;
+    const dragY = handleBox.y + Math.min(160, handleBox.height / 2);
+    await win.mouse.move(startX, dragY);
     await win.mouse.down();
-    await win.mouse.move(handleBox.x + handleBox.width / 2 - 80, handleBox.y + 160, { steps: 8 });
+    await win.mouse.move(startX - dragPixels, dragY, { steps: 8 });
     await win.mouse.up();
-    await win.waitForTimeout(400);
-    const afterDrag = await win.evaluate(async () => {
-      const rect = document.querySelector('#ai-sidebar').getBoundingClientRect();
-      const prefs = await window.dexerion.invoke('dex:ai-ui-get');
-      return { width: Math.round(rect.width), right: Math.round(rect.right), prefs: prefs.width, inner: window.innerWidth };
-    });
-    expect(afterDrag.width).toBeGreaterThan(600);
-    expect(Math.abs(afterDrag.width - afterDrag.prefs)).toBeLessThanOrEqual(1);
+    const savedWidth = () => win.evaluate(() => window.dexerion.invoke('dex:ai-ui-get').then(prefs => prefs.width));
+    await expect.poll(savedWidth).toBeGreaterThanOrEqual(dragStart + dragPixels - 2);
+    const afterDrag = await readGeometry();
+    expect(afterDrag.width).toBeGreaterThanOrEqual(dragStart + dragPixels - 2);
+    expect(Math.abs(afterDrag.width - await savedWidth())).toBeLessThanOrEqual(1);
     expect(Math.abs(afterDrag.right - afterDrag.inner)).toBeLessThanOrEqual(2);
+    expect(Math.abs(afterDrag.left - (afterDrag.inner - afterDrag.width))).toBeLessThanOrEqual(2);
     // The one-click Summarise button is gone; the same job is now a sentence.
     const posts = () => mock.requests.filter((r) => r.url.includes('/chat/completions')).length;
     const before = posts();
