@@ -1,0 +1,40 @@
+name: Dexerion dev checks
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-dev-checks.yml'
+      - '.github/packaging/**'
+      - 'code/build/**'
+      - 'code/code/**'
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: code/build
+    env:
+      # The tests use a visible virtual display and throwaway Electron profiles.
+      # This software-rendering runner is not an Edge performance reference.
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Verify source and run unit checks
+        run: |
+          npm run verify
+          node --test scripts/test-*.cjs ../../.github/packaging/linux-launcher.test.cjs
+      - name: Install Electron and dependencies
+        run: |
+          npm ci
+          node -p "require('electron')"
+      - name: Check real Electron boot and AI entry points
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js
