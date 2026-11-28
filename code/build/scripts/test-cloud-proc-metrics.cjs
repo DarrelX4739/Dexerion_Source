@@ -49,6 +49,9 @@ test('role attribution is bounded and shares measured totals without exporting p
   assert.equal(classifyProcess(20, 10, '/browser\0--type=renderer\0', { 20: 'shell-renderer' }), 'shell-renderer');
   assert.equal(classifyProcess(20, 10, '/browser\0--type=renderer\0', { 20: 'unknown' }), 'renderer');
   assert.equal(classifyProcess(21, 10, '/path/chrome_crashpad_handler\0--ignored\0', {}), 'crash-handler');
+  assert.equal(classifyProcess(22, 10, '/chrome --crashpad-handler-pid=7 --type=renderer'), 'renderer');
+  assert.equal(classifyProcess(23, 10, '/wrapper --crashpad-handler-pid=7', {}, '/opt/chrome/chrome'), 'other');
+  assert.equal(classifyProcess(24, 10, '/wrapper --unrelated', {}, '/opt/chrome/chrome_crashpad_handler'), 'crash-handler');
   const tree = (...rows) => selectTree(rows.map((r) => parseStat(stat(...r))), 10);
   const a = tree([10, 1, 20, 0, 100], [30, 10, 5, 0, 101]);
   const b = tree([10, 1, 70, 0, 100], [30, 10, 55, 0, 101]);

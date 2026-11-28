@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const path = require('node:path');
 
 function parseStat(line) {
   // comm is parenthesised and may itself contain spaces or parentheses.
@@ -77,20 +78,24 @@ function sumPss(tree, proc = '/proc') {
   return total > 0 ? total : null;
 }
 
-function classifyProcess(pid, rootPid, raw, labels = {}) {
+function classifyProcess(pid, rootPid, raw, labels = {}, executable = '') {
   if (pid === rootPid) return 'browser';
   if (['shell-renderer', 'page-renderer', 'other-renderer'].includes(labels[pid])) return labels[pid];
-  const argv = raw.split('\0');
-  if (argv[0].includes('crashpad')) return 'crash-handler';
-  const type = argv.find((arg) => arg.startsWith('--type='))?.slice(7);
-  return ['renderer', 'gpu-process', 'utility', 'zygote'].includes(type) ? type : 'other';
+  // Chromium can replace argv[0] with a space-delimited process title.
+  // Classify a known process type before testing the executable name; a
+  // crash-reporter flag on a renderer does not make it the crash handler.
+  const type = /(?:^|[\0\s])--type=(renderer|gpu-process|utility|zygote)(?=[\0\s]|$)/.exec(raw)?.[1];
+  if (type) return type;
+  const binary = path.basename(executable || raw.split(/[\0\s]/)[0]);
+  return /^(?:chrome_)?crashpad(?:_handler)?$/.test(binary) ? 'crash-handler' : 'other';
 }
 
 function processRoles(tree, rootPid, labels, proc = '/proc') {
   return new Map([...tree.keys()].map((pid) => {
-    let raw = '';
+    let raw = '', binary = '';
     try { raw = fs.readFileSync(proc + '/' + pid + '/cmdline', 'utf8'); } catch {}
-    return [pid, classifyProcess(pid, rootPid, raw, labels)];
+    try { binary = fs.readlinkSync(proc + '/' + pid + '/exe'); } catch {}
+    return [pid, classifyProcess(pid, rootPid, raw, labels, binary)];
   }));
 }
 

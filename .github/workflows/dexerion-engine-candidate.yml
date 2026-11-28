@@ -14,7 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        include:
+          - { os: ubuntu-24.04, runtime: '44.11.6', override: true }
+          - { os: windows-latest, runtime: '44.11.6', override: true }
+          - { os: windows-latest, runtime: '44.4.5', override: false }
+    name: ${{ matrix.os }} Electron ${{ matrix.runtime }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     defaults:
@@ -22,7 +26,7 @@ jobs:
         shell: bash
         working-directory: code/build
     env:
-      DEX_ENGINE_CANDIDATE: '44.11.6'
+      DEX_ENGINE_CANDIDATE: ${{ matrix.runtime }}
       E2E_LAUNCH_TIMEOUT_MS: '45000'
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +35,13 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: code/build/package-lock.json
-      - name: Load the candidate runtime without changing the product lockfile
+      - name: Install locked production and test dependencies
         run: |
           npm ci
           node -p "require('electron')"
+      - name: Load the candidate runtime without changing the product lockfile
+        if: matrix.override
+        run: |
           dir="$RUNNER_TEMP/dex-engine-candidate"
           mkdir -p "$dir"
           npm install --prefix "$dir" --no-save --no-package-lock --no-audit "electron@$DEX_ENGINE_CANDIDATE"
@@ -50,7 +57,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: engine-candidate-failures-${{ matrix.os }}
+          name: engine-candidate-failures-${{ matrix.os }}-${{ matrix.runtime }}
           path: code/build/test-results/
           if-no-files-found: ignore
           retention-days: 7
