@@ -19,6 +19,35 @@
 .store-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .store-row input{flex:1;min-width:220px}
 #stormsg{color:var(--pmuted);font-size:12px;margin-top:10px;min-height:17px}
+
+/* Keep the Store and developer controls in their existing order; give long
+   extension names and permission strings room to wrap in small windows. */
+[data-theme="dark"] .dx-page > :is(.dx-card, .dx-list) {
+  background: transparent;
+  border: 0;
+  border-block-start: 1px solid var(--pborder);
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="dark"] :is(.dx-card-head, .dx-card-body, .ext) { padding-inline: 0; }
+[data-theme="dark"] .dx-card-head h3 {
+  color: var(--pfg);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-theme="dark"] .store-row input { min-width: 0; flex-basis: 220px; }
+[data-theme="dark"] .ext :is(h3 span, .err, .dx-chip) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-theme="dark"] .ext .dx-chip { display: block; }
+@media (max-width: 520px) {
+  [data-theme="dark"] .dx-page { padding-inline: clamp(18px, 5vw, 32px); }
+  [data-theme="dark"] .ext { gap: 12px; }
+  [data-theme="dark"] .ext .ic { width: 32px; height: 32px; }
+}
 </style>
 </head><body><div class="dx-page wide">
 <div class="dx-head">
