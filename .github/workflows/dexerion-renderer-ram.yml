@@ -1,0 +1,40 @@
+name: Dexerion renderer RAM experiment
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-renderer-ram.yml'
+      - 'experiments/renderer-ram/**'
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Verify unchanged preload and install locked Electron
+        shell: bash
+        run: |
+          set -e
+          test "$(git rev-parse HEAD:code/code/preload.js)" = 'ab054824f86b67e0a72ecc0a8b3d3a72b5851436'
+          test "$(git rev-parse HEAD:code/code)" = 'd26d533baded8690771bd327dc1621990ff78cab'
+          npm ci --prefix code/build
+          node --check experiments/renderer-ram/electron.cjs
+          node --check experiments/renderer-ram/measure.cjs
+      - name: Measure matched one- and nine-tab private working sets
+        run: node experiments/renderer-ram/measure.cjs renderer-ram.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-matched-renderer-ram
+          path: renderer-ram.json
+          if-no-files-found: ignore
+          retention-days: 7
