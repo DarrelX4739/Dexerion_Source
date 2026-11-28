@@ -1,7 +1,7 @@
 name: Dexerion Edge cloud comparison
 on:
   push:
-    branches: [darrel-dev-1]
+    branches: [dev-V]
     paths:
       - '.github/workflows/dexerion-edge-cloud.yml'
       - 'code/build/scripts/measure-protocol.js'

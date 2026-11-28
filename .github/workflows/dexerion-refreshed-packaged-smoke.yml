@@ -2,7 +2,7 @@ name: Dexerion refreshed packaged smoke
 
 on:
   push:
-    branches: [darrel-dev-1]
+    branches: [dev-V]
     paths:
       - .github/workflows/dexerion-refreshed-packaged-smoke.yml
       - code/build/e2e/refreshed-packaged-boot.spec.js
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   boot:
-    if: github.ref == 'refs/heads/darrel-dev-1'
+    if: github.ref == 'refs/heads/dev-V'
     strategy:
       fail-fast: false
       matrix:

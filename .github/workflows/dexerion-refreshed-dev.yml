@@ -1,7 +1,7 @@
 name: Dexerion refreshed dev checks
 on:
   push:
-    branches: [darrel-dev-1]
+    branches: [dev-V]
     paths:
       - '.github/workflows/dexerion-refreshed-dev.yml'
       - 'code/**'
