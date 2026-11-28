@@ -2341,3 +2341,13 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   background:color-mix(in srgb,var(--identity) 10%,var(--hover));
 }
 :where(:root:not([data-skin])) #tabstrip.rail-open .gchip .gdot {width:8px;height:8px}
+
+/* Style the existing drag classes, not the draggable rectangles. Inset the
+   dashed group target so it cannot be cut off by the scrolling rail. */
+:where(:root:not([data-skin])) #tabs .gchip.drop {outline-offset:-2px}
+:where(:root:not([data-skin])) #tabs .tab.drop-group {border-radius:8px}
+:where(:root:not([data-skin])) #tabs .tab.dragging {opacity:.48}
+@media (prefers-reduced-motion:reduce) {
+  #tabs .tab {animation:none;transition:none}
+  #tabs .gchip .gstate {transition:none}
+}
