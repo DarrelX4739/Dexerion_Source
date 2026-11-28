@@ -37,7 +37,7 @@ jobs:
           npm ci
           node -p "require('electron')"
       - name: Check real Electron boot and AI entry points
-        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js
+        run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js e2e/performance-surfaces.spec.js
       - name: Compare whole-browser CPU and RAM against Chrome
         env:
           DEX_CLOUD_TRIALS: '5'
