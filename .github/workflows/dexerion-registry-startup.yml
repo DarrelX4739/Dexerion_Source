@@ -1,0 +1,33 @@
+name: Dexerion package startup registry cost
+on:
+  push:
+    branches: [cpp-native-spike]
+    paths:
+      - '.github/workflows/dexerion-registry-startup.yml'
+      - 'experiments/startup-registry/**'
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Time exact registration command shape under unused runner-only keys
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD:code)" = '9180619b50ea9f3da77c00f38648293e6a3422e7'
+          node experiments/startup-registry/compare.cjs code/code/src/main/defaultbrowser.js registry-cost.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-registry-cost
+          path: registry-cost.json
+          if-no-files-found: ignore
+          retention-days: 7
