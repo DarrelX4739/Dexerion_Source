@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,describeParity}=require('./read-long-idle.cjs');
+const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,describeParity,waitForQuietCheckpoint,quietTimingEvidence}=require('./read-long-idle.cjs');
 const {verify}=require('./owned-working-set-preflight.cjs');
 const base=Date.parse('2026-11-28T15:00:00Z');
 const profile='C:\\temp\\dex-long-idle-stock';
@@ -71,9 +71,54 @@ test('missing counters, matched wall-clock but poor provider time, and extra tim
   assert.throws(()=>memoryPair(good.slice(0,1),partial),/no silent dropping/);
   assert.throws(()=>memoryPair(good,[{...good[0],providerWindowElapsedMs:undefined},good[1]]),/provider windows/);
   assert.throws(()=>memoryPair(good,[{...good[0],providerWindowElapsedMs:[274088,274092]},good[1]]),/provider windows/);
-  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]-1),normal()[1]],base,warm),/raced/);
-  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]+2500),normal()[1]],base,warm),/raced/);
-  assert.throws(()=>memoryArm([normal()[0],{...normal()[1],receivedAt:base+300001}],base,warm),/over time/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]-1),normal()[1]],base,warm),/request_before_target/);
+  assert.throws(()=>memoryArm([qualified(CHECKPOINTS[0]+2500),normal()[1]],base,warm),/provider_after_target_bound/);
+  assert.throws(()=>memoryArm([normal()[0],{...normal()[1],receivedAt:base+300001}],base,warm),/reply_over_budget/);
+});
+test('rechecks after a real timer wake one millisecond before planned provider scheduling',async()=>{
+  const anchor={wall:base,mono:100.25};
+  const delay=CHECKPOINTS[0];
+  let wall=anchor.wall,mono=anchor.mono;
+  const calls=[];
+  const fake={wall:()=>wall,mono:()=>mono,wait:async d=>{
+    calls.push(d);
+    // First wake (the exact old one-shot failure) passes the 60ms drift
+    // guard but is still early in wall and monotonic time.
+    const actual=calls.length===1?d-1:d;
+    wall+=actual;mono+=actual;
+  }};
+  const ready=await waitForQuietCheckpoint(anchor,delay,fake);
+  assert.deepEqual(calls,[delay,1]);
+  assert.equal(ready.wallAt,base+delay);
+  assert.equal(ready.monotonicElapsedMs,delay);
+  assert.equal(ready.timerWaits,2);
+});
+test('either early clock causes a recheck; a drifting or stuck clock refuses the checkpoint',async()=>{
+  const anchor={wall:base,mono:55.125}, aim=CHECKPOINTS[0];
+  let wall=base+aim,mono=anchor.mono+aim-.25,waits=[];
+  const fake={wall:()=>wall,mono:()=>mono,wait:async ms=>{waits.push(ms);mono+=ms;wall+=ms;}};
+  assert.equal((await waitForQuietCheckpoint(anchor,aim,fake)).timerWaits,1);
+  assert.deepEqual(waits,[1]);
+  assert((await waitForQuietCheckpoint(anchor,aim,fake)).monotonicElapsedMs>=aim);
+  await assert.rejects(waitForQuietCheckpoint(anchor,aim,{...fake,wall:()=>base+aim+61,mono:()=>anchor.mono+aim}),/stepped/);
+  let n=0;
+  await assert.rejects(waitForQuietCheckpoint(anchor,aim,{...fake,wall:()=>base,mono:()=>anchor.mono,
+    wait:async()=>{n++;}}),/bounded rechecks/);
+  assert.equal(n,16);
+});
+test('bounded diagnostics identify an early request versus a late provider without leaking actual acquired bytes or identities',()=>{
+  const aim=base+CHECKPOINTS[0];
+  const early=quietTimingEvidence({requestedAt:aim-1,receivedAt:aim+88,
+    providerMinUtcMs:aim+60,providerMaxUtcMs:aim+70,privateResidentBytes:987654321,rootBirth:1323070020n},aim,null);
+  assert.deepEqual(early,{requestOffsetMs:-1,replyOffsetMs:88,providerOffsetMs:[60,70],
+    collectorRoundTripMs:89,issues:['request_before_target']});
+  const late=quietTimingEvidence({requestedAt:aim+5,receivedAt:aim+2550,providerMinUtcMs:aim+2501,
+    providerMaxUtcMs:aim+2520},aim,null);
+  assert.deepEqual(late.issues,['provider_after_target_bound']);
+  const corrupt=quietTimingEvidence({requestedAt:aim+60001,receivedAt:Infinity,providerMaxUtcMs:NaN},
+    aim,null);
+  assert.deepEqual(corrupt,{requestOffsetMs:null,replyOffsetMs:null,providerOffsetMs:[null,null],
+    collectorRoundTripMs:null,issues:['invalid_clock_field','request_after_bound','reply_over_budget']});
 });
 test('reports live document, actual reload, and persistent/unsaved state separately',()=>{
   const original={token:'first-token',origin:base+120},again={token:'second-token',origin:base+385000};

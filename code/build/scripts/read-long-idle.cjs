@@ -1,5 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict');
+const {performance}=require('node:perf_hooks');
+const {setTimeout:idleWait}=require('node:timers/promises');
 const {verifiedNativeTree}=require('./measure-sample-guard.cjs');
 const CHECKPOINTS=Object.freeze([270000,286000]);
 const validBytes=n=>Number.isSafeInteger(n)&&n>=0;
@@ -27,6 +29,53 @@ function readOwnedSnapshot(raw,root,processName,profileDir,at,end){
   return {sampledAt,at,end,root:[stableRoot.pid,stableRoot.startedUtc],
     privateBytes,processCount:probe.rows.length,identities:probe.rows.map(r=>[r.pid,r.startedUtc])};
 }
+const MAX_DRIFT_MS=60;
+const systemClock={wall:()=>Date.now(),mono:()=>performance.now(),wait:idleWait};
+function observeQuietClock(start,clock=systemClock) {
+  assert(validBytes(start?.wall)&&Number.isFinite(start.mono)&&start.mono>=0,'invalid quiet timer anchor');
+  const wallAt=clock.wall(),monotonicAt=clock.mono();
+  assert(validBytes(wallAt)&&Number.isFinite(monotonicAt)&&monotonicAt>=start.mono,
+    'quiet monotonic clock went backward or is unavailable');
+  const wallElapsedMs=wallAt-start.wall,monotonicElapsedMs=monotonicAt-start.mono;
+  assert(Math.abs(wallElapsedMs-monotonicElapsedMs)<=MAX_DRIFT_MS,'host wall clock stepped relative to monotonic quiet timer');
+  return {wallAt,wallElapsedMs,monotonicElapsedMs};
+}
+async function waitForQuietCheckpoint(start,checkpoint,clock=systemClock){
+  assert(validBytes(checkpoint),'invalid quiet checkpoint');
+  for(let tries=0;tries<=16;tries++){
+    const c=observeQuietClock(start,clock);
+    const remain=Math.max(checkpoint-c.wallElapsedMs,checkpoint-c.monotonicElapsedMs);
+    if(remain<=0)return {...c,timerWaits:tries};
+    if(tries===16)break;
+    // Node timers may resolve before the Date/QPC clock crosses the intended
+    // time. Never call the provider based only on the first timer firing.
+    await clock.wait(Math.max(1,Math.ceil(remain)));
+  }
+  throw new Error('quiet timer did not cross both clocks within bounded rechecks');
+}
+const displayOffset=n=>Number.isFinite(n)&&Math.abs(n)<=60000?Math.round(n*1000)/1000:null;
+function quietTimingEvidence(sample,origin,prior){
+  const {requestedAt,receivedAt,providerMinUtcMs:lo,providerMaxUtcMs:hi}=sample;
+  const issues=[];
+  if(!validBytes(requestedAt)||!validBytes(receivedAt)||!Number.isFinite(lo)||!Number.isFinite(hi))
+    issues.push('invalid_clock_field');
+  if(requestedAt<origin)issues.push('request_before_target');
+  if(requestedAt>origin+2500)issues.push('request_after_bound');
+  if(receivedAt<requestedAt)issues.push('reply_before_request');
+  if(receivedAt-requestedAt>5000)issues.push('reply_over_budget');
+  if(lo<requestedAt-2)issues.push('provider_before_request');
+  if(hi>receivedAt+2)issues.push('provider_after_reply');
+  if(lo>hi)issues.push('provider_interval_reversed');
+  if(hi-lo>90)issues.push('provider_interval_too_wide');
+  if(lo<origin-2)issues.push('provider_before_target');
+  if(hi>origin+2500)issues.push('provider_after_target_bound');
+  if(prior&&!(prior.receivedAt<requestedAt))issues.push('overlapping_checkpoints');
+  // Bound diagnostic data, and never leak absolute times, raw QPC, identities
+  // or memory numbers from a rejected trial.
+  return {requestOffsetMs:displayOffset(requestedAt-origin),
+    replyOffsetMs:displayOffset(receivedAt-origin),providerOffsetMs:[displayOffset(lo-origin),displayOffset(hi-origin)],
+    collectorRoundTripMs:displayOffset(receivedAt-requestedAt),issues};
+}
 const validQpc=s=>s&&typeof s.rootBirth==='bigint'&&s.rootBirth>0n&&
   typeof s.clockFrequency==='bigint'&&s.clockFrequency>0n&&
   typeof s.minProviderQpc==='bigint'&&typeof s.maxProviderQpc==='bigint'&&
@@ -52,13 +101,8 @@ function memoryArm(samples,start,warmed){
     remember(s);
     const aim=CHECKPOINTS[i],origin=start+aim;
     const {requestedAt,receivedAt,providerMinUtcMs:lo,providerMaxUtcMs:hi,privateResidentBytes}=s;
-    // A measured clock interval, not Win32_Process enumeration or the
-    // PowerShell wrapper's end time. ±2 ms is only the agreed UTC rounding
-    // bound in the qualified collector, not a larger eligibility window.
-    assert(validBytes(requestedAt)&&validBytes(receivedAt)&&Number.isFinite(lo)&&Number.isFinite(hi)&&
-      requestedAt>=origin&&requestedAt<=origin+2500&&receivedAt>=requestedAt&&receivedAt-requestedAt<=5000&&
-      lo>=requestedAt-2&&hi<=receivedAt+2&&lo<=hi&&hi-lo<=90&&lo>=origin-2&&hi<=origin+2500&&
-      (!i||samples[i-1].receivedAt<requestedAt),'quiet provider checkpoint mismatched, raced or over time bound');
+    const diagnosis=quietTimingEvidence(s,origin,i?samples[i-1]:null);
+    assert(diagnosis.issues.length===0,'quiet provider checkpoint '+aim+' rejected: '+diagnosis.issues.join(','));
     assert(validBytes(privateResidentBytes)&&privateResidentBytes>0,'invalid measured working set total');
     return {plannedElapsedMs:aim,providerWindowElapsedMs:[lo-start,hi-start],privateResidentBytes,
       collectorRoundTripMs:receivedAt-requestedAt,ownedProcesses:s.scopeOfGenerations.size};
@@ -124,4 +168,5 @@ function wakeComparison(edge,dex){
     summary:'both showed the same limited wake outcome, not proof of intact live state or general behavior parity'};
 }
 const describeParity=(edge,dex)=>wakeComparison(edge,dex).summary;
-module.exports={CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,describeParity};
+module.exports={CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,
+  describeParity,waitForQuietCheckpoint,observeQuietClock,quietTimingEvidence};

@@ -11,7 +11,7 @@ const {spawn,execFileSync}=require('node:child_process');
 const {setTimeout:wait}=require('node:timers/promises');
 const {performance}=require('node:perf_hooks');
 const {browserArgs,debugPort,edgeExecutable,isShellUrl,waitFor}=require('./measure-native-browser.cjs');
-const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison}=require('./read-long-idle.cjs');
+const {CHECKPOINTS,readOwnedSnapshot,memoryArm,memoryPair,possibleNativeGeneration,wakeEvidence,wakeComparison,waitForQuietCheckpoint,observeQuietClock,quietTimingEvidence}=require('./read-long-idle.cjs');
 
 const ORDER=['edge','dexerion'],SLOTS=Array.from({length:9},(_,i)=>i),WAKE_SLOT=4;
 const SHA=process.env.GITHUB_SHA;
@@ -362,23 +362,54 @@ async function runArm(kind,executable,asar,fixture) {
     // The collector's validated UTC projection allows up to 2 ms rounding.
     // Start strictly after even the upper endpoint of the warm acquisition.
     await wait(Math.max(0,Math.ceil(warm.providerMaxUtcMs-Date.now())));
-    const quietAt=Date.now(),quietMonotonic=performance.now();
-    const snapshots=[];
+    const quietAt=Date.now(),anchor={wall:quietAt,mono:performance.now()};
+    const snapshots=[],timingDiagnostics=[];
+    result.timingDiagnostics=timingDiagnostics;
+    const stopCollector=async()=>{
+      if(!collector)return;
+      await collector.close();
+      assert(collector.child.exitCode!==null||collector.child.signalCode!==null,'owned sampler did not stop cleanly');
+      collector=null;
+    };
     for(const checkpoint of CHECKPOINTS){
-      await wait(Math.max(0,quietAt+checkpoint-Date.now()));
+      const reached=await waitForQuietCheckpoint(anchor,checkpoint);
       assert(launched.running(),'stock process exited during quiet window');
-      const requestedAt=Date.now();
-      assert(Math.abs((requestedAt-quietAt)-(performance.now()-quietMonotonic))<=60,
-        'host wall clock stepped relative to monotonic quiet timer');
-      const sample=await collector.sample(launched.root);
-      const receivedAt=Date.now();
-      assert(Math.abs((receivedAt-quietAt)-(performance.now()-quietMonotonic))<=60,
-        'host wall clock stepped across provider sample');
-      snapshots.push({...sample,requestedAt,receivedAt});
+      const current={plannedElapsedMs:checkpoint,timerWaits:reached.timerWaits};
+      timingDiagnostics.push(current);
+      if(!collector){
+        current.unavailable='prior_provider_failure_no_retry';
+        continue;
+      }
+      if(reached.wallElapsedMs>checkpoint+2500){
+        current.timing=quietTimingEvidence({requestedAt:reached.wallAt},quietAt+checkpoint,null);
+        current.unavailable='late_checkpoint_provider_not_called';
+        continue;
+      }
+      const requestedAt=reached.wallAt;
+      let sample;
+      try{sample=await collector.sample(launched.root);}
+      catch(e){
+        current.failure='provider_collection_failed';
+        const reply=observeQuietClock(anchor);
+        current.timing=quietTimingEvidence({requestedAt,receivedAt:reply.wallAt},quietAt+checkpoint,snapshots.at(-1));
+        result.memoryMissing=reason(e);
+        await stopCollector();
+        continue;
+      }
+      const {wallAt:receivedAt}=observeQuietClock(anchor);
+      const observation={...sample,requestedAt,receivedAt};
+      current.timing=quietTimingEvidence(observation,quietAt+checkpoint,snapshots.at(-1));
+      snapshots.push(observation);
       remember(sample);
     }
-    stamp=memoryArm(snapshots,quietAt,warm);
-    await collector.close();collector=null;
+    if(snapshots.length===CHECKPOINTS.length){
+      try{stamp=memoryArm(snapshots,quietAt,warm);}
+      catch(e){result.memoryMissing=reason(e);}
+    }else result.memoryMissing??='at least one planned native provider observation missing';
+    await stopCollector();
+    // Wake can stand alone after a measurement-only hold. Both clocks must
+    // have crossed both planned slots, the collector is gone, and the
+    // existing unchanged foreground/inventory checks still precede input.
     // No browser inspection/navigation before both qualified snapshots.
     // The slower broad Windows inventory is now used only for cleanup.
     cdp=await endpoint(launched.profile);
@@ -389,7 +420,7 @@ async function runArm(kind,executable,asar,fixture) {
       settledFront.seen.length<32&&!settledFront.seen.some(([at,state])=>at>=quietAt&&state!=='visible')&&covered(),
     'real foreground changed/reloaded, became hidden or another fixture navigated before wake');
     result.viewport=[settledFront.width,settledFront.height,settledFront.dpr];
-    result.memory=stamp;
+    result.memory=stamp??null;
     try{
       if(isDex){
         const s=await profileEval(cdp,shell.targetId,'dex:get-state');
@@ -461,13 +492,14 @@ async function main(){
   const files={dexerion:dex,edge:edgeExecutable()};
   const report={sourceSha:SHA,order:ORDER,workload:{visibleTabs:1,backgroundTabs:8,distinctFixtureOrigins:8,selectedTabPosition:5,staticReadingOnly:true},
     dexExeSha256:digest(dex),dexAsarSha256:digest(asar),edgeExeSha256:digest(files.edge),arms:{},
-    scope:'ONE serial same-host exploratory pair. Whole owned Windows tree private resident only during quiet, timestamped by Windows PerfProc QPC after one prewarm outside the window; browser observer disconnected. Wake fidelity measured after both samples and reported separately. Desk host/browser order, site and engine dependence remain. No CPU/GPU/power, performance target or feature parity conclusion.'};
+    scope:'ONE serial same-host exploratory pair. Whole owned Windows tree private resident only during quiet, timestamped by Windows PerfProc QPC after one prewarm outside the window; browser observer disconnected. Wake fidelity is independent after both elapsed checkpoints and unchanged workload provenance; no paired delta for an invalid memory arm. Desk host/browser order, site and engine dependence remain. No CPU/GPU/power, performance target or feature parity conclusion.'};
   const f=await listenFixture();
   try{
     for(const kind of ORDER){
       if(report.arms.edge?.cleanupMissing)break;
       report.arms[kind]=await runArm(kind,files[kind],asar,f);
       if(report.arms[kind].missing)console.error(kind+': '+report.arms[kind].missing);
+      else if(report.arms[kind].memoryMissing)console.error(kind+' memory: '+report.arms[kind].memoryMissing);
       await wait(2500);
     }
     const {edge,dexerion}=report.arms;
