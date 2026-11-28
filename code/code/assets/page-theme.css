@@ -577,3 +577,19 @@ body > .cmd > #q:focus ~ .lead,
 body > .acts > #ai-btn:is(:hover, :focus-visible),
 body > .acts > #ai-btn svg,
 body #ai-log a.md-a { color: var(--accent-text); }
+
+/* Search, Starred and Tasks use one gutter. The daylight layer, quote,
+   assistant mode and existing narrow-window breakpoints stay as before. */
+body:not(.ai):has(> .cmd > #q) {
+  --start-column:min(620px,92vw,100%);
+}
+body:not(.ai):has(> .cmd > #q) > :is(.cmd,#starred-title,#starred) {width:var(--start-column)}
+body:not(.ai) #starred .tile {padding-inline:11px;box-shadow:none}
+body:not(.ai) #starred .tile:hover {transform:none}
+body:not(.ai) #starred .tile .x {width:24px;height:24px}
+body:not(.ai) #starred .tile:has(> .x) {padding-inline-end:34px}
+body:not(.ai) > .mark h1 {letter-spacing:.105em}
+body:not(.ai) > .acts #ai-btn:hover {transform:none}
+@media (max-width:1100px) {
+  body:not(.ai):has(> .cmd > #q) > #tasks-panel {width:var(--start-column)}
+}
