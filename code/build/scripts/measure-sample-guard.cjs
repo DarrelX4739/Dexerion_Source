@@ -70,6 +70,12 @@ function workloadOrder(browsers, trial, reverseFirst) {
     ? [...browsers].reverse() : [...browsers];
 }
 
+// In a four-arm direct-launch vs automation control, pair on one host while
+// cycling every arm through each position rather than favouring one launch.
+function fourArmOrder(browsers, trial, anchor) {
+  const offsets = [0, 1, 3, 2];
+  return offsets.map((n) => browsers[(n + trial - 1 + anchor) % 4]);
+}
 function rendererRoleMap(observations) {
   const labels = new Map();
   for (const { pid, kind } of observations) {
@@ -81,4 +87,4 @@ function rendererRoleMap(observations) {
   return labels;
 }
 
-module.exports = { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };
+module.exports = { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };

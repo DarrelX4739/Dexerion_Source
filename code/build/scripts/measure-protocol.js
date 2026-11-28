@@ -33,6 +33,7 @@
 //   MEASURE_BROWSERS       comma list; default edge,dexerion
 //   MEASURE_DEADLINE_MIN   wall-clock budget in minutes (default 45); trials
 //                          that would start past it are recorded as pending
+//   MEASURE_LAUNCH_CONTROL  1 adds legacy automation arms as controls
 //   MEASURE_NATIVE_LAUNCH  1 launches both binaries without automation flags
 //   MEASURE_SKIP_POWER     1 omits RAPL on virtual hosts; never guesses power
 //   DEX_BUILD_DIR          launch Dexerion from another build tree (used to
@@ -47,7 +48,7 @@ const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
 const { aggregateGpu } = require('./measure-gpu-aggregate.cjs');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
-const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -61,6 +62,7 @@ const DEADLINE_MIN = Number(process.env.MEASURE_DEADLINE_MIN) || 45;
 const CORES = os.cpus().length;
 const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
 const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
+const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
 const E = path.join(__dirname, 'measure-env.ps1');
@@ -78,7 +80,8 @@ const SCENARIOS = {
 const SCENARIO_ORDER = (process.env.MEASURE_SCENARIOS
   || 'active-browsing,background-tabs,idle,multitasking')
   .split(',').map((s) => s.trim()).filter((s) => SCENARIOS[s]);
-const BROWSERS = (process.env.MEASURE_BROWSERS || 'edge,dexerion')
+const BROWSERS = LAUNCH_CONTROL ? ['edge', 'edge-automation', 'dexerion', 'dexerion-automation']
+  : (process.env.MEASURE_BROWSERS || 'edge,dexerion')
   .split(',').map((s) => s.trim()).filter((s) => s === 'edge' || s === 'dexerion');
 
 // Dexerion under test: the main build tree, or a baseline worktree build dir.
@@ -381,6 +384,18 @@ async function prepareNative(browser, base, scenario) {
     await waitFor(async () => (await samplePage(front)).visible, 'native foreground visibility');
     const version = await session.devtools.send('Browser.getVersion');
     return { profileDir: session.profileDir, version: version.product,
+      telemetry: async () => {
+        const { targetInfos } = await session.devtools.send('Target.getTargets');
+        const tally = new Map();
+        for (const info of targetInfos) {
+          if (info.type === 'browser') continue;
+          const group = urls.includes(info.url) ? 'workload-' + info.type
+            : /^edge:|^chrome:/i.test(info.url) ? 'built-in-' + info.type
+              : 'other-' + info.type;
+          tally.set(group, (tally.get(group) || 0) + 1);
+        }
+        return Object.fromEntries(tally);
+      },
       pageState: () => samplePage(front), close: session.close };
   } catch (err) { await session.close(); throw err; }
 }
@@ -416,8 +431,10 @@ async function runTrial(browser, scenario, base, trialIdx) {
     if (!t.env || !t.env.powerPlan || t.env.onAc === 'unknown' || t.env.osBuild === undefined) {
       t.valid = false; t.invalidReason = 'environment-record-missing';
     }
-    session = NATIVE_LAUNCH ? await prepareNative(browser, base, scenario)
-      : browser === 'edge' ? await prepareEdge(base, scenario) : await prepareDexerion(base, scenario);
+    const useNative = NATIVE_LAUNCH && !browser.endsWith('-automation');
+    const browserBin = browser.replace(/-automation$/, '');
+    session = useNative ? await prepareNative(browserBin, base, scenario)
+      : browserBin === 'edge' ? await prepareEdge(base, scenario) : await prepareDexerion(base, scenario);
     if (session.version) t.browserVersion = session.version;
     await sleep(SETTLE_MS);
 
@@ -439,7 +456,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
     t.wallSec = round(wallSec, 1);
     t.foreground = foregroundSample(beforeForeground, afterForeground, wallSec,
       SCENARIOS[scenario].foreground === 'animated');
-    if (NATIVE_LAUNCH) {
+    if (useNative) {
       t.foreground.viewport = { width: beforeForeground.width, height: beforeForeground.height, scale: beforeForeground.scale };
     }
 
@@ -448,6 +465,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
     const cpuSec = cd.cpu100ns / 1e7;
     const roles = {};
     for (const p of treeB) roles[roleOf(p)] = (roles[roleOf(p)] || 0) + 1;
+    if (session.telemetry) { try { t.visibleAndBackgroundTargets = await session.telemetry(); } catch {} }
     t.cpu = {
       treeCpuSec: round(cpuSec, 2),
       cpuCorePct: round(cpuSec / wallSec * 100, 3), // percent of one logical core
@@ -565,6 +583,7 @@ function pctOfEdge(dexS, edgeS) {
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
       nativeLaunch: NATIVE_LAUNCH,
+      exploratoryLauncherControl: LAUNCH_CONTROL,
       edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
       dexerionLaunch: NATIVE_LAUNCH ? 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP' : 'Playwright Electron loader, isolated data dir, GPU adaptive',
     },
@@ -583,8 +602,9 @@ function pctOfEdge(dexS, edgeS) {
       // Randomise only the first slot, then alternate to bound order imbalance
       // to one round while keeping the two arms paired in time.
       const reverseFirst = Math.random() < 0.5;
+      const anchor = Math.floor(Math.random() * 4);
       for (let i = 1; i <= TRIALS; i += 1) {
-        const order = workloadOrder(BROWSERS, i, reverseFirst);
+        const order = LAUNCH_CONTROL ? fourArmOrder(BROWSERS, i, anchor) : workloadOrder(BROWSERS, i, reverseFirst);
         trialOrder.push({ trial: i, order });
         for (const browser of order) {
           const elapsedMin = (Date.now() - startedAt) / 60000;
@@ -630,6 +650,14 @@ function pctOfEdge(dexS, edgeS) {
         g.nValid = valid.length;
         g.summary = {};
         for (const [axis, fn] of Object.entries(AXES)) g.summary[axis] = summarize(valid, fn);
+        g.processCounts = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.cpu?.roles || {})))].sort().map((role) => [
+          role, summarize(valid, (t) => t.cpu?.roles[role] ?? 0),
+        ]));
+        g.targetCounts = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.visibleAndBackgroundTargets || {})))].sort().map((target) => [
+          target, summarize(valid, (t) => t.visibleAndBackgroundTargets ? t.visibleAndBackgroundTargets[target] ?? 0 : NaN),
+        ]));
+        console.log('  Process counts ' + browser + ': ' + JSON.stringify(g.processCounts));
+        if (Object.keys(g.targetCounts).length) console.log('  Target counts ' + browser + ': ' + JSON.stringify(g.targetCounts));
         g.privateMiB = summarize(valid, (t) => t.ram?.privateMiBB);
         g.privateWsMiB = summarize(valid, (t) => t.ram?.privateWsMiBB);
         g.ramByRole = Object.fromEntries([...new Set(valid.flatMap((t) => Object.keys(t.ram?.byRoleB || {})))].sort().map((role) => [
@@ -657,6 +685,15 @@ function pctOfEdge(dexS, edgeS) {
         })).filter((x) => x.noiseLimited).map((x) => x.trial);
       }
 
+      if (LAUNCH_CONTROL) {
+        for (const browser of ['edge', 'dexerion']) {
+          const a = results.scenarios[scenario][browser], b = results.scenarios[scenario][browser + '-automation'];
+          console.log('  Launch control ' + browser + ': ' + JSON.stringify({
+            direct: { axes: a.summary, privateResident: a.privateWsMiB },
+            automation: { axes: b.summary, privateResident: b.privateWsMiB },
+          }));
+        }
+      }
       // Grade the 20% minimum separately from the optional 40% stretch.
       const pair = results.scenarios[scenario];
       if (pair.edge && pair.dexerion) {

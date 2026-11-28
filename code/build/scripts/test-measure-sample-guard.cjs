@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
+const { fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -95,4 +95,14 @@ test('native renderer attribution does not count shared process memory twice', (
   ]);
   assert.deepEqual([...labels], [[10, 'renderer-shell'], [11, 'renderer-foreground'],
     [12, 'renderer-background'], [13, 'renderer-mixed']]);
+});
+
+
+test('each arm appears once in every position in the four-arm launch control', () => {
+  const arms = ['edge', 'edge-automation', 'dexerion', 'dexerion-automation'];
+  for (let anchor = 0; anchor < 4; anchor++) {
+    const orders = [1, 2, 3, 4].map((trial) => fourArmOrder(arms, trial, anchor));
+    for (let pos = 0; pos < 4; pos++) assert.deepEqual(new Set(orders.map((order) => order[pos])), new Set(arms));
+    for (const order of orders) assert.deepEqual(new Set(order), new Set(arms));
+  }
 });

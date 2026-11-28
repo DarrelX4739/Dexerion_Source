@@ -43,10 +43,12 @@ jobs:
           node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-gpu-aggregate.cjs
       - name: Measure Edge and Dexerion on the same virtual Windows host
         env:
+          LAUNCH_CONTROL: ${{ contains(github.event.head_commit.message, '[launch-control]') }}
           NATIVE_SOAK: ${{ contains(github.event.head_commit.message, '[native-soak]') }}
           NATIVE_LAUNCH: ${{ contains(github.event.head_commit.message, '[native-launch]') }}
           FOCUS_ONLY: ${{ contains(github.event.head_commit.message, '[edge-foreground]') }}
         run: |
+          if ($env:LAUNCH_CONTROL -eq 'true') { $env:MEASURE_LAUNCH_CONTROL = '1' }
           if ($env:NATIVE_SOAK -eq 'true') { $env:MEASURE_SETTLE_MS = '22000' }
           if ($env:NATIVE_LAUNCH -eq 'true') { $env:MEASURE_NATIVE_LAUNCH = '1' }
           if ($env:FOCUS_ONLY -eq 'true') { $env:MEASURE_SCENARIOS = 'active-browsing' }
