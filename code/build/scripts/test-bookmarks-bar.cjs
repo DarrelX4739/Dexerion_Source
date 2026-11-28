@@ -73,3 +73,47 @@ test('rename, replacement, order, visibility, and deletion retain their existing
   assert.equal(f.bar.style.display, 'flex');
   assert.deepEqual(f.bar.children.map((a) => a.textContent), ['Docs']);
 });
+
+test('bookmark lookups match the old all-roots membership without stale state', () => {
+  const start = shell.indexOf('function isBookmarked(');
+  const end = shell.indexOf('function updateBookmarkStar', start);
+  assert.ok(start >= 0 && end > start);
+  const ctx = { S: null };
+  const lookup = vm.runInNewContext(shell.slice(start, end) + '\nisBookmarked;', ctx);
+  assert.equal(lookup(first.url), false);
+  ctx.S = { bookmarks: { roots: { bar: [first], other: [second, first], empty: null } } };
+  assert.equal(lookup(first.url), true);
+  assert.equal(lookup(second.url), true);
+  assert.equal(lookup('https://example.test/absent'), false);
+  ctx.S = { bookmarks: { roots: { bar: [], other: [] } } };
+  assert.equal(lookup(first.url), false);
+});
+
+test('a saved chrome accent takes precedence without reading computed style', () => {
+  const start = shell.indexOf('function render(s)');
+  const end = shell.indexOf('function updateMemBar', start);
+  assert.ok(start >= 0 && end > start);
+  const noop = () => {};
+  const applied = [];
+  let reads = 0;
+  let token = '  #abc123  ';
+  const run = vm.runInNewContext(shell.slice(start, end) + '\nrender;', {
+    document: {
+      documentElement: { dataset: {}, style: { setProperty: (...args) => applied.push(args) } },
+      body: { classList: { add: noop } },
+    },
+    getComputedStyle: () => { reads++; return { getPropertyValue: () => token }; },
+    SKIN: '', SKIN_MODE: '', lastTabKey: '', draggingTab: false,
+    applySkin: noop, buildTabs: noop, updateChromeRest: noop, updateTimer: noop,
+    updateTasks: noop, updateInspector: noop, updateMemBar: noop,
+  });
+  const state = { tabs: [], groups: [], active: 1, ui: { accent: '#012345' } };
+  run(state);
+  assert.equal(reads, 0);
+  state.ui.accent = '';
+  run(state);
+  token = ' ';
+  run(state);
+  assert.equal(reads, 2);
+  assert.deepEqual(applied, [['--accent', '#012345'], ['--accent', '#abc123'], ['--accent', '#35c4ff']]);
+});

@@ -86,3 +86,18 @@ close/reopen, keyboard navigation, and bookmarking after tab switches in the
 real app. For the previous suggestion change, use `DEX_SUGGEST_RESCAN=1` to
 measure the old double scan on the same commit; time local results separately
 from network completions.
+
+### Follow-up: remove redundant shell work
+
+- Bookmark membership now checks the URL directly rather than building a Set
+  on every chrome update or click. On Linux/Node, a 1,500-bookmark fixture
+  (early hit, late hit, miss; seven alternating 15,000-lookup batches per arm)
+  went from 64.9 to 14.0 µs per lookup (78% less). This is not a full-app result.
+- When a saved accent is present, skip the unused computed-style read. Tests
+  cover the saved value, theme-token fallback and default fallback.
+- Rejected a deferred profile writer that skipped byte-identical files.
+  Changing only history cut flushes from ten to one, but a seven-batch
+  local disk A/B was slower (0.53 to 0.75 ms per save). Profile persistence
+  was left unchanged.
+- Eight focused tests, the 82-file fast gate, and 16 packaging tests passed.
+  No Windows/Edge resource result is claimed for these changes.
