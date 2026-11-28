@@ -1,12 +1,23 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { once } = require('node:events');
 const { _electron: electron, expect, test } = require('@playwright/test');
+const { extractFile } = require('@electron/asar');
+const { upstreamFixture } = require('../scripts/lucide-shell-oracle.cjs');
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+
+function svgShapes(elements) {
+  const read = node => ({ namespace: node.namespaceURI, tag: node.localName,
+    attrs: Object.fromEntries([...node.attributes].map(attr => [attr.name, attr.value])),
+    children: [...node.children].map(read) });
+  return elements.map(read);
+}
 const locked = require('../package-lock.json').packages['node_modules/electron'].version;
 
 test('unpacked refreshed Dexerion opens its shell and navigates a local page', async () => {
@@ -15,6 +26,15 @@ test('unpacked refreshed Dexerion opens its shell and navigates a local page', a
   assert.ok(fs.statSync(exe).isFile());
   const exactArchive = path.join(path.dirname(exe),'resources','app.asar');
   assert.ok(fs.statSync(exactArchive).isFile());
+  // Verify both resources inside the archive we will actually launch. The
+  // full original remains packaged, but boot should execute only the subset.
+  for (const file of ['lucide-shell.js', 'lucide.min.js']) {
+    const asset = ['assets', 'vendor', file];
+    const packed = extractFile(exactArchive, path.join(...asset));
+    const checkout = fs.readFileSync(path.resolve(__dirname, '../../code', ...asset));
+    assert.equal(digest(packed), digest(checkout), `${file} must be packed unchanged`);
+  }
+  const originalIcons = upstreamFixture();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-refreshed-packed-'));
   let authority;
   const server = http.createServer((req,res) => {
@@ -51,7 +71,8 @@ test('unpacked refreshed Dexerion opens its shell and navigates a local page', a
     await expect.poll(() => win.url()).toMatch(/\/renderer\/shell\.html(?:[?#].*)?$/);
     const address = win.getByRole('textbox', {name:'Search Dexerion or type a URL'});
     await expect(address).toBeVisible();
-    await expect(win.locator('script[src$="/vendor/lucide.min.js"]')).toHaveCount(1);
+    await expect(win.locator('script[src$="/vendor/lucide-shell.js"]')).toHaveCount(1);
+    await expect(win.locator('script[src$="/vendor/lucide.min.js"]')).toHaveCount(0);
     await expect.poll(() => win.evaluate(() => typeof window.lucide?.createIcons)).toBe('function');
     await expect(win.getByRole('button',{ name:'New tab', exact:true })).toBeVisible();
     const shellState = () => win.evaluate(() => window.dexerion.invoke('dex:get-state'));
@@ -67,6 +88,11 @@ test('unpacked refreshed Dexerion opens its shell and navigates a local page', a
     await win.getByRole('button',{name:'Open Dexerion AI sidebar'}).click();
     await expect(win.locator('#ai-sidebar')).toBeVisible();
     await expect(win.locator('#ai-taskbar-title')).toHaveText('New chat');
+    const icons = win.locator('svg[data-lucide]');
+    await expect(icons).toHaveCount(originalIcons.static.length);
+    expect(await icons.evaluateAll(svgShapes)).toEqual(originalIcons.static);
+    await expect(win.getByRole('button', { name: 'New chat', exact: true }).locator('svg')).toBeVisible();
+    await expect(win.getByRole('button', { name: 'Open chat history', exact: true }).locator('svg')).toBeVisible();
     await address.fill(url);
     await address.press('Enter');
     await expect.poll(async () => {
