@@ -2370,3 +2370,20 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 #ai-sidebar .ai-panel-head {padding-inline-start:12px}
 #ai-sidebar .ai-panel-head h2 {font-weight:650;line-height:1.2}
 #ai-sidebar .ai-panel-body {scroll-padding-block:14px 32px}
+
+@media (forced-colors:active) {
+  #toolbar #omnibox:focus-visible,
+  #dmenu .mitem:focus-visible,
+  #tabs .tab .x:focus-visible,
+  #tabs .gchip:focus-visible:not(.drop) {outline-color:Highlight}
+  #tabs .tab.active {border-block-end-color:Highlight}
+  #tabs .gchip.drop, #tabs .tab.drop-group {outline-color:Highlight}
+  #tabs .tab:is(.drop-before,.drop-left) {border-inline-start-color:Highlight}
+  #tabs .tab:is(.drop-after,.drop-right) {border-inline-end-color:Highlight}
+  body.vertical #tabs .tab:is(.drop-before,.drop-left) {
+    border-inline-start-color:transparent;border-block-start-color:Highlight;
+  }
+  body.vertical #tabs .tab:is(.drop-after,.drop-right) {
+    border-inline-end-color:transparent;border-block-end-color:Highlight;
+  }
+}

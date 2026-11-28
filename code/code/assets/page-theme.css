@@ -603,3 +603,7 @@ body:not(.ai) > .acts #ai-btn:hover {transform:none}
   .dx-page {padding-block-start:30px}
   .dx-page > .dx-list .dx-item .actions {flex-wrap:wrap;justify-content:flex-end;max-width:48%}
 }
+
+@media (forced-colors:active) {
+  body > .cmd > #q:focus-visible {outline:2px solid Highlight;outline-offset:1px}
+}
