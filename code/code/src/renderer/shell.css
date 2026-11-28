@@ -603,6 +603,181 @@ body.vertical #newtab-btn { width:100%; height:28px; margin:5px 0 0; flex:none; 
 body.vertical #mid { flex:1; display:flex; flex-direction:column; min-width:0; }
 body.vertical #dmenu { top:56px; }
 
+/* The address is the persistent field. Adjacent actions retain separate
+   32px hit targets and their native popup anchors. */
+:root:not([data-skin]) #toolbar button { border-radius: 4px; }
+:root:not([data-skin]) #omnibox {
+  height: 34px;
+  border-radius: 5px;
+  padding-inline: 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--bg);
+  box-shadow: none;
+}
+:root:not([data-skin])[data-theme="dark"] #omnibox { background: #0b0b0b; }
+:root:not([data-skin]) #omnibox:focus {
+  outline: 2px solid var(--index-focus);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+:root:not([data-skin]) #omnibox::placeholder,
+:root:not([data-skin]) #bookmarkbar a { color: var(--fg2); }
+@media (max-width: 760px) {
+  :root:not([data-skin]) #toolbar {
+    gap: 1px;
+    padding-inline: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  :root:not([data-skin]) #lock { width: 16px; }
+  :root:not([data-skin]) #omni-wrap { min-width: 66px; margin-inline: 2px; }
+  :root:not([data-skin]) #omnibox { padding-inline: 6px; }
+}
+:root:not([data-skin]) #menu-btn.open { color: var(--fg); }
+:root:not([data-skin]) #dmenu,
+:root:not([data-skin]) #gedit {
+  background: var(--surface);
+  backdrop-filter: none;
+  border-color: var(--hair2);
+  border-radius: 6px;
+}
+:root:not([data-skin]) #dmenu .mitem { animation: none; border-radius: 3px; }
+:root:not([data-skin]) #dmenu .mlabel {
+  color: var(--fg2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .025em;
+  text-transform: none;
+}
+:root:not([data-skin]) #dmenu kbd {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg2);
+}
+:root:not([data-skin]) #dmenu .mfoot,
+:root:not([data-skin]) #dmenu .about-link { color: var(--fg2); }
+:root:not([data-skin]) #gedit input { background: var(--bg); color: var(--fg); }
+:root:not([data-skin]) #gedit .gswb,
+:root:not([data-skin]) #ai-sidebar .ai-paper-dot { border-radius: 4px; }
+:root:not([data-skin]) #gedit .gswb:hover,
+:root:not([data-skin]) #ai-sidebar .ai-paper-dot:hover { transform: none; outline: 1px solid var(--fg2); }
+:root:not([data-skin]) #gedit .gswb.on,
+:root:not([data-skin]) #ai-sidebar .ai-paper-dot.sel {
+  border: 2px solid var(--bg2);
+  box-shadow: 0 0 0 2px var(--fg);
+}
+:root:not([data-skin]) :is(#toolbar, #tabs, #rail-timer, #rail-tasks, #dmenu, #gedit) :focus-visible {
+  outline: 2px solid var(--index-focus);
+  outline-offset: -2px;
+}
+:root:not([data-skin]) #tabstrip .gchip.drop,
+:root:not([data-skin]) #tabstrip .tab.drop-group {
+  outline: 2px dashed var(--index-focus);
+  outline-offset: -3px;
+}
+:root:not([data-skin]) #tabstrip .tab.drop-before { box-shadow: inset 0 2px var(--index-focus); }
+:root:not([data-skin]) #tabstrip .tab.drop-after,
+:root:not([data-skin]) #tabs.drop-end { box-shadow: inset 0 -2px var(--index-focus); }
+@media (forced-colors: active) {
+  :root:not([data-skin]) #tabstrip .tab.active { outline: 1px solid Highlight; outline-offset: -1px; }
+  :root:not([data-skin]) #tabstrip .tab.active::after { background: Highlight; forced-color-adjust: none; }
+  :root:not([data-skin]) #tabstrip .tab.grouped::before { background: CanvasText; forced-color-adjust: none; }
+  :root:not([data-skin]) #tabstrip .tab.drop-before { border-top: 2px solid Highlight; }
+  :root:not([data-skin]) #tabstrip .tab.drop-after { border-bottom: 2px solid Highlight; }
+}
+
+
+/* Default vertical chrome. The tab list reaches the page edge while the timer
+   and tasks keep their original insets. Skin styles retain their own geometry. */
+:root:not([data-skin]) {
+  --index-inset: 7px;
+  --index-selected: color-mix(in srgb, var(--fg) 13%, var(--bg2));
+  --index-focus: color-mix(in srgb, var(--fg) 78%, var(--accent));
+}
+:root:not([data-skin]) body.vertical #tabstrip {
+  padding-inline: 0;
+  border-right: 0;
+  box-shadow: inset -1px 0 var(--hair);
+}
+:root:not([data-skin]) #tabstrip.rail-collapsed { --index-inset: 4px; }
+:root:not([data-skin]) #rail-timer,
+:root:not([data-skin]) #rail-tasks {
+  margin-inline: var(--index-inset) calc(var(--index-inset) + 1px);
+}
+:root:not([data-skin]) body.vertical .tab {
+  padding-inline: calc(var(--index-inset) + 12px) calc(var(--index-inset) + 9px);
+  border: 0;
+  border-radius: 0;
+  color: var(--fg2);
+  animation: none;
+}
+:root:not([data-skin]) body.vertical .tab.grouped { background: transparent; }
+:root:not([data-skin]) body.vertical .tab:hover { background: var(--hover); color: var(--fg); }
+:root:not([data-skin]) body.vertical .tab.active {
+  color: var(--fg);
+  background: var(--index-selected);
+  font-weight: 600;
+}
+:root:not([data-skin]) body.vertical .tab.active::after {
+  inset: 4px 0 4px auto;
+  width: 4px;
+  height: auto;
+  border-radius: 0;
+  background: var(--fg);
+  pointer-events: none;
+}
+:root:not([data-skin]) body.vertical .tab.grouped::before {
+  display: block;
+  inset: 2px auto 2px var(--index-inset);
+  width: 2px;
+  border-radius: 0;
+  background: var(--gc);
+  pointer-events: none;
+}
+:root:not([data-skin]) body.vertical .tab.sleeping { opacity: 1; color: var(--muted); }
+:root:not([data-skin])[data-theme="light"] body.vertical .tab.sleeping { color: var(--fg2); }
+:root:not([data-skin]) body.vertical .tab .zzz { color: var(--fg2); }
+:root:not([data-skin]) .tab .x:focus-visible { opacity: 1; }
+:root:not([data-skin]) body.vertical #tabstrip.rail-collapsed .tab { padding: 0; }
+:root:not([data-skin]) body.vertical .gchip {
+  padding-inline: calc(var(--index-inset) + 7px);
+  border: 0;
+  background: transparent;
+  color: var(--fg2);
+  border-radius: 0;
+  animation: none;
+}
+:root:not([data-skin]) body.vertical .gchip:hover { background: var(--hover); color: var(--fg); }
+:root:not([data-skin]) .gchip .gnm { max-width: none; }
+:root:not([data-skin]) .gchip .gct {
+  margin-inline-start: auto;
+  padding: 0 3px;
+  background: transparent;
+  color: var(--fg2);
+  font-variant-numeric: tabular-nums;
+}
+:root:not([data-skin]) body.vertical #tabs #newtab-btn {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg2);
+  background: var(--bg2);
+  font: 500 12px var(--font);
+}
+:root:not([data-skin]) body.vertical #tabstrip.rail-open #newtab-btn {
+  justify-content: flex-start;
+  padding-inline: calc(var(--index-inset) + 14px);
+}
+#newtab-btn .newtab-label { display: none; }
+:root:not([data-skin]) #tabstrip.rail-open .newtab-label { display: inline; }
+:root:not([data-skin]) body.vertical #tabs #newtab-btn:hover { color: var(--fg); background: var(--hover); }
+
+
 #ai-btn:hover { color:var(--accent); background:var(--hover); border-color:var(--hair); }
 #ai-sidebar[hidden] { display:none !important; }
 #ai-sidebar {
@@ -702,7 +877,6 @@ body.vertical #dmenu { top:56px; }
   font:500 12px var(--font); cursor:pointer;
 }
 .ai-overflow-item:hover, .ai-overflow-item:focus-visible { background:var(--hover); }
-.ai-empty-mark img.ai-logo-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .ai-setup { margin:0 12px 10px; padding:10px; border:1px solid var(--hair2); border-radius:8px; background:var(--surface); position:relative; z-index:1; flex:none; }
 .ai-setup[hidden] { display:none; }
 .ai-setup b, .ai-setup span { display:block; }
@@ -743,7 +917,6 @@ body.vertical #dmenu { top:56px; }
 .ai-row-btn.danger:hover { color:var(--err); background:color-mix(in srgb,var(--err) 12%,transparent); }
 .ai-empty { margin:auto 0; padding:26px 12px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--muted); }
 .ai-empty[hidden] { display:none; }
-.ai-empty-mark { width:44px; height:44px; border-radius:12px; background:var(--surface); color:var(--fg); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px; margin-bottom:4px; border:1px solid var(--hair); position:relative; overflow:hidden; }
 .ai-empty-title { font-size:18px; font-weight:600; letter-spacing:-.01em; color:var(--fg); margin:0; }
 .ai-empty-sub { font-size:12.5px; max-width:30ch; line-height:1.5; margin:0; color:var(--fg2); }
 .ai-empty-hint { color:var(--muted); font-size:11px; margin:8px 0 0; }
@@ -931,7 +1104,6 @@ table.md-table { width:100%; margin:8px 0 10px; border-collapse:collapse; font-s
 #ai-sidebar .ai-ask { border-radius:6px; }
 #ai-sidebar .ai-suggest button, #ai-sidebar .ai-suggestions button { border-radius:6px; }
 #ai-sidebar .ai-setup { border-radius:6px; }
-#ai-sidebar .ai-empty-mark { border-radius:12px; }
 #ai-sidebar .ai-icon-btn { border-radius:6px; }
 #ai-sidebar .ai-send { border-radius:6px; }
 #ai-sidebar .ai-ctx-body { border-radius:5px; }
@@ -942,7 +1114,6 @@ table.md-table { width:100%; margin:8px 0 10px; border-collapse:collapse; font-s
 #ai-sidebar[data-ai-layout="b"] .ai-chat-row,
 #ai-sidebar[data-ai-layout="b"] .ai-suggest button,
 #ai-sidebar[data-ai-layout="b"] .ai-suggestions button { border-radius:8px; }
-#ai-sidebar[data-ai-layout="b"] .ai-empty-mark { border-radius:12px; }
 /* ================= Theme A · Minimalist =================
    Quiet monochrome restraint: flat surfaces, hairlines, small radii,
    tight grotesque type. The accent appears only where it means something. */
@@ -955,7 +1126,6 @@ table.md-table { width:100%; margin:8px 0 10px; border-collapse:collapse; font-s
 #ai-sidebar[data-ai-layout="a"] .ai-chat-row,
 #ai-sidebar[data-ai-layout="a"] .ai-suggest button,
 #ai-sidebar[data-ai-layout="a"] .ai-suggestions button { border-radius:6px; }
-#ai-sidebar[data-ai-layout="a"] .ai-empty-mark { border-radius:10px; }
 #ai-sidebar[data-ai-layout="a"] .ai-taskbar-title { font-size:12.5px; letter-spacing:-.01em; }
 #ai-sidebar[data-ai-layout="a"] .ai-message .text { font-size:13px; }
 #ai-sidebar[data-ai-layout="a"] .ai-msg-meta,
@@ -976,7 +1146,6 @@ table.md-table { width:100%; margin:8px 0 10px; border-collapse:collapse; font-s
 #ai-sidebar[data-ai-layout="b"] .ai-chat-row,
 #ai-sidebar[data-ai-layout="b"] .ai-suggest button,
 #ai-sidebar[data-ai-layout="b"] .ai-suggestions button { border-radius:14px; }
-#ai-sidebar[data-ai-layout="b"] .ai-empty-mark { border-radius:18px; box-shadow:0 10px 30px -12px var(--accent); }
 #ai-sidebar[data-ai-layout="b"] .ai-send { border-radius:50%; width:34px; height:34px; box-shadow:0 6px 18px -8px var(--accent); }
 #ai-sidebar[data-ai-layout="b"] .ai-runbar { box-shadow:0 8px 24px -12px var(--accent); border-color:color-mix(in srgb,var(--accent) 40%,transparent); }
 #ai-sidebar[data-ai-layout="b"] .ai-message.user .text { background:color-mix(in srgb,var(--accent) 22%,var(--surface)); }
@@ -1387,6 +1556,19 @@ body.vertical #tabstrip.rail-open.show-tasks #rail-mini {
 }
 body.vertical #tabstrip.rail-open.show-tasks #rail-tasks { flex:0 0 50%; max-height:none; }
 body.vertical #tabstrip.rail-open.show-tasks #tasks-mini { display:none; }
+
+/* Give open tabs more room in short windows without changing which utility
+   is shown. Both panels retain their existing internal scroll containers. */
+@media (max-height: 600px) {
+  :root:not([data-skin]) body.vertical #tabstrip.rail-open:not(.show-tasks) #rail-timer,
+  :root:not([data-skin]) body.vertical #tabstrip.rail-open.show-tasks #rail-tasks {
+    flex-basis: min(50%, max(128px, calc(110vh - 365px)));
+  }
+  :root:not([data-skin]) body.vertical #tabstrip.rail-open:not(.show-tasks) #rail-timer > *,
+  :root:not([data-skin]) body.vertical #tabstrip.rail-open.show-tasks #rail-tasks > #tasks-body {
+    flex-shrink: 0;
+  }
+}
 
 /* ============================================================================
    Video fullscreen (body.html-fs)
@@ -1917,8 +2099,6 @@ body.ais-open { overflow:hidden; }
 /* Empty state */
 .ai-empty { margin:auto 0; padding:26px 12px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--muted); }
 .ai-empty[hidden] { display:none; }
-.ai-empty-mark { width:44px; height:44px; border-radius:12px; background:var(--surface); color:var(--fg); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px; margin-bottom:4px; border:1px solid var(--hair); position:relative; overflow:hidden; }
-.ai-empty-mark img.ai-logo-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .ai-empty-title { font-size:18px; font-weight:600; letter-spacing:-.01em; color:var(--fg); margin:0; }
 .ai-empty-sub { font-size:12.5px; max-width:30ch; line-height:1.5; margin:0; color:var(--fg2); }
 .ai-empty-hint { color:var(--muted); font-size:11px; margin:8px 0 0; }
@@ -2253,4 +2433,190 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   #ai-sidebar .ai-composer-hint[data-tone="ok"],
   #ai-sidebar .ai-overflow-status { color:CanvasText; }
   #ai-sidebar .ai-overflow-menu, #ai-sidebar .ai-panel { border:1px solid CanvasText; }
+}
+
+/* The idle pose replaces the empty-thread illustration within its existing footprint. */
+.dexi-idle { object-fit: contain; margin-bottom: 4px; flex: none; }
+
+/* Default dark assistant surfaces: one boundary for the composer, a ruled
+   prompt list, and a quiet search canvas. Paint only: the default controls,
+   visibility rules, scroll geometry, and alternate layouts stay owned above. */
+:where(:root:not([data-skin]):not([data-theme="light"])) :is(#ai-sidebar[data-ai-layout="a"], #ais) {
+  --assistant-key: color-mix(in srgb, var(--fg) 56%, var(--accent));
+  --assistant-rule: var(--hair);
+  --assistant-subtle: var(--fg2);
+  --assistant-raised: color-mix(in srgb, var(--fg) 5%, var(--bg2));
+  --assistant-action: color-mix(in srgb, var(--accent) 39%, var(--bg2));
+}
+
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] {
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-taskbar {
+  background: var(--bg2);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] :is(.ai-taskbar-new, .ai-attach-btn) {
+  color: var(--assistant-subtle);
+  border-radius: 4px;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-taskbar-new[aria-pressed="true"] {
+  color: var(--assistant-key);
+  border-color: var(--assistant-key);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-suggestions button {
+  border-color: transparent;
+  border-bottom-color: var(--assistant-rule);
+  border-radius: 3px;
+  color: var(--fg);
+  background: transparent;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-suggestions button:is(:hover,:focus-visible) {
+  background: var(--hover);
+  border-color: var(--assistant-rule);
+}
+/* Keep the conversation just as readable once the first prompt is sent. */
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-message.model .ai-message-avatar {
+  color: var(--assistant-key);
+  border-radius: 5px;
+  background: var(--assistant-raised);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] :is(.ai-message.user,.ai-message.model) .text {
+  border-color: var(--assistant-rule);
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-message.user .text {
+  background: var(--assistant-raised);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-message.model .text {
+  color: var(--fg);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-composer {
+  border-color: var(--hair2);
+  background: var(--assistant-raised);
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-composer:focus-within {
+  border-color: var(--assistant-key);
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] textarea.ai-prompt:is(:focus,:hover) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] textarea.ai-prompt {
+  border-color: transparent;
+  background: transparent;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] textarea.ai-prompt::placeholder {
+  color: var(--assistant-subtle);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] :is(#ai-model-select, #ai-effort-select) {
+  color: var(--assistant-subtle);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-send {
+  border-radius: 5px;
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-send:not(.is-stop) {
+  background: var(--assistant-action);
+  color: var(--fg);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ai-sidebar[data-ai-layout="a"] .ai-send:hover:not(:disabled) {
+  transform: none;
+}
+
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais {
+  background: var(--bg2);
+  color: var(--fg);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-top {
+  box-shadow: inset 0 -1px var(--assistant-rule);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-aura {
+  background: none;
+  animation: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-mark,.ais-hero-mark,.ais-msg.model .who,.ais-msg.user .bubble) {
+  border-color: var(--assistant-rule);
+  border-radius: 5px;
+  color: var(--fg);
+  background: var(--assistant-raised);
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-mark,.ais-hero-mark,.ais-msg.model .who) {
+  color: var(--assistant-key);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-input-row .ais-mark {
+  border-color: transparent;
+  background: transparent;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-composer,.ais-connect,.ais-suggest,.ais-modes,.ais-icon) {
+  border-color: var(--hair2);
+  border-radius: 6px;
+  background: var(--assistant-raised);
+  box-shadow: none;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-composer:focus-within {
+  border-color: var(--assistant-key);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-hero h1,.ais-input-row textarea,.ais-msg.model .text,.ais-msg.model .text .md-h,.ais-source .t) {
+  color: var(--fg);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-hero p,.ais-connect p,.ais-connect small,.ais-source .d,.ais-hint,.ais-work-detail,.ais-step-detail,.ais-actions summary,.ais-adapt summary,.ais-sources h4,.ais-mode,.ais-diff) {
+  color: var(--assistant-subtle);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-input-row textarea::placeholder {
+  color: var(--assistant-subtle);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-source .n,.ais-source:hover .t,.ais-msg.model .text a,.ais-step-ico,.ais-suggest .row.sel .mark) {
+  color: var(--assistant-key);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-mode.on,.ais-diff.on,.ais-suggest .row.sel) {
+  border-color: transparent;
+  border-radius: 4px;
+  color: var(--fg);
+  background: var(--hover);
+  box-shadow: inset 0 -2px var(--assistant-key);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-mode:hover,.ais-diff:hover,.ais-icon:hover) {
+  color: var(--fg);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-send,.ais-connect-row button) {
+  border-color: var(--assistant-key);
+  border-radius: 5px;
+  color: var(--fg);
+  background: var(--assistant-action);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-send:hover,.ais-connect-row button:hover):not(:disabled) {
+  background: color-mix(in srgb, var(--assistant-action) 90%, var(--fg));
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-to-report {
+  border-radius: 5px;
+  background: var(--assistant-raised);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais .ais-to-report:hover:not(:disabled) {
+  border-color: var(--assistant-key);
+  background: var(--hover);
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(button,summary,a,input,textarea):focus-visible {
+  outline: 2px solid var(--assistant-key);
+  outline-offset: 1px;
+}
+:where(:root:not([data-skin]):not([data-theme="light"])) #ais textarea:focus-visible {
+  outline: none; /* The containing composer owns the visible focus rule. */
+}
+
+@media (forced-colors: active) {
+  :where(:root:not([data-skin]):not([data-theme="light"])) :is(#ai-sidebar[data-ai-layout="a"],#ais) {
+    --assistant-key: Highlight;
+  }
+  :where(:root:not([data-skin]):not([data-theme="light"])) :is(#ai-sidebar[data-ai-layout="a"] .ai-composer, #ais .ais-composer):focus-within {
+    outline: 3px solid Highlight;
+    outline-offset: -3px;
+  }
+  :where(:root:not([data-skin]):not([data-theme="light"])) #ais :is(.ais-mode.on,.ais-diff.on,.ais-suggest .row.sel) {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
 }

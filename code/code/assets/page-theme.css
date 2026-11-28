@@ -440,14 +440,14 @@ button { font-family: inherit; }
 .dx-swatches { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .dx-swatch {
   width: 26px; height: 26px;
-  border-radius: 50%;
+  border-radius: 4px;
   border: 2px solid transparent;
   padding: 0;
   cursor: pointer;
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition: box-shadow var(--dur) var(--ease);
 }
-.dx-swatch:hover { transform: scale(1.12); }
-.dx-swatch.sel { box-shadow: 0 0 0 2px var(--pbg), 0 0 0 4px var(--pfg-2); }
+.dx-swatch:hover { outline: 1px solid var(--pfg-2); }
+.dx-swatch.sel { box-shadow: 0 0 0 2px var(--pbg), 0 0 0 4px var(--pfg); }
 
 /* ---------- toast ---------- */
 .dx-toast {
@@ -510,4 +510,191 @@ button { font-family: inherit; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Dark New Tab: one launch column rather than three competing fixed anchors.
+   Scope to the normal start page, not the existing assistant or other skins. */
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) {
+  --dx-launch-width: 38rem;
+  --dx-launch-line: color-mix(in srgb, var(--pfg) 14%, transparent);
+  padding: clamp(24px, 7vh, 72px) clamp(16px, 4vw, 36px) 42px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > :is(.daylight, .mark, .cmd, .acts, #starred-title, #starred, #tasks-panel) {
+  width: min(100%, var(--dx-launch-width));
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .daylight {
+  position: static;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  text-align: start;
+  margin: 0 0 clamp(18px, 3.6vh, 36px);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--dx-launch-line);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .clock {
+  font: 650 1rem/1.25 var(--font-mono);
+  letter-spacing: -.035em;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .date { color: var(--pfg-2); }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .qline { flex-basis: 100%; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .quote {
+  border: 0;
+  padding: 0;
+  margin: 4px 0;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .daylight .author { margin-block-start: 4px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .mark {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  justify-content: start;
+  align-content: center;
+  column-gap: 13px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .crest {
+  grid-row: span 2;
+  width: clamp(44px, 8vh, 66px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark h1 {
+  font-size: clamp(26px, 5.4vw, 40px);
+  line-height: 1.04;
+  letter-spacing: -.037em;
+  text-transform: none;
+  margin: 0;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .mark .sub {
+  color: var(--pfg-2);
+  margin-block-start: 4px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .cmd { margin-block-start: clamp(14px, 3.4vh, 25px); }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q {
+  padding-inline: 43px 66px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q:focus-visible {
+  outline: 2px solid var(--pfg-2);
+  outline-offset: 2px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd .go {
+  border: 0;
+  border-inline-start: 1px solid var(--dx-launch-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--pfg-2);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > .acts { margin-block-start: 10px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .acts #ai-btn {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 6px;
+  border-color: var(--dx-launch-line);
+  background: var(--pcard);
+  box-shadow: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .acts #ai-btn:hover {
+  transform: none;
+  color: var(--pfg);
+  background: var(--phover);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #starred-title { margin: 30px 0 8px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .sect > h2 { color: var(--pfg-2); letter-spacing: .12em; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #starred {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 6px;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile {
+  padding-inline: 9px 30px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile:hover {
+  transform: none;
+  background: var(--phover);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) #starred .tile .x { width: 24px; height: 24px; right: 4px; }
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) > #tasks-panel {
+  position: static;
+  margin: 22px 0 0;
+  max-height: none;
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) :is(#starred, #tasks-nt) > .empty {
+  text-align: start;
+  padding: 12px 13px;
+  border-style: solid;
+  border-radius: 4px;
+  color: var(--pfg-2);
+}
+html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q:focus {
+  border-color: var(--pborder-2);
+  box-shadow: none;
+}
+@media (max-width: 380px) {
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd #q {
+    padding-inline: 35px 52px;
+    font-size: 13px;
+  }
+  html[data-theme="dark"]:not([data-skin]) body:not(.ai):has(> #sky > .phase) .cmd .lead { left: 11px; }
+}
+
+/* Appearance only: preset chips are a family; the native custom control is
+   visibly a different action. Do not change/persist the selected colour. */
+.dx-card:has(#swatches) .themeopt:hover { transform: none; }
+.dx-card:has(#swatches) .themeopt.sel {
+  border-color: var(--pfg-2);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.dx-card:has(#swatches) #swatches { gap: 8px; }
+.dx-card:has(#swatches) #swatches #customAccent {
+  width: 29px;
+  height: 26px;
+  padding: 2px;
+  margin-inline-start: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dx-card:has(#swatches) #customAccent::-webkit-color-swatch-wrapper { padding: 0; }
+.dx-card:has(#swatches) #customAccent::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.dx-card:has(#swatches) #customAccent.preset-active { border: 1px dashed var(--pfg-2); }
+.dx-card:has(#swatches) #customAccent.preset-active::-webkit-color-swatch {
+  background:
+    linear-gradient(var(--pfg-2), var(--pfg-2)) center / 9px 1px no-repeat,
+    linear-gradient(var(--pfg-2), var(--pfg-2)) center / 1px 9px no-repeat,
+    var(--pfield) !important;
+}
+.dx-card:has(#swatches) #customAccent:focus-visible {
+  outline: 2px solid var(--pfg);
+  outline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .dx-card:has(#swatches) .dx-row:has(#swatches) { flex-wrap: wrap; gap: 10px; }
+  .dx-card:has(#swatches) .dx-row:has(#swatches) > .tx { flex: 1 0 100%; }
+  .dx-card:has(#swatches) .dx-row:has(#swatches) > .ctl { max-width: 100%; }
+}
+
+@media (forced-colors: active) {
+  /* Keep only actual colour samples exempt from the system palette. */
+  #swatches .dx-swatch {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+  #swatches .dx-swatch.sel {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+  #swatches .dx-swatch:focus-visible {
+    outline: 2px dashed CanvasText;
+    outline-offset: 2px;
+  }
+  #swatches .dx-swatch.sel:focus-visible { border-color: Highlight; }
 }
