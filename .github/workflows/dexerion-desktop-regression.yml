@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.arm == 'reference' && 'ce1ea874d339ceb639598f859bdfe8f298ef3ba2' || github.sha }}
+          ref: ${{ matrix.arm == 'reference' && 'e157975849d00b5a4e4f2badce54a59a0cac3aa7' || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -37,7 +37,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends openbox x11-utils
           npm ci
           node -p "require('electron')"
-      - name: Recheck fullscreen geometry and report retry on a managed display
+      - name: Isolate and repeat the timed-out intensive regression round
         run: |
           xvfb-run -a -s '-screen 0 1280x1024x24' bash -e -c '
             openbox --sm-disable >/tmp/dex-openbox.log 2>&1 &
@@ -48,7 +48,7 @@ jobs:
               sleep 0.25
             done
             xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"
-            npm run test:e2e -- e2e/artifacts.spec.js e2e/nextgen-intensive.spec.js e2e/preview-controls.spec.js e2e/report-write-retry.spec.js --grep "a generated site edits|intensive round 01:|site and report preview chrome|a missing report artifact"
+            npm run test:e2e -- e2e/nextgen-intensive.spec.js --grep "intensive round 13:" --repeat-each=2
           '
       - name: Keep desktop diagnostic evidence
         if: failure()
