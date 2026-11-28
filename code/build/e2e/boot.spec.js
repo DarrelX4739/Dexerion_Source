@@ -220,32 +220,71 @@ test('boots with shared tokens and streams a mock NIM reply', async ({}, testInf
         return Math.abs(thread.scrollTop - start) < 1;
       });
       await expect.poll(stableScroll, { timeout: 5000 }).toBe(true);
+      // Read-only trace of the synthetic card so an intermittent
+      // Windows dismiss produces evidence instead of a 30 second selector wait.
+      await card.evaluate(el => {
+        const thread = document.getElementById('ai-messages');
+        const menu = el.querySelector('[role="menu"]');
+        const trigger = el.querySelector('button[aria-label="More actions"]');
+        const rows = [];
+        function record(event, detail = '') {
+          if (rows.length >= 80) return;
+          rows.push({ event, detail, now:Math.round(performance.now()), scrollTop:thread.scrollTop,
+            active:document.activeElement === trigger ? 'trigger' : document.activeElement?.getAttribute('role'),
+            expanded:trigger.getAttribute('aria-expanded'), hidden:menu.hidden, connected:trigger.isConnected });
+        }
+        const scroll = () => record('scroll');
+        const focus = event => record('focus', event.target === trigger ? 'trigger' : event.target.getAttribute?.('role') || event.target.tagName);
+        const key = event => { if (/^(Enter|ArrowDown|Escape|Tab)$/.test(event.key)) record('key', event.key); };
+        const mutation = new MutationObserver(list => {
+          for (const m of list) record('mutation', m.attributeName);
+        });
+        thread.addEventListener('scroll', scroll, true);
+        document.addEventListener('focusin', focus, true);
+        document.addEventListener('keydown', key, true);
+        mutation.observe(trigger, {attributes:true,attributeFilter:['aria-expanded']});
+        mutation.observe(menu, {attributes:true,attributeFilter:['hidden']});
+        window.__dexTestReportMenuSnapshot = {
+          read() {
+            return { innerWidth, innerHeight, devicePixelRatio, scrollHeight:thread.scrollHeight, connected:trigger.isConnected,
+              thread:thread.getBoundingClientRect().toJSON(), trigger:trigger.getBoundingClientRect().toJSON(),
+              menu:menu.getBoundingClientRect().toJSON(), rows };
+          },
+          close() {
+            mutation.disconnect();
+            thread.removeEventListener('scroll', scroll, true);
+            document.removeEventListener('focusin', focus, true);
+            document.removeEventListener('keydown', key, true);
+            delete window.__dexTestReportMenuSnapshot;
+          },
+        };
+        record('ready');
+      });
       try {
         await win.keyboard.press('Enter');
         await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 5000 });
         await expect(action).toBeVisible({ timeout: 5000 });
         const items = await card.getByRole('menuitem').count();
         for (let i = 0; i < items; i++) {
-          if (await action.evaluate(el => el === document.activeElement)) break;
+          await expect(trigger, 'menu closed before focus reached its intended action').toHaveAttribute('aria-expanded','true', { timeout:2000 });
+          const hasFocus = await card.evaluate((el, label) =>
+            el.contains(document.activeElement) && document.activeElement?.getAttribute('role') === 'menuitem' &&
+            document.activeElement?.textContent.trim() === label, name);
+          if (hasFocus) break;
           await win.keyboard.press('ArrowDown');
         }
-        await expect(action).toBeFocused();
+        await expect(action).toBeFocused({ timeout: 3000 });
         await win.keyboard.press('Enter');
       } catch (e) {
-        const state = await win.evaluate(() => {
-          const thread = document.getElementById('ai-messages');
-          const card = Array.from(thread.querySelectorAll('.dxa-card[data-kind="report"]')).at(-1);
-          const trigger = card?.querySelector('button[aria-label="More actions"]');
-          const menu = card?.querySelector('[role="menu"]');
-          return { innerWidth, innerHeight, scrollTop:thread.scrollTop,
-            scrollHeight:thread.scrollHeight, expanded:trigger?.getAttribute('aria-expanded'),
-            focused:document.activeElement?.getAttribute('role'), menuHidden:menu?.hidden,
-            menuBox:menu?.getBoundingClientRect().toJSON() };
-        }).catch(() => ({}));
-        await testInfo.attach('report-menu-' + name.toLowerCase().replace(/\s+/g, '-'), {
-          body:JSON.stringify(state), contentType:'application/json',
-        });
+        const state = await win.evaluate(() => window.__dexTestReportMenuSnapshot?.read()).catch(() => ({}));
+        const f = testInfo.outputPath('report-menu-' + name.toLowerCase().replace(/\s+/g,'-') + '.json');
+        fs.mkdirSync(path.dirname(f), {recursive:true});
+        fs.writeFileSync(f,JSON.stringify(state,null,2)+'\n','utf8');
+        await testInfo.attach('report-menu-diagnostic', {path:f,contentType:'application/json'});
+        console.error('[report-menu-fixture]', JSON.stringify(state));
         throw e;
+      } finally {
+        await win.evaluate(() => window.__dexTestReportMenuSnapshot?.close()).catch(() => {});
       }
     };
 
