@@ -27,6 +27,42 @@ function isNullJson(text) {
   return !nonWhitespace.test(text);
 }
 
+// Saved site edits keep prior snapshots and unchanged source files. JSON
+// reload materializes each repeated source separately. Equal string primitives
+// can share backing storage without aliasing the version/file objects, changing
+// the on-disk format, or keeping any cache beyond this account load.
+function shareSavedSiteSources(chats) {
+  if (!Array.isArray(chats)) return;
+  let pool;
+  function share(object, key) {
+    const value = object && object[key];
+    if (typeof value !== 'string' || value.length < 4096) return;
+    if (!pool) pool = new Map();
+    const prior = pool.get(value);
+    if (prior === undefined) pool.set(value, value);
+    else object[key] = prior;
+  }
+  for (const chat of chats) {
+    if (!chat || !Array.isArray(chat.messages)) continue;
+    for (const message of chat.messages) {
+      if (message?.artifact?.kind !== 'site') continue;
+      const pending = [message.artifact];
+      while (pending.length) {
+        const site = pending.pop();
+        share(site, 'html');
+        if (Array.isArray(site.files)) {
+          for (const file of site.files) share(file, 'content');
+        }
+        if (Array.isArray(site.history)) {
+          for (const version of site.history) {
+            if (version?.artifact?.kind === 'site') pending.push(version.artifact);
+          }
+        }
+      }
+    }
+  }
+}
+
 // Atomic write: a crash or power loss mid-write must never truncate a store —
 // a torn file loads as DEFAULTS, which reads as "Dexerion reset my data". The
 // temp file is written and flushed first, then renamed over the real one, so
@@ -179,7 +215,10 @@ class ProfileStore {
       if (k === 'tasks' && residentTasks !== undefined) { data.tasks = residentTasks; continue; }
       try {
         const p = path.join(d, k === 'topSites' ? 'topsites.json' : k === 'closedTabs' ? 'closed-tabs.json' : k + '.json');
-        if (fs.existsSync(p)) data[k] = readJson(p);
+        if (fs.existsSync(p)) {
+          data[k] = readJson(p);
+          if (k === 'chats') shareSavedSiteSources(data[k]);
+        }
       } catch {}
     }
     if (!data.bookmarks.roots) data.bookmarks = this.blankAccountData().bookmarks;
