@@ -46,7 +46,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
-const { optionalSample, requireTree, hasGpuSample, foregroundSample } = require('./measure-sample-guard.cjs');
+const { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 const OUT_DIR = process.env.MEASURE_OUT_DIR
   || path.join(os.tmpdir(), 'opencode', 'dexerion-test1');
@@ -245,80 +245,81 @@ function coTenants(snapA, snapB, treePids, wallSec) {
 // ------------------------------------------------------------ browsers
 async function prepareEdge(base, scenario) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-proto-edge-'));
-  // Throwaway profile, no first-run, no default-browser check. No other
-  // flags: the comparison target is stock Edge's shipped behaviour.
-  const context = await chromium.launchPersistentContext(dir, {
-    channel: 'msedge', headless: false,
-    args: ['--no-first-run', '--no-default-browser-check'],
-  });
-  const def = SCENARIOS[scenario];
-  const first = context.pages()[0] || await context.newPage();
-  await first.goto(base + '/' + def.foreground, { waitUntil: 'domcontentloaded' });
-  for (let i = 0; i < def.backgroundTabs; i += 1) {
-    const p = await context.newPage();
-    await p.goto(base + '/animated', { waitUntil: 'domcontentloaded' });
-  }
-  await first.bringToFront();
-  return {
-    profileDir: dir,
-    pageState: () => first.evaluate(() => ({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })),
-    close: async () => { try { await context.close(); } catch {} try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} },
+  let context;
+  const close = async () => {
+    try { if (context) await context.close(); } catch {}
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
   };
+  const urls = workloadUrls(base, SCENARIOS[scenario]);
+  try {
+    // A fresh profile with no first-run prompt, otherwise stock Edge.
+    context = await chromium.launchPersistentContext(dir, {
+      channel: 'msedge', headless: false,
+      args: ['--no-first-run', '--no-default-browser-check'],
+    });
+    const first = context.pages()[0] || await context.newPage();
+    await first.goto(urls[0], { waitUntil: 'domcontentloaded' });
+    for (const url of urls.slice(1)) {
+      const p = await context.newPage();
+      await p.goto(url, { waitUntil: 'domcontentloaded' });
+    }
+    if (!matchesInventory(context.pages().map((p) => p.url()), urls)) {
+      throw new Error('Edge tab inventory did not match the workload');
+    }
+    await first.bringToFront();
+    return {
+      profileDir: dir,
+      pageState: () => first.evaluate(() => ({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })),
+      close,
+    };
+  } catch (err) { await close(); throw err; }
 }
 
 async function prepareDexerion(base, scenario) {
-  const launched = await launchMod.launchDexerion({ attempts: 2, gpu: 'adaptive' });
-  const { win } = launched;
-  const def = SCENARIOS[scenario];
-  const open = async (url, background) => {
-    await win.evaluate(({ u, b }) => window.dexerion.invoke('dex:new-tab', u, b), { u: url, b: background });
+  const { app, win, profile } = await launchMod.launchDexerion({ attempts: 2, gpu: 'adaptive' });
+  const close = async () => {
+    try { await app.close(); } catch {}
+    try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
   };
-  // Run-3 fairness fix (V4 renderer-map finding): Edge navigates its first
-  // page IN PLACE (prepareEdge -> first.goto), so Edge's tree carries exactly
-  // 1 + backgroundTabs live pages. Dexerion boots with a planted
-  // dexerion://newtab tab, and opening the foreground workload NEXT TO it gave
-  // Dexerion one extra live page per trial (the idle third renderer). Navigate
-  // the boot newtab in place instead — the same dex:navigate IPC the shell's
-  // omnibox uses — with the boot tab id resolved from dex:get-state, so the
-  // page count matches Edge's arm exactly. Everything else is unchanged.
-  const bootId = await win.evaluate(() => window.dexerion.invoke('dex:get-state')
-    .then((st) => st.active || (st.tabs[0] && st.tabs[0].id) || null));
-  await win.evaluate(({ id, u }) => window.dexerion.invoke('dex:navigate', id, u),
-    { id: bootId, u: base + '/' + def.foreground });
-  for (let i = 0; i < def.backgroundTabs; i += 1) await open(base + '/animated', true);
-  const want = def.backgroundTabs + 1;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const st = await win.evaluate(() => window.dexerion.invoke('dex:get-state'));
-    const tabs = (st && st.tabs) || [];
-    if (tabs.length >= want && !tabs.some((t) => t.loading)) break;
-    await win.waitForTimeout(250);
-  }
-  // Run-4 fairness fix (V5 finding): prepareEdge calls first.bringToFront(),
-  // so Edge's foreground page is on screen during its trials. prepareDexerion
-  // never focused the window, and with Electron's native occlusion tracker
-  // force-disabled (proven: not-disable AND explicit enable-features are both
-  // no-ops on Electron 44), a COVERED Dexerion window kept compositing at
-  // full rate — the measured "active" page rendered into the void at ~50% of
-  // a core GPU cost while Edge's focused window rendered for real. Focus the
-  // window so both arms are measured in the same actually-visible state.
-  await launched.app.evaluate(({ BrowserWindow }) => {
-    const w = BrowserWindow.getAllWindows()[0];
-    if (!w) return;
-    if (w.isMinimized()) w.restore();
-    w.show();
-    w.focus();
-  });
-  return {
-    profileDir: launched.profile,
-    pageState: () => launched.app.evaluate(async ({ webContents }, url) => {
-      const page = webContents.getAllWebContents().find((wc) => wc.getURL() === url);
-      return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })") : null;
-    }, base + '/' + def.foreground),
-    close: async () => {
-      try { await launched.app.close(); } catch {}
-      try { fs.rmSync(launched.profile, { recursive: true, force: true }); } catch {}
-    },
-  };
+  const urls = workloadUrls(base, SCENARIOS[scenario]);
+  try {
+    // Navigate the existing boot tab rather than giving Dexerion an extra
+    // live page; keep a unique marker to identify the actual foreground.
+    const bootId = await win.evaluate(() => window.dexerion.invoke('dex:get-state')
+      .then((st) => st.active || (st.tabs[0] && st.tabs[0].id) || null));
+    await win.evaluate(({ id, u }) => window.dexerion.invoke('dex:navigate', id, u), { id: bootId, u: urls[0] });
+    for (const u of urls.slice(1)) {
+      await win.evaluate((url) => window.dexerion.invoke('dex:new-tab', url, true), u);
+    }
+    let ready = false;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const st = await win.evaluate(() => window.dexerion.invoke('dex:get-state'));
+      const tabs = st?.tabs || [];
+      if (st?.active === bootId && !tabs.some((t) => t.loading) &&
+          matchesInventory(tabs.map((t) => t.url), urls)) {
+        ready = true;
+        break;
+      }
+      await win.waitForTimeout(250);
+    }
+    if (!ready) throw new Error('Dexerion tab inventory did not match the workload');
+    // Like Edge, the measured arm must actually be shown and focused.
+    await app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      if (!w) throw new Error('Dexerion window missing');
+      if (w.isMinimized()) w.restore();
+      w.show();
+      w.focus();
+    });
+    return {
+      profileDir: profile,
+      pageState: () => app.evaluate(async ({ webContents }, url) => {
+        const page = webContents.getAllWebContents().find((wc) => wc.getURL() === url);
+        return page ? page.executeJavaScript("({ visible: document.visibilityState === 'visible', frames: window.__dexMeasureFrames || 0 })") : null;
+      }, urls[0]),
+      close,
+    };
+  } catch (err) { await close(); throw err; }
 }
 
 // ------------------------------------------------------------ statistics

@@ -32,4 +32,15 @@ function foregroundSample(before, after, seconds, animated) {
   return { visible: true, fps };
 }
 
-module.exports = { optionalSample, requireTree, hasGpuSample, foregroundSample };
+function workloadUrls(base, definition) {
+  return [
+    base + '/' + definition.foreground + '?role=foreground',
+    ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/animated?role=background&tab=' + (i + 1)),
+  ];
+}
+function matchesInventory(tabs, expected) {
+  return Array.isArray(tabs) && tabs.length === expected.length &&
+    new Set(tabs).size === expected.length && expected.every((url) => tabs.includes(url));
+}
+
+module.exports = { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory };

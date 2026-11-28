@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { optionalSample, requireTree, hasGpuSample, foregroundSample } = require('./measure-sample-guard.cjs');
+const { optionalSample, requireTree, hasGpuSample, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
 
 test('collected power does not add an extra delay', async () => {
   const sample = { medianMW: 3000 };
@@ -42,4 +42,14 @@ test('foreground samples require visibility and verify animation advances', () =
   assert.throws(() => foregroundSample(state(0, false), state(180), 4, true), /not visible/);
   assert.throws(() => foregroundSample(state(0), state(4), 4, true), /below the 15-fps/);
   assert.throws(() => foregroundSample(state(undefined), state(30), 4, true), /counter missing/);
+});
+
+test('multitasking uses one distinct foreground URL and a matching inventory', () => {
+  const urls = workloadUrls('http://127.0.0.1:1234', { foreground: 'animated', backgroundTabs: 8 });
+  assert.equal(urls.length, 9);
+  assert.ok(urls[0].endsWith('/animated?role=foreground'));
+  assert.equal(urls.filter((u) => u.includes('role=foreground')).length, 1);
+  assert.ok(matchesInventory([...urls].reverse(), urls));
+  assert.equal(matchesInventory([urls[1], ...urls.slice(1)], urls), false);
+  assert.equal(matchesInventory(urls.slice(1), urls), false);
 });
