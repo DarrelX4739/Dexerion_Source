@@ -9,8 +9,10 @@ on:
       - code/build/package.json
       - code/build/package-lock.json
       - code/build/electron-builder.json
+      - code/build/scripts/check-packaged-footprint.cjs
+      - code/build/scripts/test-packaged-footprint.cjs
       - code/code/src/renderer/shell.html
-      - code/code/assets/vendor/lucide-shell.js
+      - code/code/assets/**
   workflow_dispatch:
 
 permissions:
@@ -41,6 +43,8 @@ jobs:
           cache-dependency-path: code/build/package-lock.json
       - name: Install exact packaged app dependencies
         run: npm ci --include=dev
+      - name: Verify package budget controls
+        run: node --test scripts/test-packaged-footprint.cjs
       - name: Build an unpacked product only, never sign or publish
         shell: pwsh
         run: |
@@ -54,6 +58,13 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'dexerion-refreshed-smoke'
           $platform = if ($IsWindows) { '--win' } else { '--linux' }
           node node_modules/electron-builder/cli.js $platform --dir --x64 --config electron-builder.json "--config.electronDist=$dist" "--config.directories.output=$out" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Guard size and duplicate dependencies in the real packed archive
+        shell: pwsh
+        run: |
+          $platformDir = if ($IsWindows) { 'win-unpacked' } else { 'linux-unpacked' }
+          $asar = Join-Path $env:RUNNER_TEMP "dexerion-refreshed-smoke/$platformDir/resources/app.asar"
+          node scripts/check-packaged-footprint.cjs $asar
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Exercise the real unpacked product on Windows
         if: runner.os == 'Windows'
