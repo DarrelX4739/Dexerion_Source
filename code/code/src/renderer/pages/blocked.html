@@ -34,6 +34,32 @@ h1 { font-family: var(--font-display); font-size: 24px; letter-spacing: -.01em; 
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease); }
 .chip:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); transform: translateY(-1px); }
 .none { color: var(--pfaint); font-size: 12.5px; }
+
+/* Keep the active site's address readable with any chosen dark accent. */
+[data-theme="dark"] body {
+  grid-template-columns: minmax(0, 1fr);
+  padding-inline: clamp(16px, 5vw, 24px);
+}
+[data-theme="dark"] .wrap { width: min(560px, 100%); }
+[data-theme="dark"] .host {
+  color: var(--pfg-2);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+[data-theme="dark"] .crest {
+  background: var(--pcard);
+  border-color: var(--pborder);
+  box-shadow: none;
+  border-radius: var(--r-lg);
+}
+[data-theme="dark"] .chip {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+@media (max-height: 500px) {
+  [data-theme="dark"] body { padding-block: 20px; align-items: safe center; }
+  [data-theme="dark"] .actions { margin-top: 18px; }
+}
 </style>
 </head><body>
 <div class="wrap">

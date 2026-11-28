@@ -34,6 +34,52 @@
 .newbox b{font-size:13.5px;display:block;margin-bottom:12px}
 .newbox input{width:100%;margin-bottom:8px}
 .newbox .row{display:flex;gap:10px;margin-top:6px}
+
+/* Keep profile information and its existing actions on separate lines when
+   the window is too narrow for both. Only the dark presentation changes. */
+[data-theme="dark"] #list.dx-card {
+  background: transparent;
+  border: 0;
+  border-block-start: 1px solid var(--pborder);
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-theme="dark"] .acct .info b,
+[data-theme="dark"] .gbox :is(.gstat, b) { overflow-wrap: anywhere; }
+[data-theme="dark"] .acct { padding-inline: 0; }
+[data-theme="dark"] .gbox {
+  padding: 12px 0 20px;
+  border: 0;
+  border-block-end: 1px solid var(--pborder);
+  background: transparent;
+}
+[data-theme="dark"] .newbox {
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+}
+[data-theme="dark"] .rename { flex-wrap: wrap; }
+[data-theme="dark"] .rename input { min-width: 0; flex-basis: 140px; }
+[data-theme="dark"] .grow input { min-width: 0; flex-basis: 160px; }
+[data-theme="dark"] .avwrap .avdot:focus-visible { opacity: 1; }
+@media (max-width: 760px) {
+  [data-theme="dark"] .dx-page { padding-inline: clamp(18px, 5vw, 32px); }
+  [data-theme="dark"] .acct {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+  }
+  [data-theme="dark"] .acct > .acts {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  [data-theme="dark"] .gbox { padding-inline-start: 60px; }
+}
+@media (max-width: 400px) {
+  [data-theme="dark"] .acct > .acts { grid-column: 1 / -1; }
+  [data-theme="dark"] .gbox { padding-inline-start: 0; }
+}
 </style>
 </head><body><div class="dx-page">
 <div class="dx-head">

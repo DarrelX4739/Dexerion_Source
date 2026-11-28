@@ -44,6 +44,32 @@ body.s2 h1,body.s2 .sub,body.s2 .date,body.s2 .qline{opacity:1;transform:none}
   transition:opacity .4s var(--ease),transform .4s var(--ease)}
 body.s3 .enter{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion: reduce){ .mark,h1,.sub,.date,.qline,.enter{transition:none} }
+/* The daily welcome carries the original mark. Keep its entry sequence and
+   every line of the greeting, quote and first-run instructions. */
+[data-theme="dark"] .wrap {
+  text-align:left;
+  width:min(100%, 532px);
+  box-sizing:border-box;
+  padding:20px clamp(24px, 5vw, 48px);
+}
+[data-theme="dark"] .mark {
+  width:clamp(80px, 17vh, 132px);
+  height:clamp(80px, 17vh, 132px);
+  margin:0 0 clamp(12px, 3vh, 28px);
+}
+[data-theme="dark"] .mark img { display:block; border:0; border-radius:0; }
+[data-theme="dark"] h1 { font-size:clamp(28px, 5vw, 44px); letter-spacing:-.04em; line-height:1.1; }
+[data-theme="dark"] .date,
+[data-theme="dark"] .author { color:var(--pfg-2); }
+[data-theme="dark"] .qline { border-top:2px solid #1F6F6B; padding-top:16px; }
+[data-theme="dark"] .enter { margin-top:20px; }
+[data-theme="dark"] .enter:focus-visible { outline-color:var(--pfg); outline-offset:3px; }
+@media (max-height: 520px) {
+  [data-theme="dark"] body { overflow-y:auto; align-items:safe center; }
+  [data-theme="dark"] .mark { width:72px; height:72px; margin-bottom:10px; }
+  [data-theme="dark"] .date { margin-bottom:12px; }
+  [data-theme="dark"] .qline { padding-top:10px; }
+}
 </style>
 </head><body>
 <div class="wrap">

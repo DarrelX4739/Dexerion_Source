@@ -73,6 +73,8 @@
   border:1px solid var(--pborder);border-radius:var(--r-xs);padding:1px 5px}
 
 @media (max-width:520px){.themes{grid-template-columns:1fr}}
+/* The custom swatch only shows a colour when a custom accent is active. */
+#customAccent.preset-active::-webkit-color-swatch {background:var(--pfield)!important}
 </style>
 </head><body><div class="dx-page">
 
@@ -192,7 +194,8 @@
 <div id="saved" class="dx-toast">Saved</div>
 <script src="dexerion://assets/page-theme.js"></script>
 <script>
-const PRESETS=['#35c4ff','#8b7bff','#3ddc84','#ffb020','#ff6b9d'];
+const SC_TEAL='#1f6f6b';
+const PRESETS=['#35c4ff','#8b7bff','#3ddc84','#ffb020','#ff6b9d',SC_TEAL];
 /* Browser themes. 'dexerion' is the shipped look — no stylesheet at all — and
    each entry's caption says what the theme does to the chrome, so the choice is
    legible before it is made. The tile itself is drawn by .mock rules further up. */
@@ -226,8 +229,14 @@ async function save(){
 function paintTheme(){document.querySelectorAll('[data-theme-opt]').forEach(o=>o.classList.toggle('sel',o.dataset.themeOpt===theme));document.documentElement.dataset.theme=theme;}
 function paintAccent(){
   document.documentElement.style.setProperty('--accent',accent);
-  document.querySelectorAll('#swatches .dx-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===accent));
-  const custom=document.getElementById('customAccent');if(custom)custom.value=accent;
+  const current=accent.toLowerCase();
+  document.querySelectorAll('#swatches .dx-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===current));
+  const custom=document.getElementById('customAccent');
+  if(custom){
+    const preset=PRESETS.includes(current);
+    custom.classList.toggle('preset-active',preset);
+    if(!preset)custom.value=current;
+  }
 }
 function paintSkin(){
   document.querySelectorAll('[data-skin-opt]').forEach(o=>{
@@ -268,7 +277,7 @@ function buildSkins(){
   theme=s.theme||'light';accent=s.accent||PRESETS[0];
   skin=s.skin||'dexerion';
   const box=document.getElementById('swatches');
-  PRESETS.forEach(c=>{const b=document.createElement('button');b.className='dx-swatch';b.dataset.c=c;b.style.background=c;b.title=c;
+  PRESETS.forEach(c=>{const b=document.createElement('button');b.className='dx-swatch';b.dataset.c=c;b.style.background=c;b.title=c===SC_TEAL?'SC Teal (#1F6F6B)':c;
     b.onclick=async()=>{accent=c;paintAccent();await save();};box.appendChild(b);});
   const custom=document.createElement('input');custom.type='color';custom.id='customAccent';custom.title='Custom colour';
   custom.oninput=async()=>{accent=custom.value;paintAccent();};

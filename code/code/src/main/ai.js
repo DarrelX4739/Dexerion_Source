@@ -25,7 +25,6 @@ const MAX_IMAGES = 4;
 const MAX_IMAGE_DATA_CHARS = 4000000;
 const MAX_TOTAL_IMAGE_DATA_CHARS = 16000000;
 const IMAGE_DATA_URL = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
-const omitCountedImageUrl = (key, value) => key === 'url' ? '' : value;
 const VISION_MODEL_ID = providers.VISION_ID;
 const WARM_TTL_MS = 10 * 60 * 1000;
 // Stay-warm cadence while the browser is in use (see keepWarm): refresh the
@@ -840,7 +839,6 @@ function createAi({ profile }) {
       const m = messages[i];
       if (!m || typeof m !== 'object') continue;
       let built = null;
-      let imageChars = 0;
       // Agent turns (neutral wire form): assistant turns carrying tool calls,
       // 'tool' turns carrying the results fed back. Cap tool results too: a
       // single large result used to eat the whole budget and evict the thread.
@@ -877,9 +875,8 @@ function createAi({ profile }) {
           for (const image of m.images.slice(0, MAX_IMAGES)) {
             const url = image && typeof image.url === 'string' ? image.url : '';
             if (!IMAGE_DATA_URL.test(url) || url.length > MAX_IMAGE_DATA_CHARS) continue;
-            if (images.length && imageChars + url.length > MAX_TOTAL_IMAGE_DATA_CHARS) continue;
+            if (images.length && images.reduce((n, item) => n + item.image_url.url.length, 0) + url.length > MAX_TOTAL_IMAGE_DATA_CHARS) continue;
             images.push({ type: 'image_url', image_url: { url } });
-            imageChars += url.length;
           }
         }
         if (!text && !images.length) continue;
@@ -889,12 +886,7 @@ function createAi({ profile }) {
         built = [{ role, content: images.length ? content : text }];
       }
       if (!built) continue;
-      // An accepted data URL contains no JSON escapes. Count the rest of the
-      // wire shape normally, without allocating a throwaway copy of the
-      // base64 payload; the actual messages retain the original image data.
-      const cost = imageChars
-        ? JSON.stringify(built, omitCountedImageUrl).length + imageChars
-        : JSON.stringify(built).length;
+      const cost = JSON.stringify(built).length;
       if (out.length && used + cost > budgetChars) break;
       for (let j = built.length - 1; j >= 0; j--) out.unshift(built[j]);
       used += cost;

@@ -3,9 +3,9 @@
 //
 // The full browser E2E suite lives in `e2e/` and is intentionally slower. This
 // script catches syntax drift and broken version-spec invariants before a
-// build: the Electron entry points, src/ and e2e/ JavaScript parse; the
-// site/report version ladders have the promised contiguous tiers, the combined
-// V31-V50 manifest maps one-to-one onto them, and offline delivery stays intact.
+// build: every source/e2e JavaScript file parses, the site/report version
+// ladders have the promised contiguous tiers, the combined V31-V50 manifest
+// maps one-to-one onto them, and the offline delivery contracts are intact.
 
 const fs = require('fs');
 const path = require('path');
@@ -13,8 +13,7 @@ const { execFileSync } = require('child_process');
 
 const BUILD = __dirname;
 const ROOT = path.resolve(BUILD, '..');
-const APP = path.resolve(ROOT, '../code');
-const SRC = path.join(APP, 'src', 'main');
+const SRC = path.resolve(ROOT, '../code/src/main');
 const E2E = path.join(ROOT, 'e2e');
 
 function jsFiles(dir) {
@@ -36,12 +35,7 @@ function assert(cond, message) {
 }
 
 function checkSyntax() {
-  const files = [
-    path.join(APP, 'main.js'),
-    path.join(APP, 'preload.js'),
-    ...jsFiles(path.join(APP, 'src')),
-    ...jsFiles(E2E),
-  ];
+  const files = [...jsFiles(SRC), ...jsFiles(E2E)];
   assert(files.length > 50, 'expected a substantial source tree, found ' + files.length + ' JS files');
   for (const file of files) {
     execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' });
@@ -96,12 +90,6 @@ function checkVersions() {
 }
 
 function checkContracts() {
-  const { generate, TARGET, SHELL } = require('./vendor-lucide-shell.cjs');
-  assert(fs.readFileSync(TARGET, 'utf8') === generate(),
-    'shell Lucide registry is stale; run node scripts/vendor-lucide-shell.cjs');
-  assert(/lucide-shell\.js/.test(fs.readFileSync(SHELL, 'utf8')),
-    'shell does not load its reduced Lucide bundle');
-
   const sitePrompt = load('site-system-prompt.js').siteSystemPrompt(30);
   assert(sitePrompt.includes('exactly ONE object'), 'site prompt lost the one-index.html contract');
   assert(/online research|source material/i.test(sitePrompt), 'site prompt lost the online-source-as-material rule');

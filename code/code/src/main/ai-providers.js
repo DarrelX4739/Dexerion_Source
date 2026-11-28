@@ -837,9 +837,7 @@ async function chatOpenAi(providerId, cfg) {
         const think = typeof delta.reasoning_content === 'string' ? delta.reasoning_content
           : (typeof delta.reasoning === 'string' ? delta.reasoning : '');
         if (think) {
-          const remaining = MAX_THINKING - reasoning.length;
-          if (remaining > 0) reasoning += think.slice(0, remaining);
-          // Every delta still counts as progress, even after the detail cap.
+          reasoning = (reasoning + think).slice(0, MAX_THINKING);
           try { if (cfg.onReasoning) cfg.onReasoning(think); } catch {}
         }
       }

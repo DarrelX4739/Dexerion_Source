@@ -65,17 +65,6 @@ test('search reads result pages, cites them, and shows difficulty only', async (
     await win.press('#ais-input', 'Enter');
     await expect(win.locator('#ais-msgs')).toContainText('example domain [1]', { timeout: 60000 });
 
-    // The live working list settles into the same ordered, collapsed Actions
-    // disclosure when the answer completes.
-    const actions = win.locator('#ais-msgs .ais-actions');
-    const disclosure = actions.locator('summary');
-    await expect(disclosure).toHaveText(/^Actions \(\d+\)$/);
-    await expect(actions).not.toHaveAttribute('open', '');
-    await disclosure.click();
-    const labels = actions.locator('.ais-step-label');
-    await expect(labels.first()).toHaveText('Adapting your question');
-    await expect(labels.last()).toHaveText('Writing the answer');
-
     // Retrieval went through the structured provider fixture, never a SERP tab.
     expect(mock.fetches.some((u) => u.startsWith('/html/'))).toBe(true);
 

@@ -132,20 +132,19 @@ function heuristicScores(candidate) {
   };
 }
 
-// All scored candidates come from this same numeric pool. A sorted run
-// counts lower values and ties once rather than filtering it for every
-// candidate in each tier. The mid-rank tie formula stays unchanged.
-function percentileByValue(values) {
-  values.sort((a, b) => a - b);
-  const ranks = new Map();
-  const denominator = Math.max(1, values.length - 1);
-  for (let start = 0; start < values.length;) {
-    let end = start + 1;
-    while (end < values.length && values[end] === values[start]) end++;
-    ranks.set(values[start], (start + (end - start - 1) / 2) / denominator);
-    start = end;
-  }
-  return ranks;
+function percentile(values, value) {
+  if (!values.length) return 0.5;
+  const below = values.filter((v) => v < value).length;
+  const equal = values.filter((v) => v === value).length;
+  return (below + Math.max(0, equal - 1) / 2) / Math.max(1, values.length - 1);
+}
+
+function normaliseCost(costs, value) {
+  if (value == null || !costs.length) return 0.5;
+  const min = Math.min(...costs);
+  const max = Math.max(...costs);
+  if (max === min) return 0.5;
+  return (value - min) / (max - min);
 }
 
 // Candidate shape (from ai-providers.listModels): { id, context, tools,
@@ -184,28 +183,14 @@ function median(values) {
   return list[Math.floor(list.length / 2)];
 }
 
-function scoringContext(pool, anchor) {
-  const costs = pool.map((c) => c.costPerTask).filter((v) => v != null);
-  return {
-    anchor,
-    intelligence: percentileByValue(pool.map((c) => c.intelligence)),
-    speed: anchor ? null : percentileByValue(pool.map((c) => c.speed)),
-    minCost: Math.min(...costs),
-    maxCost: Math.max(...costs),
-    lmarenaMedian: median(pool.map((c) => c.lmarena)),
-    livebenchMedian: median(pool.map((c) => c.livebench)),
-  };
-}
-
 function scoreTier(spec, pool, context) {
   let best = null;
   for (const candidate of pool) {
-    const intelP = context.intelligence.get(candidate.intelligence);
+    const intelP = percentile(context.intelligenceValues, candidate.intelligence);
     const speedP = context.anchor
       ? Math.min(candidate.speed / context.anchor, 1)
-      : context.speed.get(candidate.speed);
-    const costP = candidate.costPerTask == null || context.maxCost === context.minCost
-      ? 0.5 : 1 - (candidate.costPerTask - context.minCost) / (context.maxCost - context.minCost);
+      : percentile(context.speedValues, candidate.speed);
+    const costP = candidate.costPerTask == null ? 0.5 : 1 - normaliseCost(context.costs, candidate.costPerTask);
     let score = spec.weights.intelligence * intelP
       + spec.weights.speed * speedP
       + spec.weights.cost * costP;
@@ -229,9 +214,14 @@ function pickAll(candidates, rawSnapshot) {
     return result;
   }
 
-  // Pinned tiers don't score the catalogue at all. Build the shared
-  // numeric table only when a fallback tier needs it.
-  let context;
+  const context = {
+    anchor: snapshot.anchor.speed,
+    intelligenceValues: pool.map((c) => c.intelligence),
+    speedValues: pool.map((c) => c.speed),
+    costs: pool.map((c) => c.costPerTask).filter((v) => v != null),
+    lmarenaMedian: median(pool.map((c) => c.lmarena)),
+    livebenchMedian: median(pool.map((c) => c.livebench)),
+  };
 
   for (const spec of TIER_SPECS) {
     // A pinned tier wins whenever the catalogue actually carries the model;
@@ -301,12 +291,9 @@ function pickAll(candidates, rawSnapshot) {
       floorPool = tierPool.slice();
     }
 
-    let pick;
-    if (anchorCandidate) pick = { candidate: anchorCandidate, score: 1 };
-    else {
-      context ||= scoringContext(pool, snapshot.anchor.speed);
-      pick = scoreTier(spec, floorPool, context) || scoreTier(spec, tierPool, context);
-    }
+    const pick = anchorCandidate
+      ? { candidate: anchorCandidate, score: 1 }
+      : (scoreTier(spec, floorPool, context) || scoreTier(spec, tierPool, context));
     if (!pick) { result[spec.id] = null; continue; }
     const candidate = pick.candidate;
     const row = rowFor(snapshot, candidate.id);

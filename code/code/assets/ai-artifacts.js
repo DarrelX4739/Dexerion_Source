@@ -3271,7 +3271,7 @@
       const current = items.indexOf(doc.activeElement);
       const step = ev.key === 'ArrowDown' ? 1 : -1;
       const next = current < 0 ? (step > 0 ? 0 : items.length - 1) : (current + step + items.length) % items.length;
-      try { items[next].focus({ preventScroll: true }); } catch { /* focus is best effort */ }
+      try { items[next].focus(); } catch { /* focus is best effort */ }
     }
     // The menu is position:fixed, so its place is computed from the button when
     // it opens (and kept in view on a narrow panel).
@@ -3302,10 +3302,9 @@
       const thread = doc.getElementById ? doc.getElementById('ai-messages') : null;
       openedAtScrollTop = thread ? thread.scrollTop : null;
       if (thread && thread.addEventListener) thread.addEventListener('scroll', onThreadScroll);
-      // Keep keyboard focus on the first action, but do not let focus
-      // scroll the thread: that would dismiss this fixed menu immediately.
+      // Open on the first action, so Enter/arrows continue from there.
       const first = Array.from(menu.children).find((el) => el && el.tagName === 'BUTTON');
-      if (first) { try { first.focus({ preventScroll: true }); } catch { /* focus is best effort */ } }
+      if (first) { try { first.focus(); } catch { /* focus is best effort */ } }
     };
     more.append(moreBtn, menu);
     actions.appendChild(more);

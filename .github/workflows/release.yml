@@ -1,209 +1,193 @@
-name: Build installers and publish release
+name: Build branded Windows and Linux installers
 
-# Deliberately manual-only: pushes, tags, and pull requests do not release.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version, e.g. 1.2.3, v1.0.0_buildtest, or 1.2.3-beta.1'
-        required: true
-        type: string
 
 permissions:
   contents: read
 
-concurrency:
-  group: manual-release-${{ inputs.version }}
-  cancel-in-progress: false
+# Update this to a validated commit on installer-tooling to change the Setup UI.
+# Only the packaging helpers are imported. Application source is always the
+# exact main commit being built. No releases, tags, or pushes are made here.
+env:
+  INSTALLER_TOOLING_SHA: 321711f143e8e5389ed79c71ad1c30cdb7afa70f
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
-  validate:
-    name: Validate release version
+  plan:
+    name: Identify commits to build
+    if: github.event.deleted != true
     runs-on: ubuntu-24.04
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      commits: ${{ steps.matrix.outputs.commits }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate version and reject existing tags
-        id: version
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build each newly pushed first-parent commit
+        id: matrix
         shell: bash
         env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          TIP: ${{ github.sha }}
         run: |
-          requested="${REQUESTED_VERSION#v}"
-          if [[ ! "$requested" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)([-_]([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
-            echo '::error::Use X.Y.Z with an optional -suffix or _suffix (for example v1.0.0_buildtest or 1.2.3-beta.1).'
+          set -euo pipefail
+          [[ "$TIP" =~ ^[0-9a-f]{40}$ ]]
+          if [[ -z "$BEFORE" || "$BEFORE" == 0000000000000000000000000000000000000000 ]]; then
+            commits="$TIP"
+          else
+            [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]]
+            if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$BEFORE"
+            fi
+            commits="$(git rev-list --first-parent --reverse "$TIP" --not "$BEFORE")"
+            if [[ -z "$commits" ]]; then commits="$TIP"; fi
+          fi
+          count="$(wc -l <<< "$commits")"
+          if (( count > 256 )); then
+            echo '::error::This push exceeds the 256-commit matrix limit. Push smaller batches.'
             exit 1
           fi
-          suffix="${BASH_REMATCH[5]}"
-          version="$requested"
-          prerelease=false
-          if [[ -n "$suffix" ]]; then
-            # SemVer numeric prerelease identifiers cannot have leading zeros.
-            IFS='.' read -ra identifiers <<< "$suffix"
-            for identifier in "${identifiers[@]}"; do
-              if [[ "$identifier" =~ ^0[0-9]+$ ]]; then
-                echo '::error::Numeric prerelease identifiers must not have leading zeros.'
-                exit 1
-              fi
-            done
-            # Preserve the requested tag, but use a SemVer-compatible package version.
-            version="${requested/_/-}"
-            prerelease=true
-          fi
-          tag="v$requested"
-          # ls-remote errors must fail validation, not look like an unused tag.
-          tags="$(git ls-remote --tags origin "refs/tags/$tag")"
-          if [[ -n "$tags" ]]; then
-            echo "::error::Tag $tag already exists. Choose a new version."
-            exit 1
-          fi
-          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')"
-          if grep -Fxq "$tag" <<< "$releases"; then
-            echo "::error::Release $tag already exists. Choose a new version."
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          printf 'commits=%s\n' "$(jq -cn --arg lines "$commits" '$lines|split("\n")')" >> "$GITHUB_OUTPUT"
 
-  build:
-    name: Build ${{ matrix.platform }} (x64)
-    needs: validate
-    runs-on: ${{ matrix.os }}
+  windows:
+    name: Windows x64 · ${{ matrix.commit }}
+    needs: plan
+    runs-on: windows-2025
+    timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
-        include:
-          - platform: Windows
-            os: windows-latest
-            target: win
-          - platform: Linux
-            os: ubuntu-24.04
-            target: linux
-    defaults:
-      run:
-        shell: bash
-        working-directory: code/build
-    env:
-      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-      # The repository has no signing credentials. Do not search runner keychains.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        commit: ${{ fromJSON(needs.plan.outputs.commits) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ matrix.commit }}
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.INSTALLER_TOOLING_SHA }}
+          path: installer-tooling
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: code/build/package-lock.json
-      - name: Install Linux packaging dependencies
-        if: runner.os == 'Linux'
+          cache-dependency-path: app/code/build/package-lock.json
+      - name: Install locked dependencies
+        working-directory: app/code/build
+        run: npm ci --include=dev
+      - name: Build and verify custom Windows Setup
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ matrix.commit }}
+        run: |
+          $script = Join-Path $env:GITHUB_WORKSPACE 'installer-tooling/code/build/installer/branded/ci-build.ps1'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'app'
+          $out = Join-Path $env:RUNNER_TEMP "dexerion-windows-$env:SOURCE_SHA"
+          & $script -SourceDirectory $source -SourceCommit $env:SOURCE_SHA -ToolingCommit $env:INSTALLER_TOOLING_SHA -OutputDirectory $out
+          if (-not $?) { exit 1 }
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: dexerion-windows-x64-${{ matrix.commit }}
+          path: ${{ runner.temp }}/dexerion-windows-${{ matrix.commit }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  linux:
+    name: Linux x64 · ${{ matrix.commit }}
+    needs: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        commit: ${{ fromJSON(needs.plan.outputs.commits) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ matrix.commit }}
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.INSTALLER_TOOLING_SHA }}
+          path: installer-tooling
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/code/build/package-lock.json
+      - name: Install Linux packaging and test dependencies
+        shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2t64 rpm
-      - name: Test Linux packaging launcher
-        if: runner.os == 'Linux'
-        run: node --test ../../.github/packaging/linux-launcher.test.cjs
+          sudo apt-get install --yes --no-install-recommends libarchive-tools libfuse2 xvfb xauth
       - name: Install locked dependencies
-        run: npm ci
-      - name: Generate CI-only packaging configuration
+        working-directory: app/code/build
+        run: npm ci --include=dev
+      - name: Verify the existing Linux launcher
+        working-directory: app
+        run: node --test .github/packaging/linux-launcher.test.cjs
+      - name: Package the pushed app with the existing Linux launcher
+        working-directory: app/code/build
+        shell: bash
         run: |
+          set -euo pipefail
           node <<'NODE'
-          const fs = require('node:fs');
           const path = require('node:path');
-          const config = JSON.parse(fs.readFileSync('electron-builder.json', 'utf8'));
-          const repository = process.env.GITHUB_REPOSITORY;
-          const owner = repository.split('/')[0];
-          // Override the machine-specific output path without editing tracked files.
+          const fs = require('node:fs');
+          const config = require('./electron-builder.json');
           config.directories = { ...config.directories, output: 'dist' };
-          config.extraMetadata = {
-            ...config.extraMetadata,
-            version: process.env.RELEASE_VERSION,
-            homepage: `https://github.com/${repository}`,
-            author: { name: owner, email: `${owner}@users.noreply.github.com` },
-            license: 'UNLICENSED',
-          };
+          config.extraMetadata = { ...config.extraMetadata, author: 'Dexerion',
+            homepage: 'https://github.com/' + process.env.GITHUB_REPOSITORY };
           config.linux = {
-            target: ['AppImage', 'deb'],
+            target: ['AppImage'],
             artifactName: 'Dexerion-${version}-${arch}.${ext}',
             icon: '../code/assets/logo.png',
             category: 'Network',
-            maintainer: `${owner} <${owner}@users.noreply.github.com>`,
             executableName: 'dexerion',
             desktop: { entry: { StartupWMClass: 'Dexerion' } },
           };
-          if (process.platform === 'linux') {
-            config.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');
-          }
-          // Keep the existing Windows NSIS configuration, branding and filename.
+          config.afterPack = path.resolve('../../.github/packaging/after-pack.cjs');
           fs.writeFileSync('electron-builder.ci.json', JSON.stringify(config, null, 2));
           NODE
-      - name: Build installers
-        run: npx --no-install electron-builder --${{ matrix.target }} --x64 --config electron-builder.ci.json --publish never
-      - name: Upload Windows installer
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-windows-x64
-          path: code/build/dist/Main_Exe_Dexerion.exe
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-      - name: Upload Linux packages
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-linux-x64
-          path: |
-            code/build/dist/*.AppImage
-            code/build/dist/*.deb
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-  release:
-    name: Publish GitHub Release
-    needs: [validate, build]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-      IS_PRERELEASE: ${{ needs.validate.outputs.prerelease }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: installer-*
-          path: release-assets
-          merge-multiple: true
-      - name: Verify packages and generate checksums
-        working-directory: release-assets
+          npx --no-install electron-builder --linux AppImage --x64 --config electron-builder.ci.json --publish never
+      - name: Package and smoke-test custom Linux Setup
         shell: bash
+        env:
+          SOURCE_SHA: ${{ matrix.commit }}
         run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/dexerion-linux-$SOURCE_SHA"
+          mkdir -p "$out"
           shopt -s nullglob
-          windows=(*.exe)
-          appimages=(*.AppImage)
-          debs=(*.deb)
-          if (( ${#windows[@]} != 1 || ${#appimages[@]} != 1 || ${#debs[@]} != 1 )); then
-            echo '::error::Expected one Windows installer, one AppImage, and one Debian package.'
-            exit 1
-          fi
-          sha256sum "${windows[@]}" "${appimages[@]}" "${debs[@]}" > SHA256SUMS.txt
-      - name: Create draft and upload all assets before publishing
-        shell: bash
-        run: |
-          release_flags=()
-          if [[ "$IS_PRERELEASE" == 'true' ]]; then
-            release_flags+=(--prerelease --latest=false)
-          fi
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --target "$GITHUB_SHA" \
-            --title "Dexerion $RELEASE_TAG" \
-            --generate-notes \
-            --draft "${release_flags[@]}"
-          gh release edit "$RELEASE_TAG" --draft=false
+          payloads=( "$GITHUB_WORKSPACE"/app/code/build/dist/*.AppImage )
+          [[ ${#payloads[@]} -eq 1 ]]
+          setup="$out/Dexerion-Setup-Linux-x64.run"
+          node --test "$GITHUB_WORKSPACE/installer-tooling/.github/packaging/linux-installer/install.test.cjs"
+          node "$GITHUB_WORKSPACE/installer-tooling/.github/packaging/linux-installer/build.cjs" \
+            --runtime "$GITHUB_WORKSPACE/app/code/build/dist/linux-unpacked" \
+            --payload "${payloads[0]}" --logo "$GITHUB_WORKSPACE/app/code/code/assets/logo.png" \
+            --output "$setup"
+          chmod +x "$setup"
+          "$setup" --verify
+          unshare --user --map-root-user --pid --fork true
+          xvfb-run -a "$setup" --smoke-test
+          (cd "$out"; sha256sum Dexerion-Setup-Linux-x64.run > Dexerion-Setup-Linux-x64.run.sha256)
+          node -e 'console.log(JSON.stringify({source:process.env.SOURCE_SHA,installerTooling:process.env.INSTALLER_TOOLING_SHA,runner:"ubuntu-22.04",platform:"linux",arch:"x64",githubRun:process.env.GITHUB_RUN_ID},null,2))' > "$out/build-provenance.json"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: dexerion-linux-x64-${{ matrix.commit }}
+          path: ${{ runner.temp }}/dexerion-linux-${{ matrix.commit }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

@@ -521,14 +521,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   // so web logins (Gmail, Teams, …) and saved credentials stay isolated —
   // a new account really has nothing saved. The 'default' account uses the
   // shared default session.
-  // One entry per ID, in the original first-load order. Accounts touched
-  // only by reminders own tasks, not the rest of their profile. Promotion
-  // transfers that same task list, including a reminder awaiting its save.
-  const accountCache = new Map(); // id -> { full, data }
-  const coldAccountTasks = process.env.DEX_COLD_ACCOUNT_TASKS !== 'off';
-  // Key by a normalized task list identity, never by account ID. The
-  // pre-mutation ensureTasks() replacement invalidates a list automatically.
-  const taskSnapshots = process.env.DEX_TASK_SNAPSHOT_CACHE === 'off' ? null : new WeakMap();
+  const accountCache = new Map(); // id -> { bookmarks, history, topSites, closedTabs, logins }
   const accountSessions = new Map(); // id -> session
   const accountTimers = new Map();
   const AVATAR_COLORS = ['#35c4ff', '#8b7bff', '#3ddc84', '#ffb020', '#ff6b9d', '#ff7a7a'];
@@ -536,36 +529,20 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   function listAccounts() { return S.accounts || []; }
   function getAccountMeta(id) { return listAccounts().find(a => a.id === id) || null; }
   function accData(id) {
-    const entry = accountCache.get(id);
-    if (entry?.full) return entry.data;
-    const data = profile.loadAccountData(id, entry?.data.tasks);
-    accountCache.set(id, { full: true, data });
-    return data;
-  }
-  function reminderData(id) {
-    const entry = accountCache.get(id);
-    if (entry) return entry.data;
-    if (!coldAccountTasks) return accData(id);
-    const data = profile.loadAccountReminderData(id);
-    accountCache.set(id, { full: false, data });
-    return data;
-  }
-  function persistAccount(id, entry) {
-    return entry.full
-      ? profile.saveAccountData(id, entry.data)
-      : profile.saveAccountReminderData(id, entry.data);
+    if (!accountCache.has(id)) accountCache.set(id, profile.loadAccountData(id));
+    return accountCache.get(id);
   }
   function saveAcc(id) {
     clearTimeout(accountTimers.get(id));
     accountTimers.set(id, setTimeout(() => {
-      const entry = accountCache.get(id);
-      if (entry) persistAccount(id, entry);
+      const d = accountCache.get(id);
+      if (d) profile.saveAccountData(id, d);
     }, 400));
   }
   function flushAccounts() {
     let failed = 0;
-    for (const [id, entry] of accountCache) {
-      if (!persistAccount(id, entry)) failed += 1;
+    for (const [id, d] of accountCache) {
+      if (!profile.saveAccountData(id, d)) failed += 1;
     }
     if (failed) console.warn('[dexerion] account save failed for ' + failed + ' account(s): ' + profile.lastError);
   }
@@ -1588,11 +1565,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     const snap = memSnapshot();
     const totalMB = Number.isFinite(Number(forcedTotalMB)) ? Number(forcedTotalMB) : snap.workingSetMB;
     const capMB = clampCapMB(S.settings.memoryCapMB);
-    // The planner cannot choose any victims at or below the cap. Skip the
-    // native PID/audibility queries and per-tab objects in that common case;
-    // still feed the plan to the notice check so a stale warning clears.
-    const tabSnaps = totalMB > capMB ? collectTabSnaps(snap) : [];
-    const plan = planSweep(tabSnaps, {
+    const plan = planSweep(collectTabSnaps(snap), {
       totalMB, capMB, now: Date.now(),
       floorMs: Number.isFinite(floorMs) ? Number(floorMs) : undefined,
     });
@@ -3918,7 +3891,8 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     }
     return out.slice(0, cap);
   }
-  async function enrichSuggestions(local, q, maxRows) {
+  async function buildSuggest(e, q, maxRows) {
+    const local = buildSuggestLocal(e, q, maxRows);
     const query = String(q || '').trim();
     if (!query) return local;
     const cap = maxRows || 10;
@@ -4035,11 +4009,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     }
     // Phase 2 (async): enrich with engine completions when they arrive.
     const winIdAtEnrich = st.id;
-    // Reuse phase 1's exact rows: nothing awaits between the two phases, and
-    // enrichment copies the array before appending. Avoid scanning local data twice.
-    const localForEnrichment = process.env.DEX_SUGGEST_RESCAN === '1'
-      ? buildSuggestLocal(e, q, opts.max) : items;
-    enrichSuggestions(localForEnrichment, q, opts.max).then(full => {
+    buildSuggest(e, q, opts.max).then(full => {
       const r2 = sugPopups.get(winIdAtEnrich);
       if (!r2 || r2.win.isDestroyed() || !full.length) return;
       r2.items = full;
@@ -5532,8 +5502,6 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     listAccounts().splice(i, 1);
     if (S.defaultAccountId === id) S.defaultAccountId = 'default';
     accountCache.delete(id);
-    clearTimeout(accountTimers.get(id));
-    accountTimers.delete(id);
     try { fs.rmSync(profile.accountDir(id), { recursive: true, force: true }); } catch {}
     try { fs.unlinkSync(path.join(profile.dir, 'avatar-' + id + '.png')); } catch {}
     try { await sesFor(id).clearStorageData(); } catch {}
@@ -9006,26 +8974,12 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
   function ensureTasks(A) {
     if (!A) return [];
     if (!Array.isArray(A.tasks)) A.tasks = [];
-    // This replacement is also the snapshot boundary: every task/reminder
-    // mutation calls ensureTasks() before editing the returned list or rows.
     A.tasks = tasks.sanitizeList(A.tasks);
     return A.tasks;
   }
   function tasksPublic(accountId) {
-    try {
-      const A = accData(accountId);
-      const cached = taskSnapshots?.get(A.tasks);
-      if (cached) return cached;
-      const list = ensureTasks(A);
-      const rows = tasks.sortTasks(list);
-      if (taskSnapshots) {
-        // This array only travels over IPC. Freezing the plain objects keeps
-        // the cached snapshot separate from the mutable persisted tasks.
-        for (const row of rows) Object.freeze(row);
-        taskSnapshots.set(list, Object.freeze(rows));
-      }
-      return rows;
-    } catch { return []; }
+    try { return tasks.sortTasks(ensureTasks(accData(accountId))); }
+    catch { return []; }
   }
   function broadcastTasks(accountId) {
     const list = tasksPublic(accountId);
@@ -9092,7 +9046,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     const now = Date.now();
     for (const m of listAccounts()) {
       let A;
-      try { A = reminderData(m && m.id); } catch { continue; }
+      try { A = accData(m && m.id); } catch { continue; }
       const list = ensureTasks(A);
       let changed = false;
       for (const t of list) {
@@ -9131,7 +9085,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     try {
       const lists = [];
       for (const m of listAccounts()) {
-        try { lists.push(ensureTasks(reminderData(m && m.id))); } catch {}
+        try { lists.push(ensureTasks(accData(m && m.id))); } catch {}
       }
       delay = tasks.reminderHeartbeatMs(lists, Date.now(), BUDGETS);
     } catch {}

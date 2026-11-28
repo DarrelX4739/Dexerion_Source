@@ -26,8 +26,6 @@ const SAMPLE_SEC = Math.max(4, Number(process.env.POWER_SAMPLE_SEC) || 15);
 const FLOOR_SEC = Math.max(3, Number(process.env.POWER_FLOOR_SEC) || 5);
 const SETTLE_MS = 8000;
 const BG_TABS = Math.max(1, Number(process.env.POWER_BG_TABS) || 8);
-const { packageInstance, requirePackageSample } = require('./power-meter.cjs');
-const POWER_INSTANCE = packageInstance(process.env.MEASURE_POWER_COUNTER_INSTANCE);
 const PS_SCRIPT = path.join(__dirname, 'power-sample.ps1');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const round = (v, d = 2) => Number(Number(v).toFixed(d));
@@ -76,12 +74,10 @@ function samplePower(label, seconds) {
   const out = path.join(os.tmpdir(), 'dex-power-' + process.pid + '-' + label + '.json');
   const stdout = execFileSync('powershell.exe', [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', PS_SCRIPT,
-    '-DurationSec', String(secs), '-OutFile', out, '-CounterInstance', POWER_INSTANCE,
+    '-DurationSec', String(secs), '-OutFile', out,
   ], { encoding: 'utf8', timeout: (secs + 30) * 1000 });
-  let sample;
-  try { sample = JSON.parse(fs.readFileSync(out, 'utf8')); }
-  catch { sample = JSON.parse(String(stdout).trim()); }
-  return requirePackageSample(sample, POWER_INSTANCE);
+  try { return JSON.parse(fs.readFileSync(out, 'utf8')); }
+  catch { return JSON.parse(String(stdout).trim()); }
 }
 
 async function prepareEdge(base, scenario) {
@@ -159,7 +155,7 @@ const medianOf = (arr) => {
   const { server, base } = await startServer();
   const results = {
     generatedAt: new Date().toISOString(), sampleSec: SAMPLE_SEC, floorSec: FLOOR_SEC,
-    backgroundTabs: BG_TABS, powerInstance: POWER_INSTANCE, scenarios: {}, errors: [],
+    backgroundTabs: BG_TABS, scenarios: {}, errors: [],
   };
   // Paired-floor protocol: the machine's power floor drifts by thousands of
   // milliwatts between minutes on a busy desktop, so one global idle sample

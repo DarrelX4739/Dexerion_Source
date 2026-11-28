@@ -13,14 +13,24 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 /* Accent used AS TEXT (raw accent ~2.7:1 on light paper); mixed toward the
    system text colour it clears 4.5:1 in light and stays bright in dark. */
 :root{--accent-text:color-mix(in srgb,var(--accent,#35c4ff) 74%,CanvasText 26%)}
-.bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 28px;background:color-mix(in srgb,var(--pbg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--pborder);font-size:12px}
+.bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:7px 9px;flex-wrap:wrap;padding:8px clamp(12px,3vw,28px);background:color-mix(in srgb,var(--pbg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--pborder);font-size:12px}
 .bar[hidden]{display:none}
 .bar label{color:var(--pmuted);font-size:11px;font-weight:600}
-.bar select{font:12px/1.4 inherit;color:var(--pfg);background:color-mix(in srgb,var(--pfg) 5%,transparent);border:1px solid var(--pborder);border-radius:6px;padding:3px 6px}
+.bar select{font:550 11.5px/1.35 var(--font-ui,system-ui);min-height:28px;color:var(--pfg);background:color-mix(in srgb,var(--pfg) 5%,transparent);border:1px solid var(--pborder);border-radius:6px;padding:3px 6px}
 .bar select:focus-visible{outline:2px solid var(--accent,#35c4ff);outline-offset:1px}
-.papers{display:inline-flex;gap:5px;align-items:center}
-.pdot{width:16px;height:16px;border-radius:50%;border:1px solid var(--pborder);padding:0;cursor:pointer}
-.pdot.sel{outline:2px solid var(--pfg);outline-offset:1px}
+.papers{position:relative;display:inline-flex;align-items:center}
+.pdot.paper-trigger{width:24px;height:24px}
+.paper-options{position:absolute;z-index:1;top:100%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;max-height:min(390px,55vh);overflow-y:auto;scrollbar-width:thin;padding:9px;background:var(--pbg);border:1px solid var(--pborder);border-radius:6px;box-shadow:var(--sh-2)}
+.paper-options[hidden]{display:none}
+.papers .pdot:focus-visible,
+.papers .pdot[aria-expanded="true"]{outline:2px solid var(--pfg);outline-offset:2px}
+.pdot{width:24px;height:24px;position:relative;flex:none;border-radius:50%;border:1px solid #2226;padding:0;cursor:pointer}
+.paper-options .pdot:hover{outline:1px solid var(--pfg);outline-offset:1px}
+.paper-options .pdot.sel{outline:2px solid var(--pfg);outline-offset:1px}
+.paper-options .pdot.sel::after{
+  content:"";position:absolute;top:5px;left:8px;width:4px;height:8px;
+  border:solid #20201e;border-width:0 2px 2px 0;transform:rotate(45deg);pointer-events:none;
+}
 .pdot[data-paper="paper"]{background:#efece6}
 .pdot[data-paper="white"]{background:#ffffff}
 .pdot[data-paper="pink"]{background:#f6e8ea}
@@ -37,16 +47,22 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 .hint{color:var(--pmuted);font-size:10.5px}
 .copy-status{color:var(--accent-text,#35c4ff);font-size:10.5px;font-weight:600;min-height:1em}
 .copy-status:empty,.copy-status[hidden]{display:none}
-.wrap{max-width:840px;margin:0 auto;padding:34px 28px 96px}
-.wrap .dxa-report{margin:0;border:1px solid var(--pborder);box-shadow:var(--sh-2)}
+.wrap{max-width:900px;margin:0 auto;padding:clamp(16px,3vw,34px) clamp(12px,3vw,28px) 80px}
 .err{padding:80px 24px;text-align:center;color:var(--pmuted);font-size:13.5px}
 .btn{appearance:none;border:1px solid var(--pborder);border-radius:6px;background:color-mix(in srgb,var(--pfg) 5%,transparent);color:var(--pfg);font:600 10.5px var(--font-ui,"Segoe UI",system-ui,sans-serif);padding:3px 8px;cursor:pointer}
 .btn:hover{background:color-mix(in srgb,var(--pfg) 10%,transparent)}
 .btn:focus-visible{outline:2px solid color-mix(in srgb,var(--pfg) 60%,transparent);outline-offset:1px}
-/* Primary actions (Contents, Save note, Add note) keep the design-system
-   primary from page-theme.css: solid accent background with --accent-ink
-   text. This file once re-coloured the label to the raw accent — accent on
-   accent — which rendered "Contents" as an unreadable solid green pill. */
+/* The toolbar's Contents shortcut uses normal chrome ink. The accent is a
+   leading stroke only; a custom accent cannot reduce label contrast. */
+.bar .btn{min-height:28px;font-size:11.5px}
+#btnToc{
+  color:var(--pfg);background:color-mix(in srgb,var(--pfg) 8%,var(--pbg));
+  border-color:var(--pborder);box-shadow:inset 2px 0 var(--accent);
+}
+#btnToc:hover{
+  background:color-mix(in srgb,var(--pfg) 13%,var(--pbg));
+  filter:none;box-shadow:inset 2px 0 var(--accent);
+}
 
 /* Feature panels (search / toc / annotations / versions / deps / conditions) */
 .panel{position:fixed;top:0;left:0;width:340px;height:100vh;background:var(--pcard,#fff);color:var(--pfg);border-right:1px solid var(--pborder);z-index:20;transform:translateX(-104%);transition:transform 220ms cubic-bezier(.22,.61,.36,1);overflow:auto;display:flex;flex-direction:column;font:13px/1.5 var(--font-ui,"Segoe UI",system-ui,sans-serif)}
@@ -81,10 +97,6 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
    active while cycling; the rest of the document keeps its normal ink. */
 .dxa-search-match{background:color-mix(in srgb,var(--accent,#35c4ff) 22%,transparent);color:inherit;padding:0 2px;border-radius:2px}
 .dxa-search-match.is-active{background:color-mix(in srgb,var(--accent,#35c4ff) 42%,transparent);outline:2px solid color-mix(in srgb,var(--accent,#35c4ff) 70%,transparent);outline-offset:1px}
-/* Heading hierarchy: h1 largest, h2 mid, h3 smallest. Each theme can override. */
-.dxa-report .dxa-h1{font-size:1.25em;font-weight:700;margin:18px 0 8px}
-.dxa-report .dxa-h2{font-size:1.1em;font-weight:700;margin:14px 0 6px}
-.dxa-report .dxa-h3{font-size:1em;font-weight:650;margin:10px 0 4px}
 .empty{color:var(--pmuted);font-size:12px;padding:10px 0;text-align:center}
 /* Selection-anchored annotations (V15). Highlights use the CSS Custom
    Highlight API: they are painted behind the glyphs, inside the text boxes,
@@ -112,21 +124,65 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 .anno-quote{margin:0;font-size:12px;font-style:italic;color:var(--pmuted);max-height:54px;overflow:hidden}
 .anno-hint{margin:0 0 6px;font-size:11.5px;line-height:1.45;color:var(--dx-warn,#a56a00);width:100%;text-align:left}
 .anno-hint[hidden]{display:none}
-/* Reading typography (V16): prose gets a measure (~70ch), numbers get tabular
-   figures, sections breathe a little more. Scoped to the viewer so the chat
-   card keeps its compact shape. */
-#wrap .dxa-report .dxa-md{max-width:70ch}
-#wrap .dxa-report .dxa-h{max-width:70ch}
-#wrap .dxa-report .dxa-quote,#wrap .dxa-report .dxa-callout,#wrap .dxa-report .dxa-subtitle,#wrap .dxa-report .dxa-kicker{max-width:70ch}
-#wrap .dxa-report .dxa-stat-value,#wrap .dxa-report .dxa-stat-label,#wrap .dxa-report .dxa-metric-value,#wrap .dxa-report table,#wrap .dxa-report .dxa-timeline .dxa-when{font-variant-numeric:tabular-nums}
-#wrap .dxa-report .dxa-section{margin-top:6px}
-/* The viewer is the report's own page, so it carries the report's real
-   heading. The chat card keeps its compact h3 title - the title is announced
-   once per surface, not twice on the same screen. */
+/* A report is light paper even when the window is dark. Give the viewer's
+   sheet its own ink and rule tokens, so heading, link, table and chart colors
+   don't inherit the dark browser chrome. The picker still owns paper color. */
+#wrap .dxa-report{
+  --dxa-fg:var(--dxa-report-ink);
+  --dxa-fg2:var(--dxa-report-ink-2);
+  --dxa-muted:color-mix(in srgb,var(--dxa-report-ink-2) 92%,#f7f5ef);
+  --dxa-faint:color-mix(in srgb,var(--dxa-report-ink-2) 83%,#f7f5ef);
+  --dxa-bg:#fbfaf7;
+  --dxa-bg2:#eeece7;
+  --dxa-hair:var(--dxa-report-hair-soft);
+  --dxa-hair2:var(--dxa-report-hair);
+  --dxa-accent-text:color-mix(in srgb,var(--dxa-accent) 34%,var(--dxa-report-ink));
+  color-scheme:light;
+  font:14.5px/1.65 var(--dxa-report-face);
+  margin:0;
+  padding:clamp(17px,4.5vw,42px) clamp(16px,5vw,52px);
+  border:1px solid var(--dxa-hair);
+  box-shadow:0 2px 8px #0002;
+}
+@supports (color:oklch(from teal l c h)){
+  #wrap .dxa-report{
+    --dxa-accent-text:oklch(from var(--dxa-accent) clamp(.33,l,.47) min(.10,c) h);
+  }
+}
+#wrap .dxa-report .dxa-md,
+#wrap .dxa-report .dxa-list,
+#wrap .dxa-report .dxa-quote,
+#wrap .dxa-report .dxa-callout,
+#wrap .dxa-report .dxa-subtitle{max-inline-size:68ch}
+#wrap .dxa-report .dxa-h{overflow-wrap:anywhere}
+#wrap .dxa-report .dxa-md .md-p{margin-block:0 .7em}
+#wrap .dxa-report .dxa-md .md-p:last-child{margin-block-end:0}
+#wrap .dxa-report .dxa-list{margin-block:0 .7em}
+#wrap .dxa-report :is(.dxa-list,.dxa-md) li::marker{color:var(--dxa-accent-text)}
+#wrap .dxa-report .dxa-md a{color:var(--dxa-accent-text);text-underline-offset:.17em}
+#wrap .dxa-report :is(.dxa-stat-value,.dxa-stat-label,.dxa-metric-value,table,.dxa-timeline .dxa-when){
+  font-variant-numeric:tabular-nums;
+}
+#wrap .dxa-report > .dxa-section + .dxa-section{margin-block-start:1.45em}
+#wrap .dxa-report > .dxa-section > .dxa-h + :is(.dxa-md,.dxa-list){margin-block-start:.5em}
+/* These are the default hierarchy sizes; the more specific design presets
+   retain their own type, counters, and rule treatments. */
+.dxa-report .dxa-h1{font-size:1.46em;font-weight:700;line-height:1.24;margin:1em 0 .36em}
+.dxa-report .dxa-h2,
+.dxa-report .dxa-section > :where(h3.dxa-h){font-size:1.2em;font-weight:700;line-height:1.28;margin:.9em 0 .4em}
+.dxa-report .dxa-h3{font-size:1em;font-weight:650;line-height:1.35;margin:.85em 0 .4em}
+#wrap .dxa-report > .dxa-section > .dxa-h:first-child{margin-block-start:0}
+/* The document title is a real h1; it appears once here, not in the chat
+   card. Document headings and the title use the chosen report typeface. */
 #wrap .dxa-report h1.dxa-report-title{
-  margin:0 0 6px; max-width:70ch; font-family:var(--dxa-report-face,var(--dxa-font));
-  font-size:23px; line-height:1.22; font-weight:700; letter-spacing:-.012em;
-  color:var(--dxa-report-ink,#1c1a17); overflow-wrap:anywhere;
+  margin:0 0 .48em;max-inline-size:30ch;
+  font-family:var(--dxa-report-face,var(--dxa-font));
+  font-size:clamp(26px,3.6vw,41px);line-height:1.12;font-weight:700;
+  letter-spacing:-.027em;color:var(--dxa-report-ink);
+  overflow-wrap:anywhere;text-wrap:balance;
+}
+#wrap .dxa-report > .dxa-subtitle{
+  font-size:1.06em;line-height:1.5;margin-block:0 .95em;
 }
 #wrap .dxa-report h1.dxa-report-title + .dxa-kicker{margin-top:0}
 /* The TOC rows are real buttons now, and the current section carries the
@@ -155,6 +211,8 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
   }
   .dxa-search-match,.dxa-search-match.is-active{forced-color-adjust:none;background:Highlight;color:HighlightText;outline:2px solid Highlight}
   .toc-item.active,.search-result.is-active{outline:2px solid Highlight;outline-offset:-2px}
+  .papers .pdot{forced-color-adjust:none;border-color:ButtonText}
+  .papers .pdot:is(:hover,:focus-visible,.sel,[aria-expanded="true"]){outline-color:Highlight}
 }
 .top-btn{position:fixed;right:16px;bottom:16px;z-index:20;width:36px;height:36px;border-radius:50%;border:1px solid var(--pborder);background:var(--pcard,#fff);color:var(--pfg);font:16px/1 var(--font-mono,"Cascadia Mono",Consolas,monospace);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 .top-btn[hidden]{display:none}
@@ -175,22 +233,28 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
 .block-meta .anno{color:var(--accent,#35c4ff)}
 /* Print/export polish: a clean single-column article with no viewer chrome.
    Interactive blocks print fully expanded and cards/tables never split. */
-@page{size:A4;margin:16mm 14mm}
+@page{size:A4;margin:16mm 14mm;background:#fff}
 @media print{
-  html,body{background:#fff!important;color:#111!important}
+  html,body{color-scheme:light!important;background:#fff!important;color:#111!important}
   .bar,.panel,.overlay,.top-btn,.copy-status,.hint,
-  #bar,#panelToc,#panelSearch,#panelNotes,#panelVersions,#panelDeps,
-  #panelConditions,#panelDynamic,#overlay,.anno-edit,.dxa-anno-editor,
+  .anno-edit,.dxa-anno-editor,
   button,.btn,.pdot,#btnCopy,#btnExportHtml,#btnExportMd,#btnExportPdf{display:none!important}
   .wrap{max-width:none;margin:0;padding:0}
-  .wrap .dxa-report{margin:0;border:0;box-shadow:none}
-  h1,h2,h3,h4,.dxa-h2,.dxa-h3,table,.dxa-card,.dxa-callout,
-  .dxa-chart,.dxa-stats,.dxa-table,.dxa-section{break-inside:avoid;page-break-inside:avoid}
-  .dxa-section{break-after:avoid-page}
+  #wrap .dxa-report{
+    --dxa-report-ink:#111;--dxa-report-ink-2:#444;
+    background:#fff!important;margin:0;padding:0;border:0;box-shadow:none;
+    font-size:11pt;line-height:1.52;
+  }
+  #wrap .dxa-report h1.dxa-report-title{font-size:24pt;line-height:1.17}
+  #wrap .dxa-report :is(h1,h2,h3,h4){break-after:avoid-page}
+  #wrap .dxa-report :is(p,li){orphans:3;widows:3}
+  #wrap .dxa-report :is(.dxa-chart,.dxa-stats,.dxa-card-item,.dxa-quote,table tr){break-inside:avoid}
+  #wrap .dxa-report :is(.dxa-table-wrap,.md-table-wrap){overflow:visible}
+  #wrap .dxa-report thead{display:table-header-group}
   a{color:#111!important;text-decoration:underline}
   details,details[open],.dxa-accordion,.dxa-tabs{display:block!important}
   details>*:not(summary),.dxa-accordion>*,.dxa-tabs>*,
-  [hidden]:not(.dxa-report){display:block!important}
+  .dxa-report :is(.dxa-accordion-panel,.dxa-tabpanel)[hidden]{display:block!important}
   details summary{list-style:none}
   .print-only,.dxa-print-only{display:block!important;margin-top:18px;
     padding-top:8px;border-top:1px solid #bbb;font-size:9pt;color:#555}
@@ -203,7 +267,10 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
   <label for="theme">Design</label>
   <select id="theme" aria-label="Design"></select>
   <label>Page colour</label>
-  <span class="papers" id="papers" role="group" aria-label="Page colour"></span>
+  <span class="papers">
+    <button type="button" class="pdot paper-trigger" id="paperTrigger" data-paper="paper" aria-label="Page colour" aria-expanded="false" aria-controls="papers"></button>
+    <span class="paper-options" id="papers" role="group" aria-label="Page colours" hidden></span>
+  </span>
   <label for="font">Font</label>
   <select id="font" aria-label="Font"></select>
   <button type="button" class="btn primary" id="btnToc" title="Table of contents">Contents</button>
@@ -990,7 +1057,10 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
     if (font) font.value = (art.font && window.DexArtifacts.REPORT_FONTS.includes(art.font)) ? art.font : 'neutral';
     const papers = document.getElementById('papers');
     if (papers) {
-      const current = art.paper || 'paper';
+      const current = window.DexArtifacts.REPORT_PAPERS.includes(art.paper) ? art.paper : 'paper';
+      const trigger = document.getElementById('paperTrigger');
+      trigger.dataset.paper = current;
+      trigger.setAttribute('aria-label', 'Page colour: ' + current);
       for (const dot of papers.querySelectorAll('.pdot')) {
         const sel = dot.dataset.paper === current;
         dot.classList.toggle('sel', sel);
@@ -1057,6 +1127,32 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
     const font = document.getElementById('font');
     for (const f of window.DexArtifacts.REPORT_FONTS) font.appendChild(new Option(label(f), f));
     const papers = document.getElementById('papers');
+    const trigger = document.getElementById('paperTrigger');
+    const picker = trigger.parentElement;
+    const setPickerOpen = (open) => {
+      papers.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    };
+    picker.addEventListener('pointerenter', (event) => {
+      if (event.pointerType === 'mouse') setPickerOpen(true);
+    });
+    picker.addEventListener('pointerleave', (event) => {
+      if (event.pointerType === 'mouse' && !papers.contains(document.activeElement)) setPickerOpen(false);
+    });
+    picker.addEventListener('focusout', (event) => {
+      if (!picker.contains(event.relatedTarget)) setPickerOpen(false);
+    });
+    trigger.addEventListener('click', () => {
+      setPickerOpen(true);
+      (papers.querySelector('.sel') || papers.firstElementChild).focus();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || papers.hidden) return;
+      if (papers.contains(document.activeElement)) trigger.focus();
+      setPickerOpen(false);
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
     for (const p of window.DexArtifacts.REPORT_PAPERS) {
       const dot = document.createElement('button');
       dot.type = 'button';
@@ -1065,7 +1161,11 @@ body{margin:0;background:var(--pbg);color:var(--pfg)}
       dot.title = label(p);
       dot.setAttribute('aria-label', 'Page colour: ' + p);
       dot.setAttribute('aria-pressed', 'false');
-      dot.addEventListener('click', () => applyLook({ paper: p }));
+      dot.addEventListener('click', () => {
+        trigger.focus({ preventScroll: true });
+        setPickerOpen(false);
+        applyLook({ paper: p });
+      });
       papers.appendChild(dot);
     }
     theme.addEventListener('change', () => applyLook({ theme: theme.value }));

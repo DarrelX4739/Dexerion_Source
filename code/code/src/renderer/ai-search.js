@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const MARK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg>';
+  const MARK = '<img src="../../assets/dexi-face.png" width="20" height="15" alt="" draggable="false">';
   const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
   const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
@@ -259,15 +259,7 @@
     const detail = state.current ? state.current.detail : '';
     live.detail.textContent = detail;
     live.detail.hidden = !detail;
-    // Completed steps are append-only until the next trace. Keep their DOM
-    // and SVGs; only a newly mounted bubble or reset needs the whole list.
-    if (live.paintedSteps !== state.steps) {
-      live.stepList.replaceChildren();
-      live.paintedSteps = state.steps;
-    }
-    for (let i = live.stepList.childElementCount; i < state.steps.length; i++) {
-      live.stepList.appendChild(stepRow(state.steps[i]));
-    }
+    live.stepList.replaceChildren(...state.steps.map(stepRow));
   }
 
   function mountWorking(live) {
@@ -319,7 +311,6 @@
 
   function finishWorking(live, showActions) {
     if (live && live.work) live.work.remove();
-    if (live) live.paintedSteps = null;
     if (state.current) state.steps.push(state.current);
     state.current = null;
     const steps = state.steps.slice();

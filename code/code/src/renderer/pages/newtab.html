@@ -40,12 +40,10 @@ body{display:flex;flex-direction:column;align-items:center;padding:11vh 24px 56p
 .acts{display:flex;gap:10px;margin-top:16px;animation:dx-rise .4s .16s var(--ease) both}
 #ai-btn{display:inline-flex;align-items:center;gap:9px;padding:10px 18px;border-radius:var(--r-md);
   cursor:pointer;font-size:13px;font-weight:600;letter-spacing:.005em;color:var(--pfg);
-  background:var(--pcard);border:1px solid var(--pborder-2);
-  box-shadow:var(--sh-1),inset 0 1px 0 var(--phl);
-  transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),color var(--dur) var(--ease)}
-#ai-btn:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);
-  box-shadow:0 10px 26px -14px var(--accent);color:var(--accent)}
-#ai-btn svg{color:var(--accent)}
+  background:transparent;border:1px solid transparent;
+  transition:transform var(--dur) var(--ease),color var(--dur) var(--ease)}
+#ai-btn:hover{transform:translateY(-2px);color:var(--accent)}
+#ai-btn img{object-fit:contain}
 
 /* ---------- starred ---------- */
 .sect{display:flex;align-items:center;gap:14px;width:min(620px,92vw);margin:40px 0 14px;
@@ -472,7 +470,7 @@ body.ai .daylight{display:none}
 </div>
 
 <div class="acts">
-  <button id="ai-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg>Search With Dexerion AI</button>
+  <button id="ai-btn"><img src="dexerion://assets/dexi-face.png" width="15" height="11" alt="" draggable="false">Search With Dexerion AI</button>
 </div>
 
 <div id="chat">
@@ -635,18 +633,10 @@ function paintFav(favEl,dataUrl){
   const box=document.getElementById('tasks-nt');
   if(!box)return;
   const nEl=document.getElementById('tasks-n');
-  const dayOptions={month:'short',day:'numeric'};
-  const timeOptions={hour:'2-digit',minute:'2-digit'};
-  function dueText(t,formatters){
+  function dueText(t){
     const d=new Date(t.dueMs);
-    const valid=Number.isFinite(d.getTime());
-    const day=valid
-      ?(formatters.day||=new Intl.DateTimeFormat(undefined,dayOptions)).format(d)
-      :d.toLocaleDateString(undefined,dayOptions);
-    if(!t.hasTime)return day;
-    return day+' '+(valid
-      ?(formatters.time||=new Intl.DateTimeFormat(undefined,timeOptions)).format(d)
-      :d.toLocaleTimeString(undefined,timeOptions));
+    const day=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    return t.hasTime?day+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):day;
   }
   function paint(list){
     box.innerHTML='';
@@ -656,9 +646,6 @@ function paintFav(favEl,dataUrl){
       box.innerHTML='<div class="empty"><b>No open tasks</b><br>Add one from the tasks panel in the tab rail.</div>';
       return;
     }
-    // Reuse formatters only for this paint. The next load picks up the
-    // current locale and time zone, and each overdue check stays live.
-    const formatters={};
     open.forEach((t,i)=>{
       const d=document.createElement('div');
       d.className='tk-todo';d.style.animationDelay=(i*38)+'ms';d.title=t.notes||t.title;
@@ -676,7 +663,7 @@ function paintFav(favEl,dataUrl){
         tx.appendChild(desc);
       }
       const sm=document.createElement('small');
-      sm.textContent=dueText(t,formatters);
+      sm.textContent=dueText(t);
       if(t.dueMs<Date.now())sm.classList.add('overdue');
       tx.appendChild(sm);
       d.append(c,tx);

@@ -1,28 +1,33 @@
 param(
   [int]$DurationSec = 12,
   [string]$OutFile = '',
-  [string]$CounterInstance = 'rapl_package0_pkg'
+  [string]$CounterInstance = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
 # Windows RAPL counters report milliwatts. Sample the whole CPU package; the
 # first Get-Counter sample is a warm-up zero on this machine, so drop it.
-if ($CounterInstance -notmatch '^rapl_package[0-9]+_pkg$') {
-  throw 'Expected an explicit CPU package RAPL meter'
+if (-not $CounterInstance) {
+  $probe = Get-Counter '\Energy Meter(*)\Power' -ErrorAction Stop
+  $pkg = $probe.CounterSamples | Where-Object {
+    $_.InstanceName -match 'pkg$|package[0-9]*_pkg' -and $_.InstanceName -notmatch 'dram|pp0|pp1'
+  } | Select-Object -First 1
+  if (-not $pkg) {
+    $pkg = $probe.CounterSamples | Where-Object {
+      $_.InstanceName -and $_.InstanceName -ne '_total' -and $_.CookedValue -gt 0
+    } | Select-Object -First 1
+  }
+  if (-not $pkg) { throw 'No non-zero RAPL Energy Meter Power instance found' }
+  $CounterInstance = $pkg.InstanceName
 }
-$CounterInstance = $CounterInstance.ToLowerInvariant()
 
 $path = '\Energy Meter(' + $CounterInstance + ')\Power'
 $samples = Get-Counter -Counter $path -SampleInterval 1 -MaxSamples ($DurationSec + 1) -ErrorAction Stop
-$rows = @($samples.CounterSamples)
-if (-not $rows.Count -or @($rows | Where-Object { $_.InstanceName -ne $CounterInstance }).Count) {
-  throw 'CPU package power meter missing or inconsistent: ' + $CounterInstance
-}
-$values = @($rows | ForEach-Object { [double]$_.CookedValue })
+$values = @($samples.CounterSamples | ForEach-Object { [double]$_.CookedValue })
 if ($values.Count -gt 1) { $values = $values[1..($values.Count - 1)] }
 $values = @($values | Where-Object { $_ -gt 0 })
-if ($values.Count -lt 3) { throw 'Fewer than three valid power samples for ' + $path }
+if (-not $values.Count) { throw 'No valid power samples returned for ' + $path }
 
 $sorted = @($values | Sort-Object)
 $sum = 0.0

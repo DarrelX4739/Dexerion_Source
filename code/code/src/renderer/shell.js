@@ -89,12 +89,18 @@ function render(s) {
   // design token (--dx-accent), never a hardcoded hex copy of it: the token is
   // the single source for the palette.
   const savedAccent = (s.ui && s.ui.accent) || '';
-  const accent = savedAccent || getComputedStyle(document.documentElement).getPropertyValue('--dx-accent').trim() || '#35c4ff';
-  document.documentElement.style.setProperty('--accent', accent);
+  const tokenAccent = getComputedStyle(document.documentElement).getPropertyValue('--dx-accent').trim();
+  document.documentElement.style.setProperty('--accent', savedAccent || tokenAccent || '#35c4ff');
   document.body.classList.add('vertical');
   // The design-preview query wins; otherwise follow the saved Theme setting.
   applySkin(SKIN || (s.ui && s.ui.skin) || '');
-  updateTabRail(s);
+  // tabs — diffed: rebuilding mid-drag or mid-click eats the gesture, so
+  // only touch the DOM when something actually changed.
+  const key = s.tabs.map(t => t.id + '|' + (t.title || '') + '|' + (t.url || '') + '|' + (t.loading ? 1 : 0) + '|' + (t.sleeping ? 1 : 0) + '|' + (t.favicon || '') + '|' + (t.groupId || '')).join('~') + '@' + s.active + '#' + ((s.groups || []).map(g => g.id + '|' + (g.name || '') + '|' + g.color).join('~'));
+  if (key !== lastTabKey && !draggingTab) {
+    lastTabKey = key;
+    buildTabs(s);
+  }
   updateChromeRest(s);
   updateTimer(s);
   updateTasks(s);
@@ -144,45 +150,6 @@ function updateInspector(s) {
 }
 
 let lastTabKey = '', draggingTab = false;
-let lastRailSelection = null;
-
-function sameTabRailSelection(previous, next) {
-  const priorTabs = previous.tabs, tabs = next.tabs;
-  if (previous.active !== next.active || priorTabs.length !== tabs.length) return false;
-  for (let i = 0; i < tabs.length; i++) {
-    const a = priorTabs[i], b = tabs[i];
-    if (a.id !== b.id || (a.title || '') !== (b.title || '') || (a.url || '') !== (b.url || '') ||
-        !!a.loading !== !!b.loading || !!a.sleeping !== !!b.sleeping ||
-        (a.favicon || '') !== (b.favicon || '') || (a.groupId || '') !== (b.groupId || '')) return false;
-  }
-  const priorGroups = previous.groups || [], groups = next.groups || [];
-  if (priorGroups.length !== groups.length) return false;
-  for (let i = 0; i < groups.length; i++) {
-    const a = priorGroups[i], b = groups[i];
-    if (a.id !== b.id || (a.name || '') !== (b.name || '') || a.color !== b.color) return false;
-  }
-  return true;
-}
-
-function updateTabRail(s) {
-  // The bridge delivers fresh snapshots; shell code never mutates their tab
-  // or group arrays. Skip the expensive fingerprint strings (including
-  // favicon data URLs) only when all fields used in the old key match.
-  if (draggingTab) return;
-  if (lastTabKey && lastRailSelection && sameTabRailSelection(lastRailSelection, s)) {
-    // Follow the live snapshot instead of retaining a second array copy.
-    lastRailSelection.tabs = s.tabs;
-    lastRailSelection.groups = s.groups;
-    return;
-  }
-  lastRailSelection = { tabs: s.tabs, groups: s.groups, active: s.active };
-  const key = s.tabs.map(t => t.id + '|' + (t.title || '') + '|' + (t.url || '') + '|' + (t.loading ? 1 : 0) + '|' + (t.sleeping ? 1 : 0) + '|' + (t.favicon || '') + '|' + (t.groupId || '')).join('~') + '@' + s.active + '#' + ((s.groups || []).map(g => g.id + '|' + (g.name || '') + '|' + g.color).join('~'));
-  if (key !== lastTabKey) {
-    lastTabKey = key;
-    buildTabs(s);
-  }
-}
-
 document.addEventListener('dragstart', (e) => { if (e.target.closest && e.target.closest('.tab')) draggingTab = true; });
 document.addEventListener('dragend', () => { draggingTab = false; lastTabKey = ''; if (S) render(S); });
 document.addEventListener('drop', () => { draggingTab = false; lastTabKey = ''; });
@@ -198,7 +165,7 @@ function buildTabs(s) {
   const plus = $('#newtab-btn');
   tabsEl.innerHTML = '';
   // Keep the rename/color editor open across re-renders unless its group died.
-  if (geditFor && !(s.groups || []).some(g => g.id === geditFor)) closeGroupEditor();
+  if (groupEditor && !(s.groups || []).some(g => g.id === groupEditor.id)) closeGroupEditor();
   const groups = new Map((s.groups || []).map(g => [g.id, g]));
   for (const id of collapsedGroups) if (!groups.has(id)) collapsedGroups.delete(id);
   let lastG = null;
@@ -210,12 +177,14 @@ function buildTabs(s) {
     tabsEl.appendChild(tabEl(t, i, s, g));
   });
   if (plus) tabsEl.appendChild(plus);
+  if (groupEditor) positionGroupEditor();
 }
 
 function groupChip(g, s) {
   const count = s.tabs.filter(t => t.groupId === g.id).length;
   const collapsed = collapsedGroups.has(g.id);
   const d = document.createElement('div');
+  d.dataset.groupId = g.id;
   d.className = 'gchip' + (collapsed ? ' collapsed' : '');
   d.style.setProperty('--gc', G_COLORS[g.color] || G_COLORS.grey);
   d.title = (g.name || 'Tab group') + ` (${count} tab${count === 1 ? '' : 's'}) — click to ${collapsed ? 'expand' : 'collapse'}, right-click for group options`;
@@ -228,14 +197,14 @@ function groupChip(g, s) {
   const n = document.createElement('span'); n.className = 'gct'; n.textContent = count;
   d.append(state, dot, nm, n);
   const toggle = (e) => {
-    e.preventDefault(); e.stopPropagation(); closeGroupEditor();
+    e.preventDefault(); e.stopPropagation(); closeGroupEditor(true);
     if (collapsedGroups.has(g.id)) collapsedGroups.delete(g.id); else collapsedGroups.add(g.id);
     lastTabKey = '';
     if (S) render(S);
   };
   d.onclick = toggle;
   d.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') toggle(e); };
-  d.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openGroupEditor(g, d); };
+  d.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openGroupEditor(g); };
   d.ondragover = (e) => {
     if (!e.dataTransfer.types.includes('text/tab')) return;
     e.preventDefault(); d.classList.add('drop');
@@ -327,10 +296,30 @@ function clearDropMarks() {
 }
 
 // Group rename / recolor editor (floating panel anchored to the chip).
-let geditFor = null;
-function openGroupEditor(g, anchor) {
-  closeGroupEditor();
-  geditFor = g.id;
+let groupEditor = null;
+function positionGroupEditor() {
+  const rail = railEl();
+  const panel = document.getElementById('gedit');
+  if (!panel || !rail.classList.contains('rail-open')) return;
+  const chip = $('#tabs').querySelector(`.gchip[data-group-id="${CSS.escape(groupEditor.id)}"]`);
+  if (!chip) return closeGroupEditor();
+  const row = chip.getBoundingClientRect();
+  const list = $('#tabs').getBoundingClientRect();
+  if (row.bottom <= list.top || row.top >= list.bottom) return closeGroupEditor(true);
+  const below = row.bottom - rail.getBoundingClientRect().top + 8;
+  const above = below - row.height - panel.offsetHeight - 16;
+  const bottomLimit = rail.clientHeight - panel.offsetHeight - 8;
+  panel.style.top = Math.max(8, below <= bottomLimit ? below : Math.min(above, bottomLimit)) + 'px';
+}
+function focusGroupEditor() {
+  positionGroupEditor();
+  const name = document.querySelector('#gedit input');
+  if (name) { name.focus({ preventScroll: true }); name.select(); }
+}
+function openGroupEditor(g) {
+  closeGroupEditor(true);
+  clearTimeout(railStowT);
+  expandRail();
   const p = document.createElement('div');
   p.id = 'gedit';
   p.style.setProperty('--gc', G_COLORS[g.color] || G_COLORS.grey);
@@ -345,13 +334,17 @@ function openGroupEditor(g, anchor) {
     const patch = namePatch();
     return Object.keys(patch).length ? window.dexerion.invoke('dex:group-set', g.id, patch) : Promise.resolve(true);
   };
-  const commit = () => { saveName(); closeGroupEditor(); };
-  nm.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') commit();
-    else if (e.key === 'Escape') closeGroupEditor();
+  groupEditor = { id: g.id, saveName };
+  p.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeGroupEditor(); }
+    else if (e.target === nm) {
+      e.stopPropagation();
+      if (e.key === 'Enter') closeGroupEditor(true);
+    }
   });
-  nm.addEventListener('blur', (e) => { if (!p.contains(e.relatedTarget)) commit(); });
+  p.addEventListener('focusout', (e) => {
+    if (groupEditor && !p.contains(e.relatedTarget)) closeGroupEditor(true);
+  });
   const sw = document.createElement('div'); sw.className = 'gsw';
   for (const name of Object.keys(G_COLORS)) {
     const b = document.createElement('button');
@@ -380,43 +373,40 @@ function openGroupEditor(g, anchor) {
   };
   row.append(un, cl);
   p.append(nm, sw, row);
-  document.body.appendChild(p);
-  const r = anchor.getBoundingClientRect();
-  const pw = 248, ph = p.offsetHeight || 180;
-  p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8)) + 'px';
-  p.style.top = ((r.bottom + 8 + ph < window.innerHeight) ? r.bottom + 8 : Math.max(8, r.top - ph - 8)) + 'px';
-  setTimeout(() => { nm.focus(); nm.select(); }, 0);
-  setTimeout(() => document.addEventListener('pointerdown', geditOutside, true), 0);
+  railEl().appendChild(p);
+  if (railEl().classList.contains('rail-open')) focusGroupEditor();
+  document.addEventListener('pointerdown', geditOutside, true);
+  window.addEventListener('resize', positionGroupEditor);
+  $('#tabs').addEventListener('scroll', positionGroupEditor);
 }
 function geditOutside(e) {
   if (!document.getElementById('gedit')) return;
   if (e.target.closest && (e.target.closest('#gedit') || e.target.closest('.gchip'))) return;
-  closeGroupEditor();
+  closeGroupEditor(true);
 }
-function closeGroupEditor() {
-  geditFor = null;
+function closeGroupEditor(save = false) {
+  const editor = groupEditor;
+  groupEditor = null;
+  if (editor && save) editor.saveName();
   document.removeEventListener('pointerdown', geditOutside, true);
   const p = document.getElementById('gedit');
-  if (p) p.remove();
+  if (p) {
+    window.removeEventListener('resize', positionGroupEditor);
+    $('#tabs').removeEventListener('scroll', positionGroupEditor);
+    p.remove();
+  }
 }
 
-const chromeTitle = document.head.querySelector('title');
 function updateChromeRest(s) {
   const act = s.tabs.find(t => t.id === s.active);
   // Preview windows name their direction in the title bar, so four of them are
   // tellable apart in the taskbar (the active tab still follows the dot).
-  const title = SKIN
+  document.title = SKIN
     ? 'Dexerion — ' + (SKIN_LABELS[SKIN] || SKIN) + (act ? ' · ' + act.title : '')
     : (act ? act.title + ' — ' : '') + 'Dexerion';
-  // The document.title getter normalises whitespace; compare the actual
-  // title node so a meaningful change to its raw text still gets written.
-  if (!chromeTitle || chromeTitle.textContent !== title) document.title = title;
-  // Never overwrite the text or selection being edited in the omnibox.
+  // omnibox
   const omni = $('#omnibox');
-  if (document.activeElement !== omni) {
-    const url = displayUrl(act ? act.url : '');
-    if (omni.value !== url) omni.value = url;
-  }
+  if (document.activeElement !== omni) omni.value = displayUrl(act ? act.url : '');
   // nav buttons
   document.querySelector('[data-nav=back]').disabled = !(act && act.canBack);
   document.querySelector('[data-nav=forward]').disabled = !(act && act.canForward);
@@ -454,114 +444,52 @@ function updateChromeRest(s) {
   } else if (av.dataset.src) {
     av.dataset.src = ''; av.textContent = initial;
     av.style.background = `linear-gradient(150deg, ${(s.account && s.account.color) || '#35c4ff'}, var(--paper-ink))`;
-  } else if (av.textContent !== initial) {
+  } else {
     av.textContent = initial;
   }
   if (!s.account || !s.account.avatar) {
     av.style.background = `linear-gradient(150deg, ${(s.account && s.account.color) || '#35c4ff'}, var(--paper-ink))`;
   }
-  const accountButton = $('#account-btn');
-  const tooltip = `Signed in as ${an}${s.account && s.account.googleEmail ? ' (' + s.account.googleEmail + ')' : ''} — manage accounts`;
-  if (accountButton.title !== tooltip) accountButton.title = tooltip;
+  $('#account-btn').title = `Signed in as ${an}${s.account && s.account.googleEmail ? ' (' + s.account.googleEmail + ')' : ''} — manage accounts`;
   const dacc = $('#dmenu-acc');
-  if (dacc) {
-    const label = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
-    if (dacc.textContent !== label) dacc.textContent = label;
-  }
+  if (dacc) dacc.textContent = `${an}${s.defaultAccountId === (s.account && s.account.id) ? ' (default)' : ''}`;
   updateBookmarkStar(act);
-  updateBookmarksBar(s);
-  updateExtensionsToolbar(s.extensions);
-  reportChrome();
-}
-
-// Reconcile the toolbar by extension ID and occurrence. Unrelated state
-// pushes need neither new controls nor repeat pending icon requests.
-const toolbarExtensions = new Map();
-function updateExtensionsToolbar(extensions) {
-  if (!extensions.length && !toolbarExtensions.size) return;
-  const bar = $('#extbar');
-  if (!bar) return;
-  const installed = new Map();
-  for (const { id, enabled } of extensions) {
-    installed.set(id, (installed.get(id) || 0) + (enabled ? 1 : 0));
-  }
-
-  // Remove old buttons before reordering survivors. Keep icons when an
-  // extension is disabled. Broken records can share an empty display ID;
-  // preserve their separate buttons and original ordering.
-  for (const [id, entry] of toolbarExtensions) {
-    const visible = installed.get(id);
-    while (entry.buttons.length > (visible || 0)) entry.buttons.pop().remove();
-    if (visible === undefined) toolbarExtensions.delete(id);
-    else entry.nextSlot = 0;
-  }
-
-  let next = bar.firstElementChild;
-  for (const { id, name, version, loadError, enabled } of extensions) {
-    if (!enabled) continue;
-    let entry = toolbarExtensions.get(id);
-    if (!entry) {
-      entry = { buttons: [], nextSlot: 0, icon: null, pending: false };
-      toolbarExtensions.set(id, entry);
-    }
-    const slot = entry.nextSlot++;
-    let btn = entry.buttons[slot];
-    if (!btn) {
-      btn = entry.buttons[slot] = document.createElement('button');
-      btn.onclick = () => window.dexerion.invoke('dex:ext-popup', id);
-      setExtBtnIcon(btn, entry.icon);
-    }
-    const title = `${name} ${version || ''}${loadError ? ' — error: ' + loadError : ''}`;
-    if (btn.title !== title) btn.title = title;
-    const hasError = Boolean(loadError);
-    if (Boolean(btn._extError) !== hasError) {
-      btn._extError = hasError;
-      btn.classList.toggle('exterr', hasError);
-    }
-    if (btn !== next) {
-      const focused = document.activeElement === btn;
-      bar.insertBefore(btn, next);
-      if (focused && document.activeElement !== btn) btn.focus({ preventScroll: true });
-    }
-    next = btn.nextElementSibling;
-
-    if (entry.icon || entry.pending) continue;
-    entry.pending = true;
-    window.dexerion.invoke('dex:ext-icon', id).then(src => {
-      // A late reply for a removed extension must not affect a reinstall of
-      // the same ID. A merely disabled extension can keep the cached icon.
-      if (toolbarExtensions.get(id) !== entry) return;
-      entry.pending = false;
-      entry.icon = src || 'fallback';
-      for (const button of entry.buttons) setExtBtnIcon(button, entry.icon);
-    }).catch(() => { entry.pending = false; }); // retry on the next update
-  }
-}
-
-// Keep existing links when their visible labels and URLs have not changed.
-// Navigation still follows the active tab from the latest chrome state.
-let bookmarkBarRows = [];
-let bookmarkBarActive;
-function updateBookmarksBar(s) {
+  // bookmarks bar — hidden when the setting is off or the bar is empty, so an
+  // empty bar never leaves a dead strip under the toolbar.
   const bar = $('#bookmarkbar');
-  const items = (s.bookmarks && s.bookmarks.roots && s.bookmarks.roots.bar) || [];
-  bookmarkBarActive = s.active;
-  const display = (s.bookmarksBar && items.length) ? 'flex' : 'none';
-  if (bar.style.display !== display) bar.style.display = display;
-  if (items.length === bookmarkBarRows.length && items.every((b, i) =>
-    b.url === bookmarkBarRows[i].url && (b.title || b.url) === bookmarkBarRows[i].label)) return;
-
-  // No cap: the whole bar remains scrollable, including when it is re-shown.
-  bookmarkBarRows = items.map(b => ({ url: b.url, label: b.title || b.url }));
-  const links = document.createDocumentFragment();
-  for (const { url, label } of bookmarkBarRows) {
-    const a = document.createElement('a');
-    a.textContent = label;
-    a.title = url;
-    a.onclick = () => window.dexerion.invoke('dex:navigate', bookmarkBarActive, url);
-    links.appendChild(a);
+  const barItems = (s.bookmarks && s.bookmarks.roots && s.bookmarks.roots.bar) || [];
+  bar.style.display = (s.bookmarksBar && barItems.length) ? 'flex' : 'none';
+  bar.innerHTML = '';
+  // No cap: every bookmark on the bar (it scrolls horizontally when it overflows).
+  for (const b of barItems) {
+    const a = document.createElement('a'); a.textContent = b.title || b.url;
+    a.title = b.url;
+    a.onclick = () => window.dexerion.invoke('dex:navigate', s.active, b.url);
+    bar.appendChild(a);
   }
-  bar.replaceChildren(links);
+  // extensions toolbar — real action icons, cached per session
+  const eb = $('#extbar'); eb.innerHTML = '';
+  window.__extIcons = window.__extIcons || {};
+  const liveIds = new Set(s.extensions.map(x => x.id));
+  for (const k of Object.keys(window.__extIcons)) if (!liveIds.has(k)) delete window.__extIcons[k];
+  for (const x of s.extensions.filter(x => x.enabled)) {
+    const btn = document.createElement('button');
+    btn.title = `${x.name} ${x.version || ''}${x.loadError ? ' — error: ' + x.loadError : ''}`;
+    if (x.loadError) btn.classList.add('exterr');
+    btn.onclick = () => window.dexerion.invoke('dex:ext-popup', x.id);
+    eb.appendChild(btn);
+    const cached = window.__extIcons && window.__extIcons[x.id];
+    if (cached) { setExtBtnIcon(btn, cached); }
+    else {
+      btn._icon = null; setIcon(btn, 'ext');
+      window.dexerion.invoke('dex:ext-icon', x.id).then(src => {
+        window.__extIcons = window.__extIcons || {};
+        window.__extIcons[x.id] = src || 'fallback';
+        setExtBtnIcon(btn, window.__extIcons[x.id]);
+      }).catch(() => {});
+    }
+  }
+  reportChrome();
 }
 
 // Memoised chrome measurements. The calls earlier in the module run from state
@@ -623,18 +551,11 @@ function updateRailMini(p, running) {
     snd.title = off ? 'Unmute (restore White noise)' : 'Mute sound';
   }
 }
-let lastPomoSites = null;
 function renderPomoSites(p) {
   const box = $('#rt-sites');
   if (!box) return;
-  const list = (p && p.blocklist) || [];
-  // The timer sends fresh state twice a second, but elapsed time does not
-  // change which sites are listed. Keep the same controls (including focus)
-  // until the ordered host set actually changes.
-  if (lastPomoSites && lastPomoSites.length === list.length &&
-      list.every((host, i) => host === lastPomoSites[i])) return;
-  lastPomoSites = list.slice();
   box.replaceChildren();
+  const list = (p && p.blocklist) || [];
   if (!list.length) {
     const d = document.createElement('div');
     d.className = 'rt-empty';
@@ -808,12 +729,11 @@ function displayUrl(u) {
 
 // Local mirror of the bookmarked URLs, so the star can be painted synchronously
 // (no IPC on the render path) and flips the instant it is clicked.
-function isBookmarked(url) {
+function bookmarkSet() {
+  const set = new Set();
   const roots = S && S.bookmarks && S.bookmarks.roots;
-  if (roots) for (const k of Object.keys(roots)) {
-    for (const b of (roots[k] || [])) if (b.url === url) return true;
-  }
-  return false;
+  if (roots) for (const k of Object.keys(roots)) for (const b of (roots[k] || [])) set.add(b.url);
+  return set;
 }
 function updateBookmarkStar(act) {
   const btn = $('#bookmark-btn');
@@ -824,7 +744,7 @@ function updateBookmarkStar(act) {
     return;
   }
   btn.classList.remove('disabled');
-  const marked = isBookmarked(url);
+  const marked = bookmarkSet().has(url);
   setIcon(btn, marked ? 'starOn' : 'star');
   btn.classList.toggle('bookmarked', marked);
   btn.title = marked ? 'Remove this bookmark' : 'Bookmark this page';
@@ -935,7 +855,7 @@ function toggleBookmark() {
   if (!/^https?:\/\//i.test(act.url)) return;
   const url = act.url;
   const btn = $('#bookmark-btn');
-  const nowMarked = !(isBookmarked(url) || btn.classList.contains('bookmarked'));
+  const nowMarked = !(bookmarkSet().has(url) || btn.classList.contains('bookmarked'));
   // Flip the star immediately; persist in the background. Nothing on the click
   // path awaits, so there is no perceptible delay.
   setIcon(btn, nowMarked ? 'starOn' : 'star');
@@ -1089,7 +1009,11 @@ function expandRail() {
   clearTimeout(railOpenT);
   railTrackWidth();
   // Full timer UI + tab text only join once the width has landed.
-  railOpenT = setTimeout(() => { el.classList.add('rail-open'); reportChrome(); }, RAIL_ANIM_MS);
+  railOpenT = setTimeout(() => {
+    el.classList.add('rail-open');
+    reportChrome();
+    if (groupEditor) focusGroupEditor();
+  }, RAIL_ANIM_MS);
 }
 function scheduleRailStow() {
   clearTimeout(railStowT);
@@ -1097,8 +1021,10 @@ function scheduleRailStow() {
     if (draggingTab) { scheduleRailStow(); return; }
     const ae = document.activeElement;
     const el = railEl();
-    if (el && ae && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) { scheduleRailStow(); return; }
+    if (groupEditor && el && el.matches(':hover')) return;
+    if (el && ae && !ae.closest('#gedit') && el.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) { scheduleRailStow(); return; }
     if (el) {
+      if (groupEditor) closeGroupEditor(true);
       clearTimeout(railOpenT);
       el.classList.remove('rail-open');
       el.classList.add('rail-collapsed');
@@ -1283,21 +1209,14 @@ async function tasksRefresh() {
     if (Array.isArray(list)) { TASKS = list; renderTasks(); }
   } catch {}
 }
-const TASK_DATE_OPTIONS = { month: 'short', day: 'numeric' };
-const TASK_TIME_OPTIONS = { hour: '2-digit', minute: '2-digit' };
-function tkDueText(t, formatters) {
+function tkDueText(t) {
   if (!t || !t.dueMs) return '';
   const d = new Date(t.dueMs);
-  const valid = Number.isFinite(d.getTime());
-  const day = valid
-    ? (formatters.date ||= new Intl.DateTimeFormat(undefined, TASK_DATE_OPTIONS)).format(d)
-    : d.toLocaleDateString(undefined, TASK_DATE_OPTIONS);
+  const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   if (!t.hasTime) return day;
-  return day + ' ' + (valid
-    ? (formatters.time ||= new Intl.DateTimeFormat(undefined, TASK_TIME_OPTIONS)).format(d)
-    : d.toLocaleTimeString(undefined, TASK_TIME_OPTIONS));
+  return day + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
-function tkRow(t, formatters) {
+function tkRow(t) {
   const row = document.createElement('div');
   row.className = 'tk-row' + (t.done ? ' done' : '');
   const box = document.createElement('button');
@@ -1313,7 +1232,7 @@ function tkRow(t, formatters) {
   b.textContent = t.title;
   b.title = t.notes || t.title;
   main.appendChild(b);
-  const meta = (t.notes ? t.notes + ' · ' : '') + tkDueText(t, formatters);
+  const meta = (t.notes ? t.notes + ' · ' : '') + tkDueText(t);
   if (meta) {
     const sm = document.createElement('small');
     sm.textContent = meta;
@@ -1366,9 +1285,6 @@ function renderTasks() {
   const peek = $('#tk-peek');
   const list = $('#tk-list');
   if (!badge || !peek || !list) return;
-  // Share Intl setup within this render only. A later render picks up the
-  // current locale/time zone and still recomputes the overdue labels.
-  const formatters = {};
   const open = TASKS.filter((t) => t && !t.done);
   if (open.length) {
     badge.hidden = false;
@@ -1386,7 +1302,7 @@ function renderTasks() {
     d.textContent = 'No open tasks.';
     peek.appendChild(d);
   } else {
-    for (const t of top) peek.appendChild(tkRow(t, formatters));
+    for (const t of top) peek.appendChild(tkRow(t));
   }
   if (open.length > 3) {
     const more = document.createElement('button');
@@ -1403,7 +1319,7 @@ function renderTasks() {
     d.textContent = 'No tasks yet — add one above.';
     list.appendChild(d);
   } else {
-    for (const t of TASKS) list.appendChild(tkRow(t, formatters));
+    for (const t of TASKS) list.appendChild(tkRow(t));
   }
   tkSyncListCap();
 }

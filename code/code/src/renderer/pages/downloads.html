@@ -44,7 +44,6 @@
 <script>
 const list=document.getElementById('list');
 let refreshTimer=null;
-let paintedDownloads=[];
 function clsFor(state){
   const s=String(state||'').toLowerCase();
   if(s==='complete'||s==='completed')return 'done';
@@ -173,33 +172,12 @@ function render(download){
   row.append(icon,body,status,actions);
   return row;
 }
-// Active transfers still get their original fresh progress controls. An
-// unchanged completed row has no running animation or resume state.
-function sameCompletedDownload(a,b){
-  return !a.active&&!b.active&&a.state==='completed'&&b.state==='completed'&&
-    a.fileName===b.fileName&&a.name===b.name&&a.received===b.received&&
-    a.total===b.total&&a.path===b.path&&a.error===b.error;
-}
-function paintDownloads(downloads){
-  if(downloads.length&&downloads.length===paintedDownloads.length&&
-      downloads.every((download,i)=>download.id===paintedDownloads[i].download.id)){
-    const focused=document.activeElement;
-    for(let i=0;i<downloads.length;i++){
-      const previous=paintedDownloads[i];
-      const download=downloads[i];
-      // Focus and a pending Delete keep the old rebuild behavior. Delete
-      // is always the last control in a completed row.
-      if(sameCompletedDownload(previous.download,download)&&!previous.row.contains(focused)&&
-          !previous.row.lastElementChild.lastElementChild.disabled)continue;
-      const row=render(download);
-      previous.row.replaceWith(row);
-      paintedDownloads[i]={download,row};
-    }
-    return;
-  }
-  // Shape changes take the existing whole-list path, including the empty state.
+async function load(){
+  // A failed load must not look like "no downloads yet": DexPage.guard shows
+  // what went wrong and offers a retry.
+  const downloads=await window.DexPage.guard(()=>window.dexerion.invoke('dex:downloads'),()=>load());
+  if(!downloads)return;
   list.replaceChildren();
-  paintedDownloads=[];
   if(!downloads.length){
     const empty=document.createElement('div');
     empty.className='dx-empty';
@@ -207,18 +185,7 @@ function paintDownloads(downloads){
     list.appendChild(empty);
     return;
   }
-  for(const download of downloads){
-    const row=render(download);
-    paintedDownloads.push({download,row});
-    list.appendChild(row);
-  }
-}
-async function load(){
-  // A failed load must not look like "no downloads yet": DexPage.guard shows
-  // what went wrong and offers a retry.
-  const downloads=await window.DexPage.guard(()=>window.dexerion.invoke('dex:downloads'),()=>load());
-  if(!downloads)return;
-  paintDownloads(downloads);
+  for(const download of downloads)list.appendChild(render(download));
 }
 function scheduleLoad(){
   clearTimeout(refreshTimer);

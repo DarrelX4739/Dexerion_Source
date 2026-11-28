@@ -535,10 +535,7 @@
         id: message.id, ts: message.ts, reactions: message.reactions, pinned: message.pinned,
         edited: message.edited, editedAt: message.editedAt, replyTo: message.replyTo,
         mentions: message.mentions, forwardedFrom: message.forwardedFrom, myReactions: message.myReactions,
-      }, false));
-    // One measurement at the end of the synchronous redraw. Reading
-    // scrollHeight after every append forces layout for each message.
-    scrollToBottom();
+      }));
     // A revision can add a new version while the report view is open.
     const sheet = $('#ai-report-sheet');
     if (sheet && !sheet.hidden) refreshReportItems();
@@ -587,7 +584,20 @@
     });
   }
 
-  function addMessage(role, value, includeLabel, images, context, steps, extra, autoScroll = true) {
+  function messageAvatar(role, className) {
+    const avatar = document.createElement('div');
+    const user = role === 'user';
+    avatar.className = className + (user ? ' user-avatar' : '');
+    avatar.setAttribute('aria-hidden', 'true');
+    const image = document.createElement('img');
+    image.src = user ? '../../assets/ai-user.svg' : '../../assets/dexi-face.png';
+    image.alt = '';
+    image.draggable = false;
+    avatar.appendChild(image);
+    return avatar;
+  }
+
+  function addMessage(role, value, includeLabel, images, context, steps, extra) {
     const message = document.createElement('div');
     message.className = 'ai-message ' + (role === 'user' ? 'user' : 'model');
     const id = extra && extra.id ? String(extra.id) : ('msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7));
@@ -614,16 +624,7 @@
       message.appendChild(pin);
     }
 
-    // Avatar.
-    const avatar = document.createElement('div');
-    avatar.className = 'ai-message-avatar';
-    if (role === 'user') {
-      const letter = (activeChat && activeChat.title ? activeChat.title.charAt(0) : 'U').toUpperCase();
-      avatar.textContent = letter;
-    } else {
-      avatar.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg>';
-    }
-    message.appendChild(avatar);
+    message.appendChild(messageAvatar(role, 'ai-message-avatar'));
 
     // Message column (bubble, cards, gallery, meta — one shared width).
     const wrap = document.createElement('div');
@@ -646,10 +647,7 @@
       const text = document.createElement('div');
       text.className = 'ai-msg-reply-text';
       text.textContent = replyPreview(replied && replied.text ? replied.text : '');
-      const ra = document.createElement('div');
-      ra.className = 'ai-msg-reply-avatar';
-      ra.textContent = (replied && replied.role === 'user' ? 'U' : 'D');
-      preview.append(ra, kind, text);
+      preview.append(messageAvatar(replied && replied.role, 'ai-msg-reply-avatar'), kind, text);
       wrap.appendChild(preview);
     }
 
@@ -1044,7 +1042,7 @@
     }
 
     messages.appendChild(message);
-    if (autoScroll) scrollToBottom();
+    messages.scrollTop = messages.scrollHeight;
     return bubble;
   }
 
