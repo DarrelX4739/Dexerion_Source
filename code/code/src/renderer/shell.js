@@ -94,13 +94,7 @@ function render(s) {
   document.body.classList.add('vertical');
   // The design-preview query wins; otherwise follow the saved Theme setting.
   applySkin(SKIN || (s.ui && s.ui.skin) || '');
-  // tabs — diffed: rebuilding mid-drag or mid-click eats the gesture, so
-  // only touch the DOM when something actually changed.
-  const key = s.tabs.map(t => t.id + '|' + (t.title || '') + '|' + (t.url || '') + '|' + (t.loading ? 1 : 0) + '|' + (t.sleeping ? 1 : 0) + '|' + (t.favicon || '') + '|' + (t.groupId || '')).join('~') + '@' + s.active + '#' + ((s.groups || []).map(g => g.id + '|' + (g.name || '') + '|' + g.color).join('~'));
-  if (key !== lastTabKey && !draggingTab) {
-    lastTabKey = key;
-    buildTabs(s);
-  }
+  updateTabRail(s);
   updateChromeRest(s);
   updateTimer(s);
   updateTasks(s);
@@ -150,6 +144,45 @@ function updateInspector(s) {
 }
 
 let lastTabKey = '', draggingTab = false;
+let lastRailSelection = null;
+
+function sameTabRailSelection(previous, next) {
+  const priorTabs = previous.tabs, tabs = next.tabs;
+  if (previous.active !== next.active || priorTabs.length !== tabs.length) return false;
+  for (let i = 0; i < tabs.length; i++) {
+    const a = priorTabs[i], b = tabs[i];
+    if (a.id !== b.id || (a.title || '') !== (b.title || '') || (a.url || '') !== (b.url || '') ||
+        !!a.loading !== !!b.loading || !!a.sleeping !== !!b.sleeping ||
+        (a.favicon || '') !== (b.favicon || '') || (a.groupId || '') !== (b.groupId || '')) return false;
+  }
+  const priorGroups = previous.groups || [], groups = next.groups || [];
+  if (priorGroups.length !== groups.length) return false;
+  for (let i = 0; i < groups.length; i++) {
+    const a = priorGroups[i], b = groups[i];
+    if (a.id !== b.id || (a.name || '') !== (b.name || '') || a.color !== b.color) return false;
+  }
+  return true;
+}
+
+function updateTabRail(s) {
+  // The bridge delivers fresh snapshots; shell code never mutates their tab
+  // or group arrays. Skip the expensive fingerprint strings (including
+  // favicon data URLs) only when all fields used in the old key match.
+  if (draggingTab) return;
+  if (lastTabKey && lastRailSelection && sameTabRailSelection(lastRailSelection, s)) {
+    // Follow the live snapshot instead of retaining a second array copy.
+    lastRailSelection.tabs = s.tabs;
+    lastRailSelection.groups = s.groups;
+    return;
+  }
+  lastRailSelection = { tabs: s.tabs, groups: s.groups, active: s.active };
+  const key = s.tabs.map(t => t.id + '|' + (t.title || '') + '|' + (t.url || '') + '|' + (t.loading ? 1 : 0) + '|' + (t.sleeping ? 1 : 0) + '|' + (t.favicon || '') + '|' + (t.groupId || '')).join('~') + '@' + s.active + '#' + ((s.groups || []).map(g => g.id + '|' + (g.name || '') + '|' + g.color).join('~'));
+  if (key !== lastTabKey) {
+    lastTabKey = key;
+    buildTabs(s);
+  }
+}
+
 document.addEventListener('dragstart', (e) => { if (e.target.closest && e.target.closest('.tab')) draggingTab = true; });
 document.addEventListener('dragend', () => { draggingTab = false; lastTabKey = ''; if (S) render(S); });
 document.addEventListener('drop', () => { draggingTab = false; lastTabKey = ''; });

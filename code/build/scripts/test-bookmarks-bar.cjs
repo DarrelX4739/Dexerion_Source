@@ -103,8 +103,8 @@ test('a saved chrome accent takes precedence without reading computed style', ()
       body: { classList: { add: noop } },
     },
     getComputedStyle: () => { reads++; return { getPropertyValue: () => token }; },
-    SKIN: '', SKIN_MODE: '', lastTabKey: '', draggingTab: false,
-    applySkin: noop, buildTabs: noop, updateChromeRest: noop, updateTimer: noop,
+    SKIN: '', SKIN_MODE: '',
+    applySkin: noop, updateTabRail: noop, updateChromeRest: noop, updateTimer: noop,
     updateTasks: noop, updateInspector: noop, updateMemBar: noop,
   });
   const state = { tabs: [], groups: [], active: 1, ui: { accent: '#012345' } };

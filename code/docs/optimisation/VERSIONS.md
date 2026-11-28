@@ -204,3 +204,25 @@ overdue, toggle/delete and empty/all-day behavior.
 In a 125-task Linux/Node fake-DOM fixture, the median of seven alternating
 eight-render batches went from 8.79 to 1.54 ms per render (about 82% less).
 This is an isolated large-list path, not an app CPU or Edge measurement.
+
+### Tab rail: compare unchanged snapshots without building a large string
+
+Full chrome updates used to concatenate every tab's labels and favicon data
+into a key, even when the tab rail had not changed. Compare exactly the old
+key's input fields first. Changed snapshots still use the original key and
+rebuild logic; selection, CSS motion, favicon retry, drag/drop and group
+collapse are unchanged. The comparison only keeps references to the current
+tab/group arrays and does not alter IPC messages.
+
+In Linux/Node tests using separately decoded snapshots, the median of nine
+alternating 5,000-update batches fell from 1.47 to 0.33 µs for eight steady
+tabs and from 21.47 to 5.33 µs for 48 steady tabs. A 48-tab mixed profile fell
+from 23.50 to 6.53 µs; forcing a selection change on every update was
+23.35 vs 23.40 µs. Build counts matched in every comparison. These are
+key-generation costs, not whole-app CPU or GPU numbers.
+
+A native-layout inspection found 1,188 repeated bounds writes in a
+100-layout/12-view stub. The call count is real for that code path, but it
+does not establish native CPU savings, and a bounds cache needs real
+fullscreen, minimize/restore and reparent validation. Native layout was
+left unchanged.
