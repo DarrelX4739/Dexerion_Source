@@ -2319,3 +2319,14 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :where(:root:not([data-skin])) .rt-btns button {border-radius:7px}
 :where(:root:not([data-skin])) .tk-row {border-radius:7px}
 :where(:root:not([data-skin])) :is(#rm-start,#tm-open) {border-radius:11px}
+
+/* Default navigation: use the interface face for labels and URLs, with
+   aligned numerals. Leave the control sizes and native toolbar height alone. */
+:where(:root:not([data-skin])) #omnibox {
+  font-family:var(--font);font-size:13px;font-variant-numeric:tabular-nums;
+}
+:where(:root:not([data-skin])) #toolbar button:focus-visible {outline-offset:-3px}
+:where(:root:not([data-skin])) #omnibox:focus-visible {
+  outline:2px solid var(--dx-focus-ring);outline-offset:-2px;
+  box-shadow:inset 0 1px 0 var(--hl);
+}
