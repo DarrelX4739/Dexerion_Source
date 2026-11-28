@@ -3891,8 +3891,7 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     }
     return out.slice(0, cap);
   }
-  async function buildSuggest(e, q, maxRows) {
-    const local = buildSuggestLocal(e, q, maxRows);
+  async function enrichSuggestions(local, q, maxRows) {
     const query = String(q || '').trim();
     if (!query) return local;
     const cap = maxRows || 10;
@@ -4009,7 +4008,11 @@ function createBrowser({ profile, extensions, permissions, sessionModule, ai }) 
     }
     // Phase 2 (async): enrich with engine completions when they arrive.
     const winIdAtEnrich = st.id;
-    buildSuggest(e, q, opts.max).then(full => {
+    // Reuse phase 1's exact rows: nothing awaits between the two phases, and
+    // enrichment copies the array before appending. Avoid scanning local data twice.
+    const localForEnrichment = process.env.DEX_SUGGEST_RESCAN === '1'
+      ? buildSuggestLocal(e, q, opts.max) : items;
+    enrichSuggestions(localForEnrichment, q, opts.max).then(full => {
       const r2 = sugPopups.get(winIdAtEnrich);
       if (!r2 || r2.win.isDestroyed() || !full.length) return;
       r2.items = full;
