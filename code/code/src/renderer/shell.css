@@ -2254,3 +2254,17 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
   #ai-sidebar .ai-overflow-status { color:CanvasText; }
   #ai-sidebar .ai-overflow-menu, #ai-sidebar .ai-panel { border:1px solid CanvasText; }
 }
+
+/* Default skin: maintain all hit targets and the measured chrome geometry. */
+:root:not([data-skin]) #toolbar {
+  background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--surface) 80%,var(--bg)));
+  border-bottom-color:var(--hair2);
+}
+:root:not([data-skin]) #toolbar button {border-radius:9px}
+:root:not([data-skin]) #toolbar button:hover:not(:disabled) {border-color:var(--hair2)}
+:root:not([data-skin]) #toolbar button[aria-expanded="true"] {background:var(--hover);border-color:var(--hair2);color:var(--fg)}
+:root:not([data-skin]) #omnibox {border-radius:10px;background:var(--bg);font-family:var(--font);border-color:var(--hair2)}
+:root:not([data-skin]) #omnibox::placeholder {color:var(--muted)}
+:root:not([data-skin]) #omnibox:focus {background:var(--field);border-color:var(--accent)}
+:root:not([data-skin]) #bookmarkbar a {border-radius:7px;color:var(--fg2)}
+:root:not([data-skin]) #bookmarkbar a:hover {color:var(--fg)}
