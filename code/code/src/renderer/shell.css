@@ -2362,3 +2362,11 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :where(:root:not([data-skin])) #dmenu .mitem:focus-visible {outline-offset:-2px}
 :where(:root:not([data-skin])) .rt-time {font-weight:350;letter-spacing:-.04em}
 :where(:root:not([data-skin])) .rt-blockhead {font-weight:600;letter-spacing:.1em}
+
+/* Keep all three assistant layouts. Align headers and make muted metadata
+   read like a secondary line rather than another row of competing controls. */
+#ai-sidebar .ai-taskbar-title {letter-spacing:-.012em}
+#ai-sidebar .ai-taskbar-status {font-variant-numeric:tabular-nums}
+#ai-sidebar .ai-panel-head {padding-inline-start:12px}
+#ai-sidebar .ai-panel-head h2 {font-weight:650;line-height:1.2}
+#ai-sidebar .ai-panel-body {scroll-padding-block:14px 32px}
