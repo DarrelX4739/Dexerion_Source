@@ -2,6 +2,7 @@
 
 // Grade raw measure-protocol evidence, not the older rounded parity verdict.
 const fs = require('node:fs');
+const { verifiesPackageSample } = require('./power-meter.cjs');
 const SCENARIOS = ['active-browsing', 'background-tabs', 'idle', 'multitasking'];
 const AXES = {
   cpu: (t) => t.cpu?.cpuCorePct,
@@ -18,11 +19,14 @@ function median(values) {
   return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
 }
 
-function usable(group, axis) {
+function usable(group, axis, powerInstance) {
   return (group?.trials || []).filter((trial) => trial.valid === true).flatMap((trial) => {
     const v = AXES[axis](trial);
     if (!Number.isFinite(v) || v < 0) return [];
     if (axis === 'power') {
+      if (!verifiesPackageSample(trial.floor, powerInstance) ||
+          !verifiesPackageSample(trial.power, powerInstance) ||
+          trial.floorMedianMW !== trial.floor.medianMW) return [];
       const { p10MW, p90MW } = trial.power;
       if (!Number.isFinite(p10MW) || !Number.isFinite(p90MW) || p90MW < p10MW ||
           p90MW - p10MW > Math.max(v, 150)) return [];
@@ -36,8 +40,8 @@ function grade(evidence) {
   for (const scenario of SCENARIOS) {
     const pair = evidence?.scenarios?.[scenario];
     for (const axis of Object.keys(AXES)) {
-      const dex = usable(pair?.dexerion, axis);
-      const edge = usable(pair?.edge, axis);
+      const dex = usable(pair?.dexerion, axis, evidence?.config?.powerInstance);
+      const edge = usable(pair?.edge, axis, evidence?.config?.powerInstance);
       const row = { scenario, axis, dexSamples: dex.length, edgeSamples: edge.length, ratio: null, verdict: 'UNVERIFIED' };
       if (dex.length < MIN_TRIALS || edge.length < MIN_TRIALS) {
         row.reason = 'Fewer than 3 usable trials per browser';

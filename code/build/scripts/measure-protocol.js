@@ -48,6 +48,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
 const { chromium } = require('@playwright/test');
+const { packageInstance, requirePackageSample } = require('./power-meter.cjs');
 const { aggregateGpu } = require('./measure-gpu-aggregate.cjs');
 const { openNative, edgeExecutable, waitFor, pagesIn, isShellUrl, samplePage } = require('./measure-native-browser.cjs');
 const { verifiedNativeTree, stableCpuByRole, fourArmOrder, rendererRoleMap, memoryByRole, workloadOrder, optionalSample, requireTree, foregroundSample, workloadUrls, matchesInventory } = require('./measure-sample-guard.cjs');
@@ -77,7 +78,8 @@ const PACKAGED_BINARY = process.env.DEX_NATIVE_PACKAGED_APP ? path.resolve(proce
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
 const E = path.join(__dirname, 'measure-env.ps1');
-const PS_SCRIPT = path.join(__dirname, 'power-sample.ps1'); // existing, unmodified
+const PS_SCRIPT = path.join(__dirname, 'power-sample.ps1');
+const POWER_INSTANCE = SKIP_POWER ? null : packageInstance(process.env.MEASURE_POWER_COUNTER_INSTANCE);
 const FLOOR_SWING_LIMIT = 0.20; // brief req 4: >20% floor swing => invalid
 
 // Scenarios in priority order: the mission's core claim is ACTIVE browsing,
@@ -171,7 +173,8 @@ function runPs(script, args, timeoutSec) {
   } finally { try { fs.rmSync(out, { force: true }); } catch {} }
 }
 
-const samplePower = (label, secs) => runPs(PS_SCRIPT, { DurationSec: secs }, secs + 40);
+const samplePower = (label, secs) => requirePackageSample(
+  runPs(PS_SCRIPT, { DurationSec: secs, CounterInstance: POWER_INSTANCE }, secs + 40), POWER_INSTANCE);
 const treeSnapshot = (final = false) => runPs(S, final ? { IncludePrivateWorkingSet: true } : {}, 60);
 const envRecord = () => { try { return runPs(E, {}, 30); } catch { return null; } };
 
@@ -684,6 +687,7 @@ function pctOfEdge(dexS, edgeS) {
       scenarioOrder: SCENARIO_ORDER, browsers: BROWSERS,
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
+      powerInstance: POWER_INSTANCE,
       nativeLaunch: NATIVE_LAUNCH,
       workloadOrigins: DISTINCT_HOSTS ? 'one .localhost host per tab' : 'same loopback origin',
       packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
