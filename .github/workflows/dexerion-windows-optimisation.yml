@@ -3,6 +3,7 @@ on:
   push:
     branches: [darrel-dev-1]
     paths:
+      - '.gitattributes'
       - '.github/workflows/dexerion-windows-optimisation.yml'
       - 'code/code/src/renderer/ai-sidebar.js'
       - 'code/code/src/renderer/ai-search.js'

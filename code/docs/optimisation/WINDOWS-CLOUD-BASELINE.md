@@ -66,7 +66,7 @@ second, but the viewport dimensions differed slightly. Native Edge had nine
 renderer processes even with one measured tab; Dexerion had two. Private
 commit was about 168.5 vs 313.3 MiB. These figures are not a product change
 since the earlier Edge runs, and do not generalise to warmed profiles.
-[Warmed four-workload follow-up](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46097489951).
+[Fresh-profile, 22-second settle follow-up](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46097489951).
 
 [The PID-attribution control](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46096917326)
 used the original automation-launch conditions to map the exact Dexerion
@@ -94,3 +94,26 @@ strong limit on the fresh-window savings available from script tuning
 alone. It does not rule out bigger lifecycle fixes for long-lived,
 feature-heavy sessions. The privileged interface and website renderer
 remain separate and their sandboxing is unchanged.
+
+
+### Same-host launcher control and unpacked build
+
+The [four-arm control](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46098370022)
+on one VM confirmed that launcher choice, rather than a product patch,
+changed the initial denominator. Estimated working set was 716.7 MiB with
+direct Edge vs 407.7 MiB under automation; Dexerion moved only from
+444.3 to 443.8 MiB. Direct Edge exposed three nonworkload service-worker
+targets and a median of nine renderer processes (two with automation).
+Direct Edge used 186.7 MiB of private resident working set vs 124.3 MiB
+for direct Dexerion in that short-settle experiment.
+
+The more representative [unpacked-binary comparison](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46098467113)
+used 22-second settling on fresh profiles. It built and started Dexerion
+without signing, installing or publishing. In the same visible foreground
+workload, Dexerion used 478.8 vs Edge's 553.4 MiB summed working set
+(13.5% lower); private resident memory was 147.0 vs 150.9 MiB (2.6% lower).
+GPU engine utilisation was essentially tied. Edge had five renderer
+processes after the longer settle. The 20% foreground memory threshold is
+not established under these conditions. This is still a disposable-profile
+VM comparison, not a benchmark of previously used profiles or a physical
+GPU/power test.

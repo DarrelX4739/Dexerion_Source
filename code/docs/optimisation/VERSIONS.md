@@ -308,3 +308,16 @@ byte-identical DOM across locale, daylight-saving, and boundary cases:
 seven paired medians fell from 65.52 to 46.15 ms for eight tasks over 20
 repaints, and from 155.34 to 65.01 ms for 160 tasks over five repaints.
 These are component timings, not startup or whole-browser CPU.
+
+
+### Native confirmation for the two UI hot paths
+
+- [Saved-chat reopen](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46098086336):
+  five alternating fresh Electron launches per arm. For the same 200 rows,
+  median layout passes fell from 202 to 3, renderer layout time from
+  39.35 to 15.52 ms, and observed time to all rows from 193.1 to 131.7 ms.
+- [Downloads live progress](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46099143655):
+  three paired launches on each side, with 150 completed rows and eight
+  measured updates on the same real local transfer. Row insertions fell
+  from 1,208 to 8 in every pair. The chunk-paced fixture measures DOM work,
+  not download speed or whole-browser resource usage.
