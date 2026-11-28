@@ -2268,3 +2268,18 @@ textarea.ai-input { height:auto; min-height:78px; resize:vertical; }
 :root:not([data-skin]) #omnibox:focus {background:var(--field);border-color:var(--accent)}
 :root:not([data-skin]) #bookmarkbar a {border-radius:7px;color:var(--fg2)}
 :root:not([data-skin]) #bookmarkbar a:hover {color:var(--fg)}
+
+/* Let shape and value distinguish selection even without group colour. */
+:root:not([data-skin]) #tabstrip {border-color:var(--hair2)}
+:root:not([data-skin]) .tab {border-radius:9px 9px 0 0;color:var(--fg2)}
+:root:not([data-skin]) .tab:hover {color:var(--fg)}
+:root:not([data-skin]) .tab.active {
+  background:linear-gradient(180deg,color-mix(in srgb,var(--identity) 7%,var(--surface)),var(--surface));
+  border-color:var(--hair2);color:var(--fg);
+}
+:root:not([data-skin]) .tab.active .t {font-weight:640}
+:root:not([data-skin]) body:not(.vertical) .tab.active::after {left:9px;right:9px;border-radius:7px}
+:root:not([data-skin]) body.vertical .tab {border-radius:8px}
+:root:not([data-skin]) .tab .x:focus-visible {opacity:1}
+:root:not([data-skin]) #newtab-btn {border-radius:8px;color:var(--fg2)}
+:root:not([data-skin]) #newtab-btn:hover {color:var(--fg);border-color:var(--hair2)}
