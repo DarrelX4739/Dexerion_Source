@@ -8,13 +8,17 @@ on:
       - 'code/build/scripts/measure-sample-guard.cjs'
       - 'code/build/scripts/measure-native-browser.cjs'
       - 'code/build/scripts/test-measure-native-browser.cjs'
+      - 'code/build/scripts/grade-current-browser-pairs.cjs'
+      - 'code/build/scripts/test-grade-current-browser-pairs.cjs'
       - 'code/build/scripts/measure-gpu-aggregate.cjs'
       - 'code/build/scripts/measure-gpu-sample.ps1'
+  workflow_dispatch:
 permissions:
   contents: read
 
 jobs:
   compare:
+    if: github.ref == 'refs/heads/dev-V'
     runs-on: windows-latest
     timeout-minutes: 48
     defaults:
@@ -22,6 +26,7 @@ jobs:
         working-directory: code/build
     env:
       MEASURE_SKIP_POWER: '1'
+      CURRENT_NATIVE_CPU_RAM: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[edge-current-cpu-ram]') }}
       MEASURE_TRIALS: '5'
       MEASURE_SAMPLE_SEC: '7'
       MEASURE_SETTLE_MS: '4000'
@@ -40,9 +45,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node -p "require('electron')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-gpu-aggregate.cjs
+          node --test scripts/test-measure-sample-guard.cjs scripts/test-edge-target.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-gpu-aggregate.cjs scripts/test-grade-current-browser-pairs.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build an unpacked app for the packaged comparison
-        if: contains(github.event.head_commit.message, '[packaged-edge]')
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[packaged-edge]') || contains(github.event.head_commit.message, '[edge-current-cpu-ram]')
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
@@ -82,10 +88,25 @@ jobs:
             $env:MEASURE_STATIC_BACKGROUND = '1'
           }
           if ($env:TITLE_CONTROL -eq 'true') { $env:MEASURE_TITLE_CONTROL = '1' }
+          if ($env:CURRENT_NATIVE_CPU_RAM -eq 'true') {
+            $env:MEASURE_CURRENT_CPU_RAM = '1'
+            $env:MEASURE_TRIALS = '4'
+            $env:MEASURE_SEED_PROFILE = '1'
+            $env:MEASURE_NATIVE_LAUNCH = '1'
+            $env:MEASURE_DISTINCT_LOOPBACK_HOSTS = '1'
+            $env:MEASURE_SETTLE_MS = '39000'
+            $env:MEASURE_SAMPLE_SEC = '15'
+            $env:MEASURE_SCENARIOS = 'active-browsing,idle,background-tabs,multitasking'
+            if (-not (Test-Path $env:DEX_NATIVE_PACKAGED_APP)) { throw 'Expected the current unpacked product' }
+          }
           $env:MEASURE_OUT_DIR = Join-Path $env:RUNNER_TEMP 'dexerion-edge'
           node scripts/measure-protocol.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $file = Join-Path $env:MEASURE_OUT_DIR 'measure-protocol-main.json'
+          if ($env:CURRENT_NATIVE_CPU_RAM -eq 'true') {
+            node scripts/grade-current-browser-pairs.cjs $file $env:GITHUB_SHA (Join-Path $env:MEASURE_OUT_DIR 'current-cpu-private-resident-summary.json')
+            exit $LASTEXITCODE
+          }
           node scripts/grade-edge-target.cjs $file
           if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
           node -e "const r=require(process.argv[1]); const names=r.config.scenarioOrder; if(names.some(s=>['edge','dexerion'].some(b=>['cpu','ram'].some(a=>!(r.scenarios?.[s]?.[b]?.summary?.[a]?.n>=(r.config.titleControl ? 4 : 3))))))process.exit(1)" $file
@@ -94,6 +115,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cloud-windows-edge-comparison
-          path: ${{ runner.temp }}/dexerion-edge/measure-protocol-main.json
+          path: |
+            ${{ runner.temp }}/dexerion-edge/measure-protocol-main.json
+            ${{ runner.temp }}/dexerion-edge/current-cpu-private-resident-summary.json
           if-no-files-found: ignore
           retention-days: 7

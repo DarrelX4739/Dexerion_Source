@@ -38,11 +38,16 @@
 //   DEX_NATIVE_PACKAGED_APP  path to an unpacked Dexerion executable, optional
 //   MEASURE_NATIVE_LAUNCH  1 launches both binaries without automation flags
 //   MEASURE_SKIP_POWER     1 omits RAPL on virtual hosts; never guesses power
+//   MEASURE_CURRENT_CPU_RAM  1 verifies and measures the four pinned native Windows scenarios
 //   DEX_BUILD_DIR          launch Dexerion from another build tree (used to
 //                          measure the pre-build-1 baseline from a git
 //                          worktree with a node_modules junction)
 
 const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
+const { fileURLToPath } = require('node:url');
+const { SCENARIOS:CURRENT_SCENARIOS,POLICY:CURRENT_POLICY } = require('./grade-current-browser-pairs.cjs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
@@ -64,6 +69,7 @@ const BG_TABS = 8;
 const DEADLINE_MIN = Number(process.env.MEASURE_DEADLINE_MIN) || 45;
 const CORES = os.cpus().length;
 const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
+const CURRENT_CPU_RAM = process.env.MEASURE_CURRENT_CPU_RAM === '1';
 const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
 const SEED_PROFILE = NATIVE_LAUNCH && !LAUNCH_CONTROL && process.env.MEASURE_SEED_PROFILE === '1';
@@ -103,6 +109,22 @@ if (TITLE_CONTROL && (!DISTINCT_HOSTS || !SEED_PROFILE || !PACKAGED_BINARY || ST
     TRIALS !== 4 || BROWSERS.length !== 2 || new Set(BROWSERS).size !== 2)) {
   throw new Error('Title control requires two packaged native browsers, seeded profiles, distinct animated tabs, and four trials');
 }
+
+if (CURRENT_CPU_RAM) {
+  assert(process.platform==='win32'&&process.env.GITHUB_ACTIONS==='true'&&
+    process.env.GITHUB_REF==='refs/heads/dev-V'&&/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA||''),
+    'current benchmark runs only on hosted dev-V Windows');
+  assert(SKIP_POWER&&NATIVE_LAUNCH&&SEED_PROFILE&&DISTINCT_HOSTS&&PACKAGED_BINARY&&
+    !STATIC_BACKGROUND&&!TITLE_CONTROL&&!LAUNCH_CONTROL&&!process.env.DEX_BUILD_DIR,
+    'current benchmark requires shipped packaged defaults, seeded profiles, and the distinct animated workload');
+  assert.equal(TRIALS,CURRENT_POLICY.trials);
+  assert.equal(SETTLE_MS,CURRENT_POLICY.settleMs);
+  assert.equal(SAMPLE_SEC,CURRENT_POLICY.sampleSec);
+  assert.deepEqual(SCENARIO_ORDER,CURRENT_SCENARIOS);
+  assert.deepEqual(BROWSERS,['edge','dexerion']);
+}
+const packagedArchive = () => path.join(path.dirname(PACKAGED_BINARY),'resources','app.asar');
+const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 
 // Dexerion under test: the main build tree, or a baseline worktree build dir.
 const DEX_BUILD_DIR = process.env.DEX_BUILD_DIR
@@ -379,7 +401,7 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
   });
   const list = () => pagesIn(session.browser);
   try {
-    let front, shell;
+    let front, shell, nativeTabs;
     if (dex) {
       shell = await waitFor(() => list().find((p) => isShellUrl(p.url())), 'native Dexerion shell');
       const getState = () => shell.evaluate(() => window.dexerion?.invoke('dex:get-state'));
@@ -387,7 +409,16 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
         const state = await getState();
         return state?.active && state.tabs?.some((t) => t.id === state.active && !t.loading) && state;
       }, 'native Dexerion boot tab');
+      if (CURRENT_CPU_RAM) {
+        const expected = path.join(packagedArchive(),'src','renderer','shell.html');
+        assert.equal(path.relative(expected,fileURLToPath(shell.url())),'','not the exact packaged Dexerion shell');
+      }
       const boot = initial.active;
+      nativeTabs = async () => {
+        const state = await getState();
+        assert(state.active===boot && !state.tabs.some(t=>t.loading),'wrong active Dexerion tab or loading not finished');
+        return state.tabs.map(t=>t.url);
+      };
       const seededTrial = !prime && seedProfiles.has(browser);
       if (seededTrial) {
         // Retain preferences, caches, and data but apply the workload to
@@ -433,8 +464,32 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
         throw new Error('Native Edge tab inventory did not match the workload');
       }
       await front.bringToFront();
+      nativeTabs=()=>context.pages().map(p=>p.url());
     }
     await waitFor(async () => (await samplePage(front)).visible, 'native foreground visibility');
+    const workloadProof = CURRENT_CPU_RAM ? async () => {
+      const tabs=await nativeTabs();
+      assert(matchesInventory(tabs,urls),'measured navigation escaped the expected tab set');
+      const fg=await front.evaluate(() => {
+        const c=document.querySelector('#c');
+        const rect=c?.getBoundingClientRect();
+        const fixed=c&&c.width===960&&c.height===640&&rect.left===0&&rect.top===0&&
+          rect.width===928&&rect.height===592&&innerWidth>=rect.right&&innerHeight>=rect.bottom;
+        const still=!c&&document.title==='Dexerion measure probe - idle'&&
+          document.querySelector('h1')?.textContent==='Measure probe'&&document.querySelector('p')?.textContent==='Idle page';
+        return {url:location.href,visible:document.visibilityState==='visible',
+          fixture:fixed?'fixed-canvas':still?'static-body':null};
+      });
+      const {targetInfos}=await session.devtools.send('Target.getTargets');
+      const matching=targetInfos.filter(t=>t.type==='page'&&urls.includes(t.url)).map(t=>t.url);
+      assert(fg.visible&&fg.url===urls[0]&&matchesInventory(matching,urls),'measured foreground or renderer targets differ');
+      const portable=raw=>{
+        const u=new URL(raw);
+        return u.hostname+u.pathname+u.search;
+      };
+      return {foreground:portable(fg.url),hostAndPath:tabs.map(portable).sort(),
+        fixture:fg.fixture,workloadTargets:matching.length};
+    } : undefined;
     const version = await session.devtools.send('Browser.getVersion');
     return { profileDir: session.profileDir, nativeRootPid: session.processId, version: version.product,
       telemetry: async () => {
@@ -463,7 +518,7 @@ async function prepareNative(browser, base, scenario, { prime = false } = {}) {
           pid: t.pid, kind: t.tabId === state.active ? 'foreground' : 'background',
         }));
       }, urls) : undefined,
-      foregroundTitle: () => front.title(),
+      foregroundTitle: () => front.title(), workloadProof,
       pageState: () => samplePage(front), close: session.close };
   } catch (err) { await session.close(false); throw err; }
 }
@@ -487,8 +542,9 @@ async function runTrial(browser, scenario, base, trialIdx) {
   try {
     // Paired floor: sampled immediately before the workload with NO browser
     // running, so package-power attribution is local in time (drift-immune).
-    const floor = await optionalSample(() => samplePower('floor', FLOOR_SEC), FLOOR_SEC * 1000,
-      { skip: SKIP_POWER, wait: sleep });
+    const floor = CURRENT_CPU_RAM ? { sample:null,error:'not collected on a Windows VM' }
+      : await optionalSample(() => samplePower('floor', FLOOR_SEC), FLOOR_SEC * 1000,
+        { skip: SKIP_POWER, wait: sleep });
     t.floor = floor.sample;
     t.floorError = floor.error;
     t.floorMedianMW = t.floor?.medianMW ?? null;
@@ -506,6 +562,7 @@ async function runTrial(browser, scenario, base, trialIdx) {
     if (session.version) t.browserVersion = session.version;
     await sleep(SETTLE_MS);
 
+    if (CURRENT_CPU_RAM) t.nativeWorkload={A:await session.workloadProof()};
     const beforeForeground = await session.pageState();
     const snapA = treeSnapshot();
     const treeEvidence = (snapshot) => {
@@ -515,18 +572,20 @@ async function runTrial(browser, scenario, base, trialIdx) {
       }
       return { mode: 'native creation-scoped', ...verifiedNativeTree(snapshot.processes, session.nativeRootPid,
         (p) => /^(electron|Dexerion|msedge)\.exe$/i.test(p.name)
-          && String(p.cmdline || '').toLowerCase().includes(session.profileDir.toLowerCase())) };
+          && String(p.cmdline || '').toLowerCase().includes(session.profileDir.toLowerCase())
+          && (!CURRENT_CPU_RAM||!/(?:^|\s)--(?:no-sandbox|disable-web-security|disable-site-isolation-trials|disable-gpu)(?:[=\s]|$)/i.test(p.cmdline||''))) };
     };
     const { rows: rowsA, ...attributionA } = treeEvidence(snapA);
     const treeA = requireTree(rowsA, 'A');
-    gpu = spawnGpu();
+    if (!CURRENT_CPU_RAM) gpu = spawnGpu();
     const workloadPower = await optionalSample(() => samplePower('workload', SAMPLE_SEC), SAMPLE_SEC * 1000,
       { skip: !t.floor, wait: sleep });
     t.power = workloadPower.sample;
     t.powerError = workloadPower.error;
     const snapB = treeSnapshot(true);
     const afterForeground = await session.pageState();
-    gpuFinished = await gpu.finish();
+    if (CURRENT_CPU_RAM) t.nativeWorkload.B=await session.workloadProof();
+    if (gpu) gpuFinished = await gpu.finish();
 
     const { rows: rowsB, ...attributionB } = treeEvidence(snapB);
     const treeB = requireTree(rowsB, 'B');
@@ -617,7 +676,8 @@ async function runTrial(browser, scenario, base, trialIdx) {
       const rolesByPid = new Map([...treeA, ...treeB].map((p) => [p.pid, roleOf(p)]));
       t.gpu = { ...aggregate, perPid: aggregate.perPid.map((r) => ({ ...r, role: rolesByPid.get(r.pid) })) };
     } else {
-      t.gpu = { error: gpuFinished?.error || gpuFinished?.errors?.[0] || 'No usable GPU intervals' };
+      t.gpu = { error: CURRENT_CPU_RAM ? 'GPU counters not sampled in current CPU/RAM matrix'
+        : (gpuFinished?.error || gpuFinished?.errors?.[0] || 'No usable GPU intervals') };
     }
 
     t.coTenants = coTenants(snapA, snapB, new Set([...treeA, ...treeB].map((p) => p.pid)), wallSec);
@@ -687,6 +747,7 @@ function pctOfEdge(dexS, edgeS) {
       scenarioOrder: SCENARIO_ORDER, browsers: BROWSERS,
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
+      ...(CURRENT_CPU_RAM?{currentCpuRam:true,skipGpu:true}:{}),
       powerInstance: POWER_INSTANCE,
       nativeLaunch: NATIVE_LAUNCH,
       workloadOrigins: DISTINCT_HOSTS ? 'one .localhost host per tab' : 'same loopback origin',
@@ -699,6 +760,10 @@ function pctOfEdge(dexS, edgeS) {
       dexerionLaunch: NATIVE_LAUNCH ? (PACKAGED_BINARY ? 'direct unpacked Dexerion binary, isolated data dir, loopback ephemeral CDP' : 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP') : 'Playwright Electron loader, isolated data dir, GPU adaptive',
     },
     env: envRecord(),
+    ...(CURRENT_CPU_RAM?{provenance:{
+      checkoutSha:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF, nativePlatform:process.platform,
+      appAsarSha256:digest(packagedArchive()),dexerionExeSha256:digest(PACKAGED_BINARY),
+    }}:{}),
     scenarios: {},
     invalidTrials: [],
     errors: [],
@@ -853,12 +918,18 @@ function pctOfEdge(dexS, edgeS) {
           cmp[axis + 'PctOfEdge'] = pct;
           cmp[axis + 'Pass'] = pct === null ? 'n/a' : (pct <= 60 ? '40% STRETCH' : pct <= 80 ? '20% TARGET' : 'BELOW TARGET');
         }
-        pair.comparison = cmp;
-        console.log('  ' + scenario + ' comparison: ' + JSON.stringify(cmp));
+        if (CURRENT_CPU_RAM) {
+          pair.legacyDiagnostic = cmp;
+          console.log('  ' + scenario + ' legacy unpaired CPU/total-working-set diagnostic: ' + JSON.stringify(cmp));
+        } else {
+          pair.comparison = cmp;
+          console.log('  ' + scenario + ' comparison: ' + JSON.stringify(cmp));
+        }
       }
     }
 
     results.method = 'Per trial: paired RAPL floor (no browser, immediately before workload) -> launch (throwaway profile) -> settle -> whole-tree snapshot A -> concurrent GPU-engine + RAPL sampling -> whole-tree snapshot B -> teardown. CPU = Win32_Process UserMode+KernelMode delta (100 ns units) summed over the browser tree (new children counted fully, mid-window exits logged). RAM = tree working set at snapshot B; role working sets and private allocations are diagnostic only (not private resident memory). GPU = tree GPU Engine utilisation points averaged across shared sample intervals; busiest engine shown separately. GPU memory is not inferred from potentially duplicated driver rows. Power = workload median mW minus that paired floor median. Invalid: floor swing >20% vs group reference, or missing environment record. Unavailable counters remain null; missing RAPL does not prevent CPU/RAM/GPU measurements. Medians/IQR over VALID trials only; all trials published.';
+    if(CURRENT_CPU_RAM) results.method='Use grade-current-browser-pairs.cjs for the current matrix. Raw legacy unpaired CPU and total working set retained separately for troubleshooting only. Same host, paired native launches, two process endpoints, validated constant visible work and whole-tree private resident at B. CPU excludes endpoint generation churn in the strict report; no GPU or power measured.';
     const outJson = path.join(OUT_DIR, 'measure-protocol-' + (process.env.DEX_BUILD_DIR ? 'baseline' : 'main') + '.json');
     fs.writeFileSync(outJson, JSON.stringify(results, null, 2), 'utf8');
     console.log('PROTOCOL EVIDENCE: ' + outJson);
