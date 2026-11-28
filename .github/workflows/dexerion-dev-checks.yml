@@ -13,7 +13,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: code/build
@@ -38,3 +38,15 @@ jobs:
           node -p "require('electron')"
       - name: Check real Electron boot and AI entry points
         run: xvfb-run -a npm run test:e2e -- e2e/boot.spec.js e2e/sidebar.spec.js e2e/search.spec.js e2e/site-offline-assets.spec.js
+      - name: Compare whole-browser CPU and RAM against Chrome
+        env:
+          DEX_CLOUD_TRIALS: '5'
+        run: xvfb-run -a -s '-screen 0 1280x1024x24' node scripts/measure-cloud-linux.cjs
+      - name: Keep comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-linux-comparison
+          path: code/build/cloud-comparison.json
+          if-no-files-found: ignore
+          retention-days: 7
