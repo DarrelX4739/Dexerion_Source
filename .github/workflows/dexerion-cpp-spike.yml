@@ -108,6 +108,8 @@ jobs:
           python experiments/cef-shell/smoke.py "$app"
 
   native-core:
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
     if: github.ref == 'refs/heads/cpp-native-spike'
     strategy:
       fail-fast: false
@@ -128,3 +130,15 @@ jobs:
           cmake -S experiments/native-core -B "$RUNNER_TEMP/dex-native-core" -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/dex-native-core" --config Release --parallel 3
           ctest --test-dir "$RUNNER_TEMP/dex-native-core" -C Release --output-on-failure
+
+      - name: Install unchanged Electron test dependencies for a real-flow comparison
+        working-directory: code/build
+        run: npm ci
+      - name: Replay actual hosted Electron decisions in C++ on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: xvfb-run -a node experiments/native-core/tests/electron_power_shadow.cjs "$RUNNER_TEMP/dex-native-core/dex_ap_replay"
+      - name: Replay actual hosted Electron decisions in C++ on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: node experiments/native-core/tests/electron_power_shadow.cjs "$RUNNER_TEMP/dex-native-core/Release/dex_ap_replay.exe"

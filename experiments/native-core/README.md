@@ -47,3 +47,23 @@ node experiments/native-core/tests/adaptive_power_parity.cjs /tmp/dex-ap-replay 
 ```
 
 `--bench` is optional and never a pass/fail timing gate. It first checks exact policy outputs. Then it repeatedly evaluates the *runtime plan only* on the same synthetic inputs using the shipped JS and a release C++ binary; it excludes parsing, process startup, IPC, applying plans and all browser/rendering work. Seven rounds alternate execution order; both sides consume output and assert matching checksums. This stress test measures computational throughput, **not** actual scheduling frequency or a browser performance gain. Avoid extrapolating it to renderer memory, GPU load, battery life, or the Edge target.
+
+## Third kernel: Focus Timer
+
+`dex_focus_timer` ports the work/break clock state machine from `code/code/src/main/pomodoro.js`. It covers start, pause, resume, skip, reset, duration changes, tick/expiry, rounded display, and the fact that a paused work phase still blocks. The caller injects time and receives data describing a notification, state update and timer operation; it never starts timers, posts notifications or enforces permissions itself. On expiration the next phase is **not** automatically started. The unexpected but existing initial display with non-default saved settings is also preserved.
+
+The differential test loads the existing JS engine with synthetic clock, profile, interval and notification adapters. It compares every public clock state and observable effect across 129 deterministic command traces. Test adapters check that active intervals stay single, get replaced correctly and use the original 500 ms cadence. Both host clock rollback and late ticks/pause are covered.
+
+The original browser still owns the profile, sound/volume, audio playback, domain normalization, blocklist edits, network enforcement, UI, persistence and actual scheduling/notifications. The native blocking bit is only phase state; it is never used as a replacement for the browser's URL guard. The independent `shouldSleepTab` helper in the reference file is not part of this timer port. The portable CMake targets are `dex_ft_unit` and `dex_ft_replay`; to run the differential manually, pass the latter executable to `tests/focus_timer_parity.cjs`.
+
+## Opt-in live shadow check (requires a desktop)
+
+After installing the repository's locked dependencies in `code/build` and compiling a release `dex_ap_replay`, run, from the repository root:
+
+```sh
+xvfb-run -a node experiments/native-core/tests/electron_power_shadow.cjs build/native-core/dex_ap_replay
+```
+
+On Windows, use `node experiments/native-core/tests/electron_power_shadow.cjs build/native-core/Release/dex_ap_replay.exe`. An available Linux window manager permits additional minimized-state coverage. This test is **not** part of the ordinary CTest suite. The default suite tests its observer protections and verifies that a deliberately wrong native comparison fails, not that a GUI was launched.
+
+The child is the unchanged source Electron application launched by its existing Playwright throwaway-profile harness with Adaptive GPU. A test-only observation hook in the trusted main process captures only normalized numeric/Boolean power measurements, tiers and the pure JS function's returned plan while real window operations run. It verifies the exact newly generated test profile, refuses packaged or non-test applications, and never records URLs or user content. Each observed real call returns the original JS result to the browser; the external C++ executable only receives and replays the trace **after the hook is removed**. Zero observed plans is a failure. A passing log reports exact matched decisions and observed tiers; it is a host-data contract check, not an end-to-end performance benchmark. The throwaway profile is deleted when the browser closes.
