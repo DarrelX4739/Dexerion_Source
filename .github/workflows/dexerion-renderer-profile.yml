@@ -1,0 +1,37 @@
+name: Dexerion Windows renderer profile
+on:
+  push:
+    branches: [darrel-dev-1]
+    paths:
+      - '.github/workflows/dexerion-renderer-profile.yml'
+      - 'code/build/scripts/profile-foreground-renderer.cjs'
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: code/build
+    env:
+      E2E_LAUNCH_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - run: npm ci
+      - run: node scripts/profile-foreground-renderer.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-foreground-renderer-profile
+          path: code/build/cloud-foreground-renderer-profile.json
+          if-no-files-found: ignore
+          retention-days: 7
