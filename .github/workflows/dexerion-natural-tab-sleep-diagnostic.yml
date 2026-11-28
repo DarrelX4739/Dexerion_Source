@@ -1,0 +1,57 @@
+name: Dexerion Windows natural tab-sleep reclamation diagnostic
+on:
+  push:
+    branches: [dev-V]
+    paths:
+      - '.github/workflows/dexerion-natural-tab-sleep-diagnostic.yml'
+      - 'code/build/scripts/measure-natural-tab-sleep.cjs'
+      - 'code/build/scripts/read-natural-tab-sleep.cjs'
+      - 'code/build/scripts/test-natural-tab-sleep.cjs'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/dev-V'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        working-directory: code/build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: code/build/package-lock.json
+      - name: Install locked runtime and verify measurement guards
+        shell: pwsh
+        run: |
+          npm ci --include=dev
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts/test-natural-tab-sleep.cjs scripts/test-measure-native-browser.cjs scripts/test-measure-sample-guard.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build the unpacked product without publishing
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'dex-natural-tab-sleep'
+          node node_modules/electron-builder/cli.js --win --dir --x64 --config electron-builder.json "--config.directories.output=$package" --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Observe natural tab sleep and fidelity of first wake
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'dex-natural-tab-sleep/win-unpacked/Dexerion.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'dex-natural-tab-sleep.json'
+          node scripts/measure-natural-tab-sleep.cjs $exe $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dexerion-windows-natural-tab-sleep
+          path: ${{ runner.temp }}/dex-natural-tab-sleep.json
+          if-no-files-found: ignore
+          retention-days: 7
