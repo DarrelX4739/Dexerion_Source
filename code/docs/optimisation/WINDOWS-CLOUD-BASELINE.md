@@ -117,3 +117,38 @@ processes after the longer settle. The 20% foreground memory threshold is
 not established under these conditions. This is still a disposable-profile
 VM comparison, not a benchmark of previously used profiles or a physical
 GPU/power test.
+
+### All workloads with a fresh profile and a 22-second settle
+
+[Run 46097489951](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46097489951)
+used direct binaries and the source-tree Dexerion build. Five launches per
+browser per workload, same VM. In this and the preceding run, a longer
+settle does not imply an existing browsing profile. Each trial started
+with a new disposable profile.
+
+| Workload | Dexerion / Edge total working set | Dexerion / Edge private resident | Dexerion / Edge CPU (% of one core) |
+|---|---:|---:|---:|
+| Active | 439.4 / 554.9 MiB (−20.8%) | 120.0 / 144.5 MiB (−17.0%) | 1.226 / 1.832 |
+| Background tabs | 470.1 / 1,026.8 MiB (−54.2%) | 157.0 / 268.0 MiB (−41.4%) | 1.858 / 1.439 |
+| Idle | 420.0 / 527.5 MiB (−20.4%) | 109.7 / 138.1 MiB (−20.6%) | 1.235 / 0.822 |
+| Multitasking | 506.8 / 1,044.3 MiB (−51.5%) | 174.1 / 268.6 MiB (−35.2%) | 2.845 / 3.858 |
+
+GPU engine utilisation was roughly tied in the animated workloads (Dexerion
+3.33 vs Edge 3.25 active; 3.37 vs 3.29 multitasking), with zero medians in
+both nonanimated workloads. A zero baseline does not establish a saving.
+Physical power was unmeasured. These absolute Windows percentages do not
+come from Task Manager's busiest-engine view.
+
+### Previously primed profile control
+
+[Run 46099031702](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46099031702)
+primed each browser once on a synthetic local page, then cloned its
+temporary profile for each measured launch. No real profile was read.
+Foreground working set was **449.1 vs 414.1 MiB (+8.5%)**, and private
+resident memory was **127.4 vs 101.9 MiB (+25.0%)** (five Dexerion and
+four usable Edge private resident samples). GPU engine utilisation was
+near equal (1.607 vs 1.585). Edge used a median of two renderer processes
+here, compared with nine in the first short-settle fresh-profile run.
+This shows why initial fresh-profile results cannot establish the target
+for continued use. The browser UI and compiler/runtime footprint are
+not explained by JavaScript heap alone.

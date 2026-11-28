@@ -321,3 +321,18 @@ These are component timings, not startup or whole-browser CPU.
   measured updates on the same real local transfer. Row insertions fell
   from 1,208 to 8 in every pair. The chunk-paced fixture measures DOM work,
   not download speed or whole-browser resource usage.
+
+### Cross-platform parity gate
+
+The [managed Linux full suite](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46099293679)
+passed all 51 applicable Electron tests; two explicitly separate build
+modes (candidate engine and unpacked smoke) were skipped in this suite.
+The [native Windows subset](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46099865776)
+passed six real browser flows covering boot, saved chat, search, live
+download, dormant account activation, and new-tab tasks, plus all 79
+focused tests and 46 contract checks. The Git LF attributes preserve
+vendor source bytes, and the new-tab fixture accepts either line ending.
+The [three-arm retest](https://github.com/DarrelX4739/Dexerion_Source/actions/runs/46100008184)
+passed both earlier intermittent cases in the prior build, first chat
+candidate, and current dev build. It did not change any feature or relax
+an assertion.
