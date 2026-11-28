@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
+const path = require('node:path');
 const { getRawHeader } = require('@electron/asar');
 const { NtExecutable, NtExecutableResource, Format } = require('resedit');
 const { calculateCheckSumForPE } = require('pe-library');
@@ -12,11 +13,23 @@ const directory = Format.ImageDirectoryEntry;
 const hash = input => createHash('sha256').update(input).digest('hex');
 function resourceForArchive(archive) {
   // electron-builder's locked asar/integrity.js hashes the exact decoded
-  // pickle string, not a reserialization or the entire package.
-  const archiveHeaderSha256 = hash(getRawHeader(archive).headerString);
-  return { archiveHeaderSha256, payload:Buffer.from(JSON.stringify([
-    { file:'resources\\app.asar', alg:'SHA256', value:archiveHeaderSha256 },
-  ])) };
+  // pickle string, not a reserialization or the entire package. Our custom
+  // unpacked Electron distribution retains default_app.asar, unlike a clean
+  // default builder download. Exact-build resource order is app then default.
+  const dir = path.dirname(archive);
+  assert.equal(path.basename(archive),'app.asar');
+  const entries = fs.readdirSync(dir,{withFileTypes:true}).filter(e=>/\.asar$/i.test(e.name));
+  assert(entries.every(e=>e.isFile() && ['app.asar','default_app.asar'].includes(e.name)),
+    'unrecognized ASAR in benchmark resources');
+  const names = entries.map(e=>e.name).sort();
+  assert(names[0]==='app.asar');
+  const hashes = names.map(name=>hash(getRawHeader(path.join(dir,name)).headerString));
+  const [archiveHeaderSha256,defaultArchiveHeaderSha256=null] = hashes;
+  assert.notEqual(archiveHeaderSha256,defaultArchiveHeaderSha256,'ASAR digest payload must be unambiguous');
+  const payload = Buffer.from(JSON.stringify(names.map((name,i)=>({
+    file:'resources\\'+name, alg:'SHA256', value:hashes[i],
+  }))));
+  return { archiveHeaderSha256,defaultArchiveHeaderSha256,payload };
 }
 function inspect(bytes, archive, arm) {
   const pe = NtExecutable.from(bytes);
@@ -41,7 +54,7 @@ function inspect(bytes, archive, arm) {
   assert(rsrc?.info.name==='.rsrc' && (rsrc.info.characteristics&0x20000000)===0,
     arm+': expected non-executable .rsrc');
   const [rsrcStart,rsrcEnd] = rawSpan(rsrc);
-  const { archiveHeaderSha256,payload } = resourceForArchive(archive);
+  const { archiveHeaderSha256,defaultArchiveHeaderSha256,payload } = resourceForArchive(archive);
   const entries = NtExecutableResource.from(pe).entries.filter(e=>e.type==='INTEGRITY');
   assert(entries.length===1 && entries[0].id==='ELECTRONASAR',arm+': expected unique named ASAR integrity resource');
   assert(Buffer.from(entries[0].bin).equals(payload),arm+': embedded resource must authenticate its own exact ASAR header');
@@ -58,7 +71,7 @@ function inspect(bytes, archive, arm) {
       ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
     assert.equal(checksum,calculateCheckSumForPE(raw,false),arm+': invalid populated PE checksum');
   }
-  return { archiveHeaderSha256,digestOffset,checksumOffset,checksum,textStart,textEnd,
+  return { archiveHeaderSha256,defaultArchiveHeaderSha256,digestOffset,checksumOffset,checksum,textStart,textEnd,
     lang:entries[0].lang,codepage:entries[0].codepage };
 }
 function auditWindowsAsarIntegrity(stockExe, subsetExe, stockArchive, subsetArchive) {
@@ -69,6 +82,7 @@ function auditWindowsAsarIntegrity(stockExe, subsetExe, stockArchive, subsetArch
     assert.equal(a[field],b[field],'ASAR integrity PE layout differs at '+field);
   }
   assert.notEqual(a.archiveHeaderSha256,b.archiveHeaderSha256,'must audit two different ASAR headers');
+  assert.equal(a.defaultArchiveHeaderSha256,b.defaultArchiveHeaderSha256,'bundled Electron default archive must be identical');
   assert.equal(a.checksum===0,b.checksum===0,'PE checksum population differs');
   assert(stock.subarray(a.textStart,a.textEnd).equals(subset.subarray(b.textStart,b.textEnd)),
     'executable .text differs');
@@ -87,6 +101,7 @@ function auditWindowsAsarIntegrity(stockExe, subsetExe, stockArchive, subsetArch
   return { identicalOutsideVerifiedIntegrityAndChecksum:true, executableBytes:stock.length,
     stockExecutableSha256:hash(stock),subsetExecutableSha256:hash(subset),
     stockAsarHeaderSha256:a.archiveHeaderSha256,subsetAsarHeaderSha256:b.archiveHeaderSha256,
+    identicalDefaultAsarHeaderSha256:a.defaultArchiveHeaderSha256,
     integrityDigestFileOffset:a.digestOffset,differingIntegrityBytes,checksumFileOffset:a.checksumOffset,
     stockVerifiedPeChecksum:a.checksum,subsetVerifiedPeChecksum:b.checksum,
     identicalTextSha256:hash(stock.subarray(a.textStart,a.textEnd)) };

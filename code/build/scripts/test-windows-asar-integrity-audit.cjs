@@ -18,7 +18,7 @@ function checksum(bytes) {
   calculateCheckSumForPE(bound,true);
   return Buffer.from(bound);
 }
-async function fixture(t, withChecksum) {
+async function fixture(t, withChecksum, customElectronDist=false) {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'dex-pe-audit-fixture-'));
   t.after(()=>fs.rmSync(root,{force:true,recursive:true}));
   const vendor=path.join(path.dirname(require.resolve('electron-winstaller/package.json')),'vendor','7z-x64.exe');
@@ -30,6 +30,12 @@ async function fixture(t, withChecksum) {
     fs.writeFileSync(path.join(source,'shell.html'),`<script src="lucide-${arm}.js"></script>`);
     const archive=path.join(resources,'app.asar'),exe=path.join(dir,'Dexerion.exe');
     await asar.createPackage(source,archive);
+    if(customElectronDist) {
+      const defaultSource=path.join(dir,'default-source');
+      fs.mkdirSync(defaultSource);
+      fs.writeFileSync(path.join(defaultSource,'index.html'),'<p>Stable default app</p>');
+      await asar.createPackage(defaultSource,path.join(resources,'default_app.asar'));
+    }
     fs.copyFileSync(vendor,exe);
     if(withChecksum) fs.writeFileSync(exe,checksum(fs.readFileSync(exe)));
     // Drive the exact locked packaging helper for both resource-edit passes;
@@ -54,6 +60,7 @@ async function fixture(t, withChecksum) {
 test('accepts exact builder-linked PE digest and zero checksum, rejects opposite archive',async t=>{
   const f=await fixture(t,false);
   const r=f.compare();
+  assert.equal(r.identicalDefaultAsarHeaderSha256,null);
   assert.equal(r.stockVerifiedPeChecksum,0);
   assert.equal(r.subsetVerifiedPeChecksum,0);
   assert(r.differingIntegrityBytes>0 && r.differingIntegrityBytes<=64);
@@ -63,9 +70,15 @@ test('accepts exact builder-linked PE digest and zero checksum, rejects opposite
   assert.throws(()=>f.compare(f.subset.exe,f.stock.archive),/must authenticate its own exact ASAR header/);
 });
 test('accepts genuine recalculated PE checksums and rejects every unrelated byte change',async t=>{
-  const f=await fixture(t,true);
+  const f=await fixture(t,true,true);
   const r=f.compare();
   assert(r.stockVerifiedPeChecksum>0 && r.subsetVerifiedPeChecksum>0);
+  assert.match(r.identicalDefaultAsarHeaderSha256,/^[a-f0-9]{64}$/);
+  assert.throws(()=>f.compare(f.mutate('false-default-hash',b=>{
+    const at=b.indexOf(Buffer.from(r.identicalDefaultAsarHeaderSha256));
+    assert(at>r.integrityDigestFileOffset);
+    b[at]^=1;
+  })),/must authenticate/);
   assert.throws(()=>f.compare(f.mutate('false-hash',b=>b[r.integrityDigestFileOffset]^=1)),/must authenticate/);
   assert.throws(()=>f.compare(f.mutate('false-pe-checksum',b=>b[r.checksumFileOffset]^=1,false)),/invalid populated PE checksum/);
   assert.throws(()=>f.compare(f.mutate('dropped-checksum',b=>b.writeUInt32LE(0,r.checksumFileOffset),false)),/checksum population differs/);
@@ -80,4 +93,15 @@ test('accepts genuine recalculated PE checksums and rejects every unrelated byte
     b[offset]^=1;
   })),/unexplained executable byte change/);
   assert.throws(()=>f.compare(f.mutate('last-byte',b=>b[b.length-1]^=1)),/unexplained executable byte change/);
+});
+
+test('does not allow an unlisted or missing ASAR in a custom Electron distribution',async t=>{
+  const f=await fixture(t,false,true);
+  const dir=path.dirname(f.subset.archive);
+  const extra=path.join(dir,'extra.asar');
+  fs.copyFileSync(f.subset.archive,extra);
+  assert.throws(()=>f.compare(),/unrecognized ASAR/);
+  fs.unlinkSync(extra);
+  fs.unlinkSync(path.join(dir,'default_app.asar'));
+  assert.throws(()=>f.compare(),/must authenticate/);
 });
