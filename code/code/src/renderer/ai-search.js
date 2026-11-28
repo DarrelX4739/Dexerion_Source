@@ -259,7 +259,15 @@
     const detail = state.current ? state.current.detail : '';
     live.detail.textContent = detail;
     live.detail.hidden = !detail;
-    live.stepList.replaceChildren(...state.steps.map(stepRow));
+    // Completed steps are append-only until the next trace. Keep their DOM
+    // and SVGs; only a newly mounted bubble or reset needs the whole list.
+    if (live.paintedSteps !== state.steps) {
+      live.stepList.replaceChildren();
+      live.paintedSteps = state.steps;
+    }
+    for (let i = live.stepList.childElementCount; i < state.steps.length; i++) {
+      live.stepList.appendChild(stepRow(state.steps[i]));
+    }
   }
 
   function mountWorking(live) {
@@ -311,6 +319,7 @@
 
   function finishWorking(live, showActions) {
     if (live && live.work) live.work.remove();
+    if (live) live.paintedSteps = null;
     if (state.current) state.steps.push(state.current);
     state.current = null;
     const steps = state.steps.slice();

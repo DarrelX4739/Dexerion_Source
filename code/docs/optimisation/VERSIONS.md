@@ -266,3 +266,12 @@ scroll writes, versus one of each with the change. In a seven-pair JSDOM
 fixture, the 200-message redraw went from 108.30 to 98.36 ms; that fixture
 does not run Chromium layout. A real Electron test checks the History
 entry, the same last 200 rows, and the actual final scroll position.
+
+### Reuse completed progress rows in fullscreen AI Search
+
+The working feed now keeps completed rows and appends only new entries.
+Reset, reopen, cancellation, final Actions and all visible event data stay
+on the existing paths. The component fixture compares exact DOM after each
+transition: 105 to 14 row insertions for 14 steps and 990 to 44 for 44 steps.
+Seven paired JSDOM medians were 26.10 to 4.05 ms and 79.39 to 3.88 ms;
+these do not include Chromium layout, network or whole-browser CPU.
