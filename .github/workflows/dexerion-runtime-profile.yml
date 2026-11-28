@@ -34,17 +34,27 @@ jobs:
           node --test experiments/runtime-profile/test-profile-summary.cjs
           npm ci --prefix code/build
       - name: Measure unchanged Electron main process on Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !contains(github.event.head_commit.message, '[profile-title]')
         shell: bash
         run: xvfb-run -a node experiments/runtime-profile/profile-main.cjs runtime-main-profile.json
       - name: Measure unchanged Electron main process on Windows
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !contains(github.event.head_commit.message, '[profile-title]')
         shell: bash
         run: node experiments/runtime-profile/profile-main.cjs runtime-main-profile.json
+      - name: Profile title-only update work in the unchanged app on Linux
+        if: runner.os == 'Linux' && contains(github.event.head_commit.message, '[profile-title]')
+        shell: bash
+        run: xvfb-run -a node experiments/runtime-profile/profile-title.cjs runtime-title-profile.json
+      - name: Profile title-only update work in the unchanged app on Windows
+        if: runner.os == 'Windows' && contains(github.event.head_commit.message, '[profile-title]')
+        shell: bash
+        run: node experiments/runtime-profile/profile-title.cjs runtime-title-profile.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dexerion-runtime-cost-${{ matrix.os }}
-          path: runtime-main-profile.json
+          path: |
+            runtime-main-profile.json
+            runtime-title-profile.json
           if-no-files-found: ignore
           retention-days: 7
