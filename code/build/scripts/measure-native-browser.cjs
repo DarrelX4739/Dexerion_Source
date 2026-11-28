@@ -37,6 +37,16 @@ function edgeExecutable(env = process.env, exists = fs.existsSync) {
   return file;
 }
 
+function copySeedProfile(source, target) {
+  fs.cpSync(source, target, {
+    recursive: true,
+    filter(candidate) {
+      const relative = path.relative(source, candidate);
+      return !/^(devtoolsactiveport|singletonlock|singletonsocket|singletoncookie|lockfile)$/i.test(relative);
+    },
+  });
+}
+
 async function waitFor(fn, label, time = 20000) {
   const last = Date.now() + time;
   do {
@@ -47,26 +57,33 @@ async function waitFor(fn, label, time = 20000) {
   throw new Error(label + ' not ready');
 }
 
-async function openNative(kind, { chromium, executable, cwd, packaged = false, env = process.env }) {
+async function openNative(kind, { chromium, executable, cwd, packaged = false, seedDir, preserveProfile = false, env = process.env }) {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-native-' + kind + '-'));
-  let child, browser, devtools, launchError, stderr = '';
-  const close = async () => {
+  let child, browser, devtools, launchError, stderr = '', kept = false;
+  const close = async (keep = preserveProfile) => {
     if (devtools) {
       try { await Promise.race([devtools.send('Browser.close'), sleep(2000)]); } catch {}
     }
     if (browser) await browser.close().catch(() => {});
+    let forced = false;
     if (child?.pid && child.exitCode === null && child.signalCode === null) {
       const done = once(child, 'exit').catch(() => {});
       await Promise.race([done, sleep(2000)]);
       if (child.exitCode === null && child.signalCode === null) {
+        forced = true;
         try { child.kill(); } catch {}
         await Promise.race([done, sleep(2000)]);
       }
     }
+    kept = keep && !forced && child?.exitCode === 0;
     // Never remove a directory outside the path created for this trial.
-    try { fs.rmSync(profileDir, { force: true, recursive: true, maxRetries: 5, retryDelay: 300 }); } catch {}
+    if (!kept) {
+      try { fs.rmSync(profileDir, { force: true, recursive: true, maxRetries: 5, retryDelay: 300 }); } catch {}
+    }
+    return { kept };
   };
   try {
+    if (seedDir) copySeedProfile(seedDir, profileDir);
     child = spawn(executable, browserArgs(kind, profileDir, { packaged }), { cwd, env, stdio: ['ignore', 'ignore', 'pipe'] });
     child.on('error', (error) => { launchError = error; });
     child.stderr.on('data', (data) => { stderr = (stderr + String(data)).slice(-400); });
@@ -81,7 +98,7 @@ async function openNative(kind, { chromium, executable, cwd, packaged = false, e
     devtools = await browser.newBrowserCDPSession();
     return { browser, devtools, profileDir, close };
   } catch (err) {
-    await close();
+    await close(false);
     throw err;
   }
 }
@@ -105,4 +122,4 @@ const samplePage = (page) => page.evaluate(() => ({
   scale: devicePixelRatio,
 }));
 
-module.exports = { browserArgs, debugPort, edgeExecutable, openNative, waitFor, pagesIn, isShellUrl, samplePage };
+module.exports = { copySeedProfile, browserArgs, debugPort, edgeExecutable, openNative, waitFor, pagesIn, isShellUrl, samplePage };

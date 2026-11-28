@@ -33,6 +33,7 @@
 //   MEASURE_BROWSERS       comma list; default edge,dexerion
 //   MEASURE_DEADLINE_MIN   wall-clock budget in minutes (default 45); trials
 //                          that would start past it are recorded as pending
+//   MEASURE_SEED_PROFILE    1 primes and clones one synthetic profile per browser
 //   MEASURE_LAUNCH_CONTROL  1 adds legacy automation arms as controls
 //   DEX_NATIVE_PACKAGED_APP  path to an unpacked Dexerion executable, optional
 //   MEASURE_NATIVE_LAUNCH  1 launches both binaries without automation flags
@@ -64,6 +65,8 @@ const CORES = os.cpus().length;
 const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
 const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
+const SEED_PROFILE = NATIVE_LAUNCH && !LAUNCH_CONTROL && process.env.MEASURE_SEED_PROFILE === '1';
+const seedProfiles = new Map();
 const PACKAGED_BINARY = process.env.DEX_NATIVE_PACKAGED_APP ? path.resolve(process.env.DEX_NATIVE_PACKAGED_APP) : null;
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
 const G = path.join(__dirname, 'measure-gpu-sample.ps1');
@@ -343,7 +346,7 @@ async function prepareDexerion(base, scenario) {
 
 // A separate mode for hosted comparisons without Playwright's launch
 // switches. Use Playwright only as a local controller over native DevTools.
-async function prepareNative(browser, base, scenario) {
+async function prepareNative(browser, base, scenario, { prime = false } = {}) {
   const urls = workloadUrls(base, SCENARIOS[scenario]);
   const dex = browser === 'dexerion';
   const executable = dex
@@ -352,6 +355,8 @@ async function prepareNative(browser, base, scenario) {
   const session = await openNative(browser, {
     chromium, executable, cwd: dex && !PACKAGED_BINARY ? DEX_BUILD_DIR : undefined,
     packaged: dex && Boolean(PACKAGED_BINARY),
+    seedDir: prime ? null : seedProfiles.get(browser),
+    preserveProfile: prime,
     env: dex && !PACKAGED_BINARY ? { ...process.env, DEX_AI_TEST: '1' } : process.env,
   });
   const list = () => pagesIn(session.browser);
@@ -400,7 +405,7 @@ async function prepareNative(browser, base, scenario) {
         return Object.fromEntries(tally);
       },
       pageState: () => samplePage(front), close: session.close };
-  } catch (err) { await session.close(); throw err; }
+  } catch (err) { await session.close(false); throw err; }
 }
 
 // ------------------------------------------------------------ statistics
@@ -588,6 +593,7 @@ function pctOfEdge(dexS, edgeS) {
       nativeLaunch: NATIVE_LAUNCH,
       packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
       exploratoryLauncherControl: LAUNCH_CONTROL,
+      profileMode: SEED_PROFILE ? 'per-browser primed disposable seed, cloned per trial' : 'fresh disposable profile per trial',
       edgeLaunch: NATIVE_LAUNCH ? 'direct binary, isolated data dir, loopback ephemeral CDP, skip first-run prompts' : 'Playwright defaults, isolated data dir',
       dexerionLaunch: NATIVE_LAUNCH ? (PACKAGED_BINARY ? 'direct unpacked Dexerion binary, isolated data dir, loopback ephemeral CDP' : 'direct Electron binary and development checkout, isolated data dir, loopback ephemeral CDP') : 'Playwright Electron loader, isolated data dir, GPU adaptive',
     },
@@ -598,6 +604,21 @@ function pctOfEdge(dexS, edgeS) {
   };
 
   try {
+    if (SEED_PROFILE) {
+      for (const browser of BROWSERS) {
+        const session = await prepareNative(browser, base, 'idle', { prime: true });
+        let primed = false;
+        try {
+          await sleep(SETTLE_MS);
+          primed = true;
+        } finally {
+          const { kept } = await session.close(primed);
+          if (!kept) throw new Error('Synthetic ' + browser + ' seed exited uncleanly');
+          seedProfiles.set(browser, session.profileDir);
+        }
+        console.log('Primed a disposable ' + browser + ' profile');
+      }
+    }
     for (const scenario of SCENARIO_ORDER) {
       results.scenarios[scenario] = {};
       for (const browser of BROWSERS) results.scenarios[scenario][browser] = { trials: [], pending: [] };
@@ -721,6 +742,9 @@ function pctOfEdge(dexS, edgeS) {
       if (pair.comparison) console.log('VERDICT ' + scenario + ': ' + JSON.stringify(pair.comparison));
     }
   } finally {
+    for (const directory of seedProfiles.values()) {
+      try { fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch {}
+    }
     server.close();
   }
 })().catch((err) => {

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
-const { browserArgs, debugPort, edgeExecutable, pagesIn, isShellUrl } = require('./measure-native-browser.cjs');
+const { copySeedProfile, browserArgs, debugPort, edgeExecutable, pagesIn, isShellUrl } = require('./measure-native-browser.cjs');
 
 test('launches each binary with no automation flags that change isolation or throttling', () => {
   const profile = path.join(os.tmpdir(), 'isolated profile');
@@ -37,4 +37,19 @@ test('looks up the installed Edge binary and matches only local Dexerion shell t
   assert.equal(isShellUrl('https://example.test/src/renderer/shell.html'), false);
   assert.equal(isShellUrl('file:///C:/test/code/src/renderer/shell.html.old'), false);
   assert.deepEqual(pagesIn({ contexts: () => [{ pages: () => [1] }, { pages: () => [2, 3] }] }), [1, 2, 3]);
+});
+
+
+test('copies synthetic profile data but not browser lock or debugging endpoint files', (t) => {
+  const p = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-native-seed-test-'));
+  t.after(() => fs.rmSync(p, { recursive: true, force: true }));
+  const a = path.join(p, 'source'), b = path.join(p, 'dest');
+  fs.mkdirSync(path.join(a, 'Default'), { recursive: true });
+  fs.writeFileSync(path.join(a, 'Default', 'Preferences'), '{}');
+  fs.writeFileSync(path.join(a, 'DevToolsActivePort'), '35123');
+  fs.writeFileSync(path.join(a, 'SingletonLock'), '');
+  copySeedProfile(a, b);
+  assert.equal(fs.readFileSync(path.join(b, 'Default', 'Preferences'), 'utf8'), '{}');
+  assert.equal(fs.existsSync(path.join(b, 'DevToolsActivePort')), false);
+  assert.equal(fs.existsSync(path.join(b, 'SingletonLock')), false);
 });
