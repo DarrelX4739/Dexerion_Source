@@ -153,3 +153,32 @@ test('the public chat path still hands the provider the complete, unchanged imag
   assert.equal(result.text, 'Found it');
   assert.deepEqual(outgoing, [{ providerId: 'nim', stream: true, messages: wireWith(unicode, pixel) }]);
 });
+
+test('large shared image is revalidated when a later fan-out leg observes a different URL', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dex-image-registration-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'ai-config.json'), JSON.stringify({
+    providers: { nim: { key: 'local-test', model: realProviders.PROVIDERS.nim.defaultModel } },
+  }));
+  const original = imageUrl(40_000, 'png');
+  for (const { replacement, shouldUpload } of [
+    { replacement: imageUrl(40_000, 'webp'), shouldUpload: true },
+    { replacement: original.slice(0, -1) + '!', shouldUpload: false },
+    { replacement: imageUrl(4_000_001, 'webp'), shouldUpload: false },
+  ]) {
+    const sameImage = { url: original };
+    const calls = [];
+    const { create } = fixtures(source, { chat: async (_provider, options) => {
+      calls.push(options.messages.flatMap(message => Array.isArray(message.content)
+        ? message.content.filter(part => part.type === 'image_url').map(part => part.image_url.url) : []));
+      if (calls.length === 1) sameImage.url = replacement;
+      return { text: calls.length === 1 ? 'First visual note.' : 'Complete answer.', toolCalls: [] };
+    } });
+    const result = await create(dir).stream('shared-image-check', [
+      { role: 'user', text: 'Initial attachment.', images: [sameImage] },
+      { role: 'user', text: 'Compare both attachments.', images: [sameImage] },
+    ], () => {}, {});
+    assert.equal(result.text, 'Complete answer.');
+    assert.deepEqual(calls, [[original], shouldUpload ? [replacement] : []]);
+  }
+});

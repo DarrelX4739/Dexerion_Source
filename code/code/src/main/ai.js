@@ -25,6 +25,23 @@ const MAX_IMAGES = 4;
 const MAX_IMAGE_DATA_CHARS = 4000000;
 const MAX_TOTAL_IMAGE_DATA_CHARS = 16000000;
 const IMAGE_DATA_URL = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const matchesImageDataUrl = (_image, url) => IMAGE_DATA_URL.test(url);
+function streamImageMatcher() {
+  let memo;
+  return (image, url) => {
+    // Routing, image fan-out and wire assembly inspect the same large URLs.
+    // Reuse only an exact check for this object and immutable URL value, only
+    // during the current send. Retries revalidate if the URL has changed.
+    if (typeof url !== 'string' || url.length < 4096 || !image
+        || (typeof image !== 'object' && typeof image !== 'function')) return matchesImageDataUrl(image, url);
+    memo ||= new WeakMap();
+    const cached = memo.get(image);
+    if (cached && cached.url === url) return cached.matches;
+    const matches = matchesImageDataUrl(image, url);
+    memo.set(image, { url, matches });
+    return matches;
+  };
+}
 const omitCountedImageUrl = (key, value) => key === 'url' ? '' : value;
 const VISION_MODEL_ID = providers.VISION_ID;
 const WARM_TTL_MS = 10 * 60 * 1000;
@@ -830,7 +847,7 @@ function createAi({ profile }) {
     return Math.max(12000, Math.min(maxChars, Math.floor((contextTokens - output - 512) * 3.2)));
   }
 
-  function buildWireMessages(messages, budgetChars, textLimit) {
+  function buildWireMessages(messages, budgetChars, textLimit, matchesImage = matchesImageDataUrl) {
     const out = [];
     // The latest thing the person asked decides whether an artifact in history
     // is replayed as a summary or as its full source.
@@ -876,7 +893,7 @@ function createAi({ profile }) {
         if (role === 'user' && Array.isArray(m.images)) {
           for (const image of m.images.slice(0, MAX_IMAGES)) {
             const url = image && typeof image.url === 'string' ? image.url : '';
-            if (!IMAGE_DATA_URL.test(url) || url.length > MAX_IMAGE_DATA_CHARS) continue;
+            if (!matchesImage(image, url) || url.length > MAX_IMAGE_DATA_CHARS) continue;
             if (images.length && imageChars + url.length > MAX_TOTAL_IMAGE_DATA_CHARS) continue;
             images.push({ type: 'image_url', image_url: { url } });
             imageChars += url.length;
@@ -923,7 +940,7 @@ function createAi({ profile }) {
     };
   }
 
-  async function streamOnce(reqId, messages, onText, opts, plan) {
+  async function streamOnce(reqId, messages, onText, opts, plan, matchesImage) {
     // The meter is always on: it costs two numbers per chunk and gives the
     // reply its honest "first token / total" line plus the lastRun record.
     // DEX_AI_TIMING only decides whether it is also logged.
@@ -955,7 +972,7 @@ function createAi({ profile }) {
     // The dedicated site writer may be handed a complete previous index.html
     // to revise. That single-file source is larger than a normal chat turn, so
     // allow the long form only on the override path (site/report writers).
-    const msgs = buildWireMessages(messages, budget, (opts && opts.systemOverride) ? 160000 : MAX_WIRE_TEXT_CHARS);
+    const msgs = buildWireMessages(messages, budget, (opts && opts.systemOverride) ? 160000 : MAX_WIRE_TEXT_CHARS, matchesImage);
     if (!msgs.length) throw new Error('Nothing to send.');
 
     const state = { cancelled: false, abort: null };
@@ -1054,13 +1071,13 @@ function createAi({ profile }) {
     return Boolean(err && (err.code === 'rate_limit' || err.code === 'provider' || err.code === 'network' || err.retryable));
   }
 
-  function sendHasImages(messages) {
+  function sendHasImages(messages, matchesImage) {
     if (!Array.isArray(messages)) return false;
     for (const m of messages) {
       if (!m || !Array.isArray(m.images)) continue;
       for (const image of m.images.slice(0, 4)) {
         const url = image && typeof image.url === 'string' ? image.url : '';
-        if (IMAGE_DATA_URL.test(url)) return true;
+        if (matchesImage(image, url)) return true;
       }
     }
     return false;
@@ -1075,13 +1092,13 @@ function createAi({ profile }) {
   const NOTE_TAKER_TOKENS = 300;
   const MAX_LEGS = 6;
 
-  function normalizedLegImages(messages) {
+  function normalizedLegImages(messages, matchesImage) {
     const out = [];
     for (const m of (Array.isArray(messages) ? messages : []).slice(-40)) {
       if (!m || m.role === 'model' || !Array.isArray(m.images)) continue;
       for (const image of m.images) {
         const url = image && typeof image.url === 'string' ? image.url : '';
-        if (!IMAGE_DATA_URL.test(url) || url.length > MAX_IMAGE_DATA_CHARS) continue;
+        if (!matchesImage(image, url) || url.length > MAX_IMAGE_DATA_CHARS) continue;
         out.push({ message: m, image });
       }
     }
@@ -1170,7 +1187,8 @@ function createAi({ profile }) {
   }
 
   async function stream(reqId, messages, onText, opts) {
-    const hasImages = sendHasImages(messages);
+    const matchesImage = streamImageMatcher();
+    const hasImages = sendHasImages(messages, matchesImage);
     const task = router.classifyTask(messages, { hasImages });
     const agentTools = Boolean(opts && Array.isArray(opts.tools) && opts.tools.length);
     const artifactTask = router.isArtifactTask(task) && !agentTools;
@@ -1197,9 +1215,9 @@ function createAi({ profile }) {
     // optsOverride rides corrective retries: tools off + a nudge suffix.
     const run = async (planOverride, optsOverride) => {
       const useOpts = optsOverride || baseOpts;
-      const legs = normalizedLegImages(messages);
+      const legs = normalizedLegImages(messages, matchesImage);
       if (legs.length <= 1) {
-        const r = await streamOnce(reqId, messages, track, useOpts, planOverride);
+        const r = await streamOnce(reqId, messages, track, useOpts, planOverride, matchesImage);
         if (r.text) produced = true;
         return r;
       }
@@ -1208,14 +1226,14 @@ function createAi({ profile }) {
       const notes = [];
       for (let k = 0; k < legs.length - 1; k++) {
         const r = await streamOnce(reqId, legPayload(messages, legs, k, notes), () => {},
-          { ...legBase, systemSuffix: NOTE_TAKER_SUFFIX, maxTokens: NOTE_TAKER_TOKENS }, planOverride);
+          { ...legBase, systemSuffix: NOTE_TAKER_SUFFIX, maxTokens: NOTE_TAKER_TOKENS }, planOverride, matchesImage);
         if (r.cancelled || chainStopped(reqId)) return { ok: true, text: '', cancelled: true, model: r.model, providerId: r.providerId, toolCalls: [] };
         if (r.text) {
           notes.push({ after: legs[k].message, text: r.text });
           produced = true;
         }
       }
-      const r = await streamOnce(reqId, legPayload(messages, legs, legs.length - 1, notes), track, useOpts, planOverride);
+      const r = await streamOnce(reqId, legPayload(messages, legs, legs.length - 1, notes), track, useOpts, planOverride, matchesImage);
       if (r.text) produced = true;
       return r;
     };
