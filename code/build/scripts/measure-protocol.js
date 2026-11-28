@@ -66,6 +66,10 @@ const SKIP_POWER = process.env.MEASURE_SKIP_POWER === '1';
 const NATIVE_LAUNCH = process.env.MEASURE_NATIVE_LAUNCH === '1';
 const LAUNCH_CONTROL = NATIVE_LAUNCH && process.env.MEASURE_LAUNCH_CONTROL === '1';
 const SEED_PROFILE = NATIVE_LAUNCH && !LAUNCH_CONTROL && process.env.MEASURE_SEED_PROFILE === '1';
+const DISTINCT_HOSTS = process.env.MEASURE_DISTINCT_LOOPBACK_HOSTS === '1';
+if (DISTINCT_HOSTS && (!NATIVE_LAUNCH || LAUNCH_CONTROL)) {
+  throw new Error('Distinct loopback workload requires matched native launches');
+}
 const seedProfiles = new Map();
 const PACKAGED_BINARY = process.env.DEX_NATIVE_PACKAGED_APP ? path.resolve(process.env.DEX_NATIVE_PACKAGED_APP) : null;
 const S = path.join(__dirname, 'measure-tree-snapshot.ps1');
@@ -347,7 +351,7 @@ async function prepareDexerion(base, scenario) {
 // A separate mode for hosted comparisons without Playwright's launch
 // switches. Use Playwright only as a local controller over native DevTools.
 async function prepareNative(browser, base, scenario, { prime = false } = {}) {
-  const urls = workloadUrls(base, SCENARIOS[scenario]);
+  const urls = workloadUrls(base, SCENARIOS[scenario], DISTINCT_HOSTS);
   const dex = browser === 'dexerion';
   const executable = dex
     ? PACKAGED_BINARY || require(require.resolve('electron', { paths: [DEX_BUILD_DIR] }))
@@ -661,6 +665,7 @@ function pctOfEdge(dexS, edgeS) {
       floorSwingInvalidPct: FLOOR_SWING_LIMIT * 100,
       skipPower: SKIP_POWER,
       nativeLaunch: NATIVE_LAUNCH,
+      workloadOrigins: DISTINCT_HOSTS ? 'one .localhost host per tab' : 'same loopback origin',
       packagedApp: Boolean(PACKAGED_BINARY && NATIVE_LAUNCH),
       exploratoryLauncherControl: LAUNCH_CONTROL,
       profileMode: SEED_PROFILE ? 'per-browser primed disposable seed, cloned per trial' : 'fresh disposable profile per trial',

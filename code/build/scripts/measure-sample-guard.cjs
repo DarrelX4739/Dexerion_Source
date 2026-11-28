@@ -41,10 +41,19 @@ function foregroundSample(before, after, seconds, animated) {
   return { visible: true, fps };
 }
 
-function workloadUrls(base, definition) {
-  return [
+function workloadUrls(base, definition, distinctLoopbackHosts = false) {
+  if (!distinctLoopbackHosts) return [
     base + '/' + definition.foreground + '?role=foreground',
     ...Array.from({ length: definition.backgroundTabs }, (_, i) => base + '/animated?role=background&tab=' + (i + 1)),
+  ];
+  const root = new URL(base);
+  if (root.protocol !== 'http:' || root.hostname !== '127.0.0.1' || !root.port ||
+      root.pathname !== '/' || root.search || root.hash) throw new Error('Distinct fixture must be local HTTP');
+  const origin = (n) => 'http://workload-' + n + '.localhost:' + root.port;
+  return [
+    origin(0) + '/' + definition.foreground + '?role=foreground',
+    ...Array.from({ length: definition.backgroundTabs }, (_, i) =>
+      origin(i + 1) + '/animated?role=background&tab=' + (i + 1)),
   ];
 }
 function matchesInventory(tabs, expected) {

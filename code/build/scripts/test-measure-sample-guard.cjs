@@ -139,3 +139,15 @@ test('native attribution rejects stale Windows PPIDs even under an otherwise val
   assert.deepEqual([g.staleParentReferences, g.unknownParentReferences], [2, 1]);
   assert.throws(() => verifiedNativeTree(data, 99, (proc) => proc.active), /launch process/);
 });
+
+test('distinct-site control keeps identical local content/roles but never shares a host', () => {
+  const def = { foreground: 'static', backgroundTabs: 8 };
+  const base = 'http://127.0.0.1:4678';
+  const shared = workloadUrls(base, def);
+  const varied = workloadUrls(base, def, true);
+  assert.equal(new Set(varied.map((url) => new URL(url).origin)).size, 9);
+  assert.ok(varied.every((url) => new URL(url).hostname.endsWith('.localhost')));
+  assert.deepEqual(varied.map((url) => new URL(url).pathname + new URL(url).search),
+    shared.map((url) => new URL(url).pathname + new URL(url).search));
+  assert.throws(() => workloadUrls('https://not-our-fixture.test:4678', def, true), /local HTTP/);
+});
